@@ -1,4 +1,4 @@
-#include "../sx1302_hal/libloragw/inc/loragw_hal.h"
+#include "../sx1302/libloragw/inc/loragw_hal.h"
 #include <stdint.h>
 #include <stdlib.h>
 

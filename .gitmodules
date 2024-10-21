@@ -1,0 +1,3 @@
+[submodule "sx1302"]
+	path = sx1302
+	url = https://github.com/oliviamiller/sx1302_hal

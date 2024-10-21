@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "../sx1302_hal/libloragw/inc/loragw_hal.h"
+#include "../sx1302/libloragw/inc/loragw_hal.h"
 
 int setBoardConfig(struct lgw_conf_board_s conf);
 int setRFConfig(uint8_t rfchain,struct lgw_conf_rxrf_s conf);

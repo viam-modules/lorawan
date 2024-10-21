@@ -1,10 +1,10 @@
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302_hal/libloragw/inc -I./sx1302_hal/libtools/inc  -I./sx1302_hal/packet_forwarder/inc
-#cgo LDFLAGS: -L./sx1302_hal/libloragw -lloragw -L./sx1302_hal/libtools -L./sx1302_hal/packet_forwarder -lpacketforwarder -ljitqueue -lbase64 -lparson -ltinymt32  -lm
+#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc  -I./sx1302/packet_forwarder/inc
+#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302libtools -lbase64 -lparson -ltinymt32  -lm
 
-#include "../sx1302_hal/libloragw/inc/loragw_hal.h"
+#include "../sx1302/libloragw/inc/loragw_hal.h"
 #include <stdlib.h>
 #include <stdint.h>
 */

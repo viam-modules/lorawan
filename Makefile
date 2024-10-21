@@ -1,6 +1,6 @@
 
-BUILD_DIR = ./sx1302_hal
-CGO_BUILD_LDFLAGS := -L$(shell pwd)/$(BUILD_DIR)/libloragw -L$(shell pwd)/$(BUILD_DIR)libloragw/lib -L$(shell pwd)/$(BUILD_DIR)/libtools -L$(shell pwd)/$(BUILD_DIR)/packet_forwarder -L$(shell pwd)/$(BUILD_DIR)/packet_forwarder
+BUILD_DIR = ./sx1302
+CGO_BUILD_LDFLAGS := -L$(shell pwd)/$(BUILD_DIR)/libloragw -L$(shell pwd)/$(BUILD_DIR)libloragw/lib -L$(shell pwd)/$(BUILD_DIR)/libtools
 
 .PHONY: all
 all:
