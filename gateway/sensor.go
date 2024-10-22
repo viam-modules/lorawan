@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"gateway/gpio"
 	"gateway/parser"
-	"os"
 	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -214,11 +213,6 @@ func (g *Gateway) handlePacket(payload []byte) {
 			g.updateReadings(name, readings)
 		}
 	default:
-		// want to keep track if any other messages are being sent from milesight device so writing to file.
-		file, _ := os.OpenFile("/tmp/messages.txt", os.O_APPEND|os.O_RDWR|os.O_CREATE, 0666)
-		defer file.Close()
-		file.Write(payload)
-		file.Write([]byte("\n"))
 		g.logger.Warnf("received unsupported packet type")
 	}
 }
@@ -230,7 +224,7 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 		g.lastReadings[name] = newReadings
 		return
 	}
-	for key, val := range readings {
+	for key, val := range newReadings {
 		readings[key] = val
 	}
 
