@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"gateway/gpio"
+	"sync"
 	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -127,7 +128,7 @@ func (conf *DeviceConfig) validateABPAttributes(path string) ([]string, error) {
 	}
 	if len(conf.NwkSKey) != 32 {
 		return nil, resource.NewConfigValidationError(path,
-			errors.New("ntowkr session key must be 16 bytes"))
+			errors.New("network session key must be 16 bytes"))
 	}
 	if conf.DevAddr == "" {
 		return nil, resource.NewConfigValidationError(path,
@@ -148,12 +149,13 @@ type Gateway struct {
 	logger logging.Logger
 
 	workers *utils.StoppableWorkers
+	mu      sync.Mutex
 
-	lastReadings map[string]interface{} // map devices to their last reading
+	lastReadings map[string]interface{} // map of devices to readings
+	readingsMu   sync.Mutex
 
-	appSKey string // app session key used to decrypt messages.
+	devices map[string]*Device // map of name to devices
 
-	devices map[string]*Device
 }
 
 func newGateway(
@@ -266,28 +268,32 @@ func (g *Gateway) receivePackets() {
 }
 
 func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
-	// first byte is MHDR - specifies message type
-	switch payload[0] {
-	case 0x0:
-		g.logger.Infof("recieved join request")
-		err := g.handleJoin(ctx, payload)
-		if err != nil {
-			g.logger.Errorf("couldn't handle join request: %w", err)
-		}
-	case 0x40:
-		g.logger.Infof("received data uplink")
-		name, readings, err := g.parseDataUplink(payload)
-		if err != nil {
-			g.logger.Errorf("error parsing uplink message: %w", err)
-		}
-		g.updateReadings(name, readings)
+	g.workers.Add(func(ctx context.Context) {
+		// first byte is MHDR - specifies message type
+		switch payload[0] {
+		case 0x0:
+			g.logger.Infof("recieved join request")
+			err := g.handleJoin(ctx, payload)
+			if err != nil {
+				g.logger.Errorf("couldn't handle join request: %w", err)
+			}
+		case 0x40:
+			g.logger.Infof("received data uplink")
+			name, readings, err := g.parseDataUplink(payload)
+			if err != nil {
+				g.logger.Errorf("error parsing uplink message: %w", err)
+			}
+			g.updateReadings(name, readings)
 
-	default:
-		g.logger.Warnf("received unsupported packet type")
-	}
+		default:
+			g.logger.Warnf("received unsupported packet type")
+		}
+	})
 }
 
 func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}) {
+	g.readingsMu.Lock()
+	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
 	if !ok {
 		// readings for this device does not exist yet
@@ -311,5 +317,7 @@ func (g *Gateway) Close(ctx context.Context) error {
 }
 
 func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+	g.readingsMu.Lock()
+	defer g.readingsMu.Unlock()
 	return g.lastReadings, nil
 }

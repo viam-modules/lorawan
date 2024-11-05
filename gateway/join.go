@@ -67,6 +67,9 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 	// send on rx2 window - opens 6 seconds after join request.
 	time.Sleep(joinRx2WindowSec * time.Second)
 
+	// lock so there is not two sends at the same time.
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	errCode := int(C.send(&txPkt))
 	if errCode != 0 {
 		return errors.New("failed to send join accept packet")
