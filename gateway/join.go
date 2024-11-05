@@ -31,25 +31,54 @@ type JoinRequest struct {
 	mic      []byte
 }
 
+// network id for the device to identify the network.
 var netID = []byte{1, 2, 3}
 
-type txPacket struct {
-	freqHz     int
-	txMode     int
-	rfChain    int
-	rfPower    int
-	modulation int
-	bandwidth  int
-	datarate   int
-	coderate   int
-	invertPol  bool
-	size       int
+func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
+	jr, device, err := parseJoinRequestPacket(payload, g.devices)
+	if err != nil {
+		return err
+	}
+
+	joinAccept, err := device.GenerateJoinAccept(ctx, jr)
+	if err != nil {
+		return err
+	}
+
+	txPkt := C.struct_lgw_pkt_tx_s{
+		freq_hz:    C.uint32_t(rx2Frequenecy),
+		tx_mode:    C.uint8_t(0), // immediate mode
+		rf_chain:   C.uint8_t(0),
+		rf_power:   C.int8_t(26),    // tx power in dbm
+		modulation: C.uint8_t(0x10), // LORA modulation
+		bandwidth:  C.uint8_t(rx2Bandwidth),
+		datarate:   C.uint32_t(rx2SF),
+		coderate:   C.uint8_t(0x01), // code rate 4/5
+		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
+		size:       C.uint16_t(len(joinAccept)),
+	}
+
+	var cPayload [256]C.uchar
+	for i, b := range joinAccept {
+		cPayload[i] = C.uchar(b)
+	}
+	txPkt.payload = cPayload
+
+	// send on rx2 window - opens 6 seconds after join request.
+	time.Sleep(joinRx2WindowSec * time.Second)
+
+	errCode := int(C.send(&txPkt))
+	if errCode != 0 {
+		return errors.New("failed to send join accept packet")
+	}
+
+	return nil
 }
 
 // payload of join request consists of
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
-func ParseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinRequest, *Device, error) {
+func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinRequest, *Device, error) {
 	var joinRequest JoinRequest
 
 	// everything in the join request payload is little endian
@@ -65,7 +94,6 @@ func ParseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 
 	// match the dev eui to gateway device
 	for _, device := range devices {
-		fmt.Println(device.devEui)
 		if bytes.Equal(device.devEui, devEUIBE) {
 			matched = device
 		}
@@ -88,7 +116,7 @@ func ParseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte, error) {
-
+	// generate random join nonce.
 	jn := generateJoinNonce()
 
 	// generate a random device address to identify uplinks.
@@ -137,9 +165,8 @@ func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte
 	return ja, nil
 
 }
-func generateDevAddr() []byte {
 
-	// Seed the random number generator with the current time
+func generateDevAddr() []byte {
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
 
@@ -185,16 +212,12 @@ func (d *Device) generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI
 	if err != nil {
 		return types.AES128Key{}, fmt.Errorf("failed to generate AppSKey: %w", err)
 	}
-	fmt.Println("APP S KEY: ")
-	fmt.Println(appsKey)
 
 	return appsKey, nil
 
 }
 
 func generateJoinNonce() []byte {
-
-	// Seed the random number generator with the current time
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
 
@@ -213,46 +236,4 @@ func reverseByteArray(arr []byte) []byte {
 		reversed[i] = arr[j]
 	}
 	return reversed
-}
-
-func (g *Gateway) HandleJoin(ctx context.Context, payload []byte) error {
-	jr, device, err := ParseJoinRequestPacket(payload, g.devices)
-	if err != nil {
-		return err
-	}
-
-	joinAccept, err := device.GenerateJoinAccept(ctx, jr)
-	if err != nil {
-		return err
-	}
-
-	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:    C.uint32_t(rx2Frequenecy),
-		tx_mode:    C.uint8_t(0), // immediate mode
-		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),    // tx power in dbm
-		modulation: C.uint8_t(0x10), // LORA modulation
-		bandwidth:  C.uint8_t(rx2Bandwidth),
-		datarate:   C.uint32_t(rx2SF),
-		coderate:   C.uint8_t(0x01), // code rate 4/5
-		invert_pol: C.bool(true),    // DOWNLINKS ARE ALWAYS INVERSE POLARITY!!!
-		size:       C.uint16_t(len(joinAccept)),
-	}
-
-	var cPayload [256]C.uchar
-
-	for i, b := range joinAccept {
-		cPayload[i] = C.uchar(b)
-	}
-	txPkt.payload = cPayload
-
-	// send on rx2 window - opens 6 seconds after join request.
-	time.Sleep(joinRx2WindowSec * time.Second)
-
-	errCode := int(C.send(&txPkt))
-	if errCode != 0 {
-		return errors.New("failed to send join accept packet")
-	}
-
-	return nil
 }

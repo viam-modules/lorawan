@@ -14,8 +14,8 @@
 #define RX2_BANDWIDTH 0x06
 
 
-// the If chain frequencies allow the gateway to read on multiple frequency channels.
-// subtracting main frequenecy - intermediate frequency
+// the IF chain frequencies allow the gateway to read on multiple frequency channels.
+// subtracting main frequenecy - intermediate frequency will give that channel's freq.
 const int32_t ifFrequencies[9] = {
 	-400000,
 	-200000,
@@ -25,11 +25,10 @@ const int32_t ifFrequencies[9] = {
 	-400000,
 	-200000,
 	0,
-	300000, // lora service channel
 };
 
-// This defines what RF chain to use for each of the 9 if chains
-const int32_t rfChains [9] = {0, 0, 0, 0, 1, 1, 1, 0};
+// This defines what RF chain to use for each of the 8 if chains
+const int32_t rfChains [9] = {0, 0, 0, 0, 1, 1, 1};
 
 
 int setUpGateway(int bus) {
@@ -51,12 +50,12 @@ int setUpGateway(int bus) {
     }
 
     strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
-    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
+    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         return EXIT_FAILURE;
     }
 
-  // set configuration for RF chains
+   // set configuration for RF chains
     memset( &rfconf, 0, sizeof rfconf);
     rfconf.enable = true;
     rfconf.freq_hz = RADIO_0_FREQ;
@@ -74,7 +73,7 @@ int setUpGateway(int bus) {
 
     }
 
-
+    // set config for intermediate frequency chains.
     memset(&ifconf, 0, sizeof(ifconf));
     ifconf.enable = true;
     ifconf.datarate = DR_LORA_SF7;
@@ -87,6 +86,7 @@ int setUpGateway(int bus) {
         }
     }
 
+    // start the gateway.
     if (lgw_start() != LGW_HAL_SUCCESS) {
             return EXIT_FAILURE;
         }

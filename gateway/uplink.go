@@ -18,10 +18,9 @@ import (
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interface{}, error) {
 
-	/// devAddr is bytes one to five - little endian
 	devAddr := phyPayload[1:5]
 
-	// need to reserve the bytes to match since devices in BE.
+	// need to reserve the bytes since payload is in LE.
 	devAddrBE := reverseByteArray(devAddr)
 
 	device, err := matchDevice(devAddrBE, g.devices)
@@ -38,9 +37,6 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
-	fmt.Println(frameCnt)
-	fmt.Println(uint32(frameCnt))
-
 	// fopts not supported in this module yet.
 	if foptsLength != 0 {
 		_ = phyPayload[8 : 8+foptsLength]
@@ -49,12 +45,10 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
 	fPort := phyPayload[8+foptsLength]
 
+	// device data in the message/
 	framePayload := phyPayload[8+foptsLength+1 : len(phyPayload)-4]
 
 	dAddr := types.MustDevAddr(devAddrBE)
-
-	//TODO: validate the MIC - last 4 bytes
-	// mic, err := crypto.ComputeLegacyUplinkMIC(key, *dAddr, (uint32)(frameCnt), phyPayload[:len(phyPayload)-4])
 
 	// decrypt the frame payload
 	decryptedPayload, err := crypto.DecryptUplink(device.appSKey, *dAddr, (uint32)(frameCnt), framePayload)
@@ -89,13 +83,12 @@ func decodePayload(fPort uint8, path string, data []byte) (map[string]interface{
 	// Convert the byte slice to a string
 	fileContent := string(decoder)
 
-	readingsMap, err := binaryToMap(fPort, fileContent, data)
+	readingsMap, err := convertBinaryToMap(fPort, fileContent, data)
 
 	return readingsMap, nil
 }
 
-// chirpstack-application-server internal/codec support other type
-func binaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]interface{}, error) {
+func convertBinaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]interface{}, error) {
 
 	decodeScript = decodeScript + "\n\nDecode(fPort, bytes);\n"
 
@@ -104,7 +97,7 @@ func binaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]interfa
 	vars["fPort"] = fPort
 	vars["bytes"] = b
 
-	v, err := executeJS(decodeScript, vars)
+	v, err := executeDecoder(decodeScript, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +105,7 @@ func binaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]interfa
 	switch v.(type) {
 	case map[string]interface{}:
 	default:
-		return map[string]interface{}{}, errors.New("codec returned unexpected data type")
+		return map[string]interface{}{}, errors.New("decoder returned unexpected data type")
 	}
 
 	readings := v.(map[string]interface{})
@@ -120,7 +113,7 @@ func binaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]interfa
 	return readings, nil
 }
 
-func executeJS(script string, vars map[string]interface{}) (out interface{}, err error) {
+func executeDecoder(script string, vars map[string]interface{}) (out interface{}, err error) {
 	defer func() {
 		if caught := recover(); caught != nil {
 			err = fmt.Errorf("%s", caught)
@@ -137,10 +130,11 @@ func executeJS(script string, vars map[string]interface{}) (out interface{}, err
 		}
 	}
 
+	// interrupt the decoder if it takes more than 10 ms to run.
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		vm.Interrupt <- func() {
-			panic(errors.New("execution timeout"))
+			errors.New("execution timeout")
 		}
 	}()
 

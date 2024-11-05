@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"gateway/gpio"
 	"time"
 
@@ -98,8 +97,6 @@ func (conf *DeviceConfig) validateOTAAAttributes(path string) ([]string, error) 
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("dev EUI is required for OTAA join type"))
 	}
-
-	fmt.Println(len(conf.DevEUI))
 	if len(conf.DevEUI) != 16 {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("dev EUI must be 8 bytes"))
@@ -240,10 +237,16 @@ func (g *Gateway) receivePackets() {
 			default:
 			}
 			numPackets := int(C.receive(packet))
-			if numPackets < 0 || numPackets > 1 {
-				g.logger.Errorf("error receiving lora packet")
-			} else if numPackets == 1 {
-				fmt.Println(packet)
+			switch numPackets {
+			case 0:
+				// no packet received, wait 10 ms to receive again.
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Millisecond):
+				}
+			case 1:
+				// received a LORA packet
 				var payload []byte
 				for i := 0; i < numPackets; i++ {
 					if packet.size == 0 {
@@ -255,13 +258,8 @@ func (g *Gateway) receivePackets() {
 					}
 					g.handlePacket(ctx, payload)
 				}
-			} else {
-				// wait 10 ms to receive another packet
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(10 * time.Millisecond):
-				}
+			default:
+				g.logger.Errorf("error receiving lora packet")
 			}
 		}
 	})
@@ -272,7 +270,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 	switch payload[0] {
 	case 0x0:
 		g.logger.Infof("recieved join request")
-		err := g.HandleJoin(ctx, payload)
+		err := g.handleJoin(ctx, payload)
 		if err != nil {
 			g.logger.Errorf("couldn't handle join request: %w", err)
 		}
@@ -281,9 +279,9 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 		name, readings, err := g.parseDataUplink(payload)
 		if err != nil {
 			g.logger.Errorf("error parsing uplink message: %w", err)
-		} else if name != "" {
-			g.updateReadings(name, readings)
 		}
+		g.updateReadings(name, readings)
+
 	default:
 		g.logger.Warnf("received unsupported packet type")
 	}
