@@ -31,6 +31,13 @@ type JoinRequest struct {
 	mic      []byte
 }
 
+const (
+	joinRx2WindowSec = 6         // rx2 delay for sending join accept message.
+	rx2Frequenecy    = 923300000 // Frequuency for rx2 window
+	rx2SF            = 12        // spreading factor for rx2 window
+	rx2Bandwidth     = 0x06      // 500k bandwidth
+)
+
 // network id for the device to identify the network.
 var netID = []byte{1, 2, 3}
 

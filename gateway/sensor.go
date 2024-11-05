@@ -28,13 +28,6 @@ import (
 // Model represents a lorawan gateway model.
 var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
-const (
-	joinRx2WindowSec = 6         // rx2 delay for sending join accept message.
-	rx2Frequenecy    = 923300000 // Frequuency for rx2 window
-	rx2SF            = 12        // spreading factor for rx2 window
-	rx2Bandwidth     = 0x06      // 500k bandwidth
-)
-
 // Config describes the configuration of the gateway
 type Config struct {
 	Devices []DeviceConfig `json:"devices"`
