@@ -23,7 +23,7 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 	// need to reserve the bytes since payload is in LE.
 	devAddrBE := reverseByteArray(devAddr)
 
-	device, err := matchDevice(devAddrBE, g.devices)
+	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
 		g.logger.Infof("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, nil
@@ -65,7 +65,7 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 	return device.name, readings, nil
 }
 
-func matchDevice(devAddr []byte, devices map[string]*Device) (*Device, error) {
+func matchDeviceAddr(devAddr []byte, devices map[string]*Device) (*Device, error) {
 	for _, dev := range devices {
 		if bytes.Equal(devAddr, dev.addr) {
 			return dev, nil

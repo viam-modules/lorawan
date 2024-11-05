@@ -265,9 +265,14 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
-			g.logger.Infof("recieved join request")
+			g.logger.Infof("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
+				// don't log as error if it was a request from unknown device.
+				if errors.Is(errNoDevice, err) {
+					g.logger.Debug("received join request from unknown device - ignoring")
+					return
+				}
 				g.logger.Errorf("couldn't handle join request: %w", err)
 			}
 		case 0x40:

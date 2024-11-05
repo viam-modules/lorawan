@@ -22,6 +22,7 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"go.viam.com/utils"
 )
 
 type JoinRequest struct {
@@ -37,6 +38,8 @@ const (
 	rx2SF            = 12        // spreading factor for rx2 window
 	rx2Bandwidth     = 0x06      // 500k bandwidth
 )
+
+var errNoDevice = errors.New("received join request from unknown device")
 
 // network id for the device to identify the network.
 var netID = []byte{1, 2, 3}
@@ -72,7 +75,9 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 	txPkt.payload = cPayload
 
 	// send on rx2 window - opens 6 seconds after join request.
-	time.Sleep(joinRx2WindowSec * time.Second)
+	if !utils.SelectContextOrWait(ctx, time.Second*joinRx2WindowSec) {
+		return nil
+	}
 
 	// lock so there is not two sends at the same time.
 	g.mu.Lock()
@@ -110,7 +115,7 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 	}
 
 	if matched.name == "" {
-		return JoinRequest{}, nil, errors.New("received join request from unknown device")
+		return JoinRequest{}, nil, errNoDevice
 	}
 
 	err := validateMIC(types.AES128Key(matched.AppKey), payload)
