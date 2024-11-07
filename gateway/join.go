@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gateway/node"
 	"math/rand"
 	"time"
 
@@ -47,7 +48,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	joinAccept, err := device.GenerateJoinAccept(ctx, jr)
+	joinAccept, err := GenerateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
@@ -88,7 +89,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 // payload of join request consists of
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
-func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinRequest, *Device, error) {
+func parseJoinRequestPacket(payload []byte, devices map[string]*node.Node) (JoinRequest, *node.Node, error) {
 	var joinRequest JoinRequest
 
 	// everything in the join request payload is little endian
@@ -97,19 +98,23 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 	joinRequest.devNonce = payload[17:19]
 	joinRequest.mic = payload[19:23]
 
-	matched := &Device{}
+	matched := &node.Node{}
 
 	// device.devEUI is in big endian - reverse to compare and find device.
 	devEUIBE := reverseByteArray(joinRequest.devEUI)
 
 	// match the dev eui to gateway device
 	for _, device := range devices {
-		if bytes.Equal(device.devEui, devEUIBE) {
+		fmt.Println(device.DevEui)
+		if bytes.Equal(device.DevEui, devEUIBE) {
 			matched = device
 		}
 	}
 
-	if matched.name == "" {
+	fmt.Println("AMRCH IS")
+	fmt.Println(matched)
+
+	if matched.Named == nil {
 		return JoinRequest{}, nil, errors.New("received join request from unknown device")
 	}
 
@@ -125,17 +130,17 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 // Format of Join Accept message:
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
-func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte, error) {
+func GenerateJoinAccept(ctx context.Context, jr JoinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn := generateJoinNonce()
 
 	// generate a random device address to identify uplinks.
-	d.addr = generateDevAddr()
+	d.Addr = generateDevAddr()
 
 	// the join accept payload needs everything to be LE, so reverse the BE fields.
 	netIDLE := reverseByteArray(netID)
 	jnLE := reverseByteArray(jn)
-	dAddrLE := reverseByteArray(d.addr)
+	dAddrLE := reverseByteArray(d.Addr)
 
 	payload := make([]byte, 0)
 	payload = append(payload, 0x20)
@@ -146,7 +151,7 @@ func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte
 	payload = append(payload, 0x01) // rx delay: 1 second
 
 	// generate MIC
-	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(d.AppKey, payload)
+	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +161,7 @@ func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte
 
 	payload = append(payload, resMIC[:]...)
 
-	enc, err := crypto.EncryptJoinAccept(d.AppKey, payload)
+	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
 
 	ja := make([]byte, 0)
 	//add back mhdr
@@ -164,12 +169,12 @@ func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte
 	ja = append(ja, enc...)
 
 	// generate the session keys
-	appsKey, err := d.generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID)
+	appsKey, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
 	if err != nil {
 		return nil, err
 	}
 
-	d.appSKey = appsKey
+	d.AppSKey = appsKey[:]
 
 	// return the encrypted join accept message
 	return ja, nil
@@ -200,14 +205,14 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 
 }
 
-func (d *Device) generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte) (types.AES128Key, error) {
+func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (types.AES128Key, error) {
 	cryptoDev := &ttnpb.EndDevice{
 		Ids: &ttnpb.EndDeviceIdentifiers{JoinEui: joinEUI, DevEui: devEUI},
 	}
 
 	// TTN expects big endian dev nonce
 	devNonceBE := reverseByteArray(devNonce)
-	applicationCryptoService := cryptoservices.NewMemory(nil, &d.AppKey)
+	applicationCryptoService := cryptoservices.NewMemory(nil, &appKey)
 
 	// generate the appSKey!
 	// all inputs here are big endian.

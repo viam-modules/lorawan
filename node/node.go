@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sync"
 
-	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -24,18 +24,7 @@ type Config struct {
 	AppSKey     string `json:"app_s_key,omitempty"`
 	NwkSKey     string `json:"network_s_key,omitempty"`
 	DevAddr     string `json:"dev_addr,omitempty"`
-}
-
-type Device struct {
-	name        string
-	decoderPath string
-
-	nwkSKey types.AES128Key
-	appSKey types.AES128Key
-	AppKey  types.AES128Key
-
-	addr   []byte
-	devEui []byte
+	GatewayName string `json:"gateway,omitempty"`
 }
 
 func init() {
@@ -62,8 +51,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("join type is OTAA or ABP"))
 	}
-
-	return nil, nil
 }
 
 func (conf *Config) validateOTAAAttributes(path string) ([]string, error) {
@@ -124,15 +111,16 @@ type Node struct {
 	workers *utils.StoppableWorkers
 	mu      sync.Mutex
 
-	name        string
-	decoderPath string
+	DecoderPath string
 
-	nwkSKey types.AES128Key
-	appSKey types.AES128Key
-	AppKey  types.AES128Key
+	nwkSKey []byte
+	AppSKey []byte
+	AppKey  []byte
 
-	addr   []byte
-	devEui []byte
+	Addr   []byte
+	DevEui []byte
+
+	gateway sensor.Sensor
 }
 
 func newNode(
@@ -149,13 +137,15 @@ func newNode(
 	n := &Node{
 		Named:       conf.ResourceName().AsNamed(),
 		logger:      logger,
-		decoderPath: cfg.DecoderPath,
+		DecoderPath: cfg.DecoderPath,
 	}
 
-	gateway, err := sensor.FromDependencies(deps, name)
+	gateway, err := sensor.FromDependencies(deps, cfg.GatewayName)
 	if err != nil {
-		return errors.Wrapf(err, "no movement sensor named (%s)", name)
+		return nil, fmt.Errorf("no gateway named (%s)", cfg.GatewayName)
 	}
+
+	n.gateway = gateway
 
 	switch cfg.JoinType {
 	case "OTAA", "":
@@ -163,37 +153,52 @@ func newNode(
 		if err != nil {
 			return nil, err
 		}
-		n.AppKey = types.AES128Key(appKey)
+		n.AppKey = appKey
 
 		devEui, err := hex.DecodeString(cfg.DevEUI)
 		if err != nil {
 			return nil, err
 		}
-		n.devEui = devEui
+		n.DevEui = devEui
 	case "ABP":
 		devAddr, err := hex.DecodeString(cfg.DevAddr)
 		if err != nil {
 			return nil, err
 		}
 
-		n.addr = devAddr
+		n.Addr = devAddr
 
 		appSKey, err := hex.DecodeString(cfg.AppSKey)
 		if err != nil {
 			return nil, err
 		}
 
-		n.appSKey = types.AES128Key(appSKey)
+		n.AppSKey = appSKey
+	}
+
+	cmd := make(map[string]interface{})
+
+	cmd["register_device"] = n
+
+	fmt.Println("doing do command")
+
+	_, err = gateway.DoCommand(ctx, cmd)
+	if err != nil {
+		return nil, err
 	}
 
 	return n, nil
 }
 
 func (n *Node) Close(ctx context.Context) error {
-	n.workers.Stop()
 	return nil
 }
 
-func (g *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
-	return map[string]interface{}{}, nil
+func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+	allReadings, err := n.gateway.Readings(ctx, nil)
+	if err != nil {
+		return map[string]interface{}{}, err
+	}
+	// return allReadings[n.Name().Name].(map[string]interface{}), nil
+	return allReadings, nil
 }

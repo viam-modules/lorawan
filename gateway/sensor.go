@@ -12,13 +12,14 @@ package gateway
 import "C"
 import (
 	"context"
-	"encoding/hex"
 	"errors"
+	"fmt"
 	"gateway/gpio"
+	"gateway/node"
+	"reflect"
 	"sync"
 	"time"
 
-	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -44,18 +45,6 @@ type DeviceConfig struct {
 	AppKey      string `json:"app_key,omitempty"`
 }
 
-type Device struct {
-	name        string
-	decoderPath string
-
-	nwkSKey types.AES128Key
-	appSKey types.AES128Key
-	AppKey  types.AES128Key
-
-	addr   []byte
-	devEui []byte
-}
-
 func init() {
 	resource.RegisterComponent(
 		sensor.API,
@@ -67,73 +56,8 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	for _, d := range conf.Devices {
-		if d.DecoderPath == "" {
-			return nil, resource.NewConfigValidationError(path,
-				errors.New("decoder path is required"))
-		}
-		switch d.JoinType {
-		case "ABP":
-			return d.validateABPAttributes(path)
-		case "OTAA", "":
-			return d.validateOTAAAttributes(path)
-		default:
-			return nil, resource.NewConfigValidationError(path,
-				errors.New("join type is OTAA or ABP"))
-		}
-
-	}
-	return nil, nil
-}
-
-func (conf *DeviceConfig) validateOTAAAttributes(path string) ([]string, error) {
-	if conf.DevEUI == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("dev EUI is required for OTAA join type"))
-	}
-	if len(conf.DevEUI) != 16 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("dev EUI must be 8 bytes"))
-	}
-	if conf.AppKey == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app key is required for OTAA join type"))
-	}
-	if len(conf.AppKey) != 32 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app key must be 16 bytes"))
-	}
-	return nil, nil
-}
-
-func (conf *DeviceConfig) validateABPAttributes(path string) ([]string, error) {
-	if conf.AppSKey == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app session key is required for ABP join type"))
-	}
-	if len(conf.AppSKey) != 32 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app session key must be 16 bytes"))
-	}
-	if conf.NwkSKey == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("network session key is required for ABP join type"))
-	}
-	if len(conf.NwkSKey) != 32 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("network session key must be 16 bytes"))
-	}
-	if conf.DevAddr == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("device address is required for ABP join type"))
-	}
-	if len(conf.DevAddr) != 8 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("device address must be 4 bytes"))
-	}
 
 	return nil, nil
-
 }
 
 type Gateway struct {
@@ -147,7 +71,7 @@ type Gateway struct {
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
-	devices map[string]*Device // map of name to devices
+	devices map[string]*node.Node // map of name to devices
 
 }
 
@@ -157,7 +81,7 @@ func newGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	cfg, err := resource.NativeConfig[*Config](conf)
+	_, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return nil, err
 	}
@@ -177,45 +101,7 @@ func newGateway(
 		return nil, errors.New("failed to start the gateway")
 	}
 
-	g.devices = make(map[string]*Device)
-
-	for _, device := range cfg.Devices {
-		dev := &Device{
-			name:        device.Name,
-			decoderPath: device.DecoderPath,
-		}
-
-		switch device.JoinType {
-		case "OTAA", "":
-			appKey, err := hex.DecodeString(device.AppKey)
-			if err != nil {
-				return nil, err
-			}
-			dev.AppKey = types.AES128Key(appKey)
-
-			devEui, err := hex.DecodeString(device.DevEUI)
-			if err != nil {
-				return nil, err
-			}
-			dev.devEui = devEui
-		case "ABP":
-			devAddr, err := hex.DecodeString(device.DevAddr)
-			if err != nil {
-				return nil, err
-			}
-
-			dev.addr = devAddr
-
-			appSKey, err := hex.DecodeString(device.AppSKey)
-			if err != nil {
-				return nil, err
-			}
-
-			dev.appSKey = types.AES128Key(appSKey)
-		}
-		g.devices[device.Name] = dev
-	}
-
+	g.devices = make(map[string]*node.Node)
 	g.receivePackets()
 
 	return g, nil
@@ -277,7 +163,6 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				g.logger.Errorf("error parsing uplink message: %w", err)
 			}
 			g.updateReadings(name, readings)
-
 		default:
 			g.logger.Warnf("received unsupported packet type")
 		}
@@ -302,6 +187,39 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 	}
 
 	g.lastReadings[name] = readings
+}
+
+func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	fmt.Println("IN DO COMMAND")
+	// Register the nodes
+	newNode, ok := cmd["register_device"]
+	fmt.Println(newNode)
+	if !ok {
+		return map[string]interface{}{}, errors.New("couldnt get node")
+	}
+
+	newN, ok := newNode.(map[string]interface{})
+
+	fmt.Println(newN)
+	fmt.Println(ok)
+	fmt.Println("Type:", reflect.TypeOf(newNode))
+
+	fmt.Println(newN["Addr"])
+
+	// map[Addr:[226 115 101 102] AlwaysRebuild:map[] AppKey:[] AppSKey:[85 114 64 76 105 110 107 76 111 82 97 50 48 49 56 35] DecoderPath:/home/olivia/decoder.js DevEui:[] Named:map[]]
+
+	node := &node.Node{DecoderPath: newN["DecoderPath"].(string)}
+
+	node.AppSKey = []byte(newN["AppSKey"].(string))
+	node.AppKey = []byte(newN["AppKey"].(string))
+
+	// node.DevEui = newN["DevEui"].([]byte)
+	// node.Addr = newN["Addr"].([]byte)
+
+	g.devices["dragino"] = node
+
+	return nil, nil
+
 }
 func (g *Gateway) Close(ctx context.Context) error {
 	g.workers.Stop()

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"gateway/gateway"
+	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -22,6 +23,10 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	}
 
 	if err = module.AddModelFromRegistry(ctx, sensor.API, gateway.Model); err != nil {
+		return err
+	}
+
+	if err = module.AddModelFromRegistry(ctx, sensor.API, node.Model); err != nil {
 		return err
 	}
 
