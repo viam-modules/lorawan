@@ -140,11 +140,30 @@ func newNode(
 		DecoderPath: cfg.DecoderPath,
 	}
 
-	gateway, err := sensor.FromDependencies(deps, cfg.GatewayName)
-	if err != nil {
-		return nil, fmt.Errorf("no gateway named (%s)", cfg.GatewayName)
+	var dep resource.Resource
+	for _, val := range deps {
+		dep = val
 	}
 
+	gateway, ok := dep.(sensor.Sensor)
+	if !ok {
+		return nil, errors.New("dependency must be a sensor")
+	}
+
+	cmd := make(map[string]interface{})
+
+	cmd["validate"] = 1
+
+	// Validate that its the gateway
+	ret, err := gateway.DoCommand(ctx, cmd)
+
+	retVal, ok := ret["validate"]
+	if !ok {
+		return nil, errors.New("dependency must be the sx1302-gateway")
+	}
+	if retVal.(float64) != 1 {
+		return nil, errors.New("dependency must be the sx1302-gateway")
+	}
 	n.gateway = gateway
 
 	switch cfg.JoinType {
@@ -176,13 +195,13 @@ func newNode(
 		n.AppSKey = appSKey
 	}
 
-	cmd := make(map[string]interface{})
+	regCmd := make(map[string]interface{})
 
-	cmd["register_device"] = n
+	regCmd["register_device"] = n
 
 	fmt.Println("doing do command")
 
-	_, err = gateway.DoCommand(ctx, cmd)
+	_, err = gateway.DoCommand(ctx, regCmd)
 	if err != nil {
 		return nil, err
 	}

@@ -13,10 +13,8 @@ import "C"
 import (
 	"context"
 	"errors"
-	"fmt"
 	"gateway/gpio"
 	"gateway/node"
-	"reflect"
 	"sync"
 	"time"
 
@@ -190,33 +188,41 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	fmt.Println("IN DO COMMAND")
-	// Register the nodes
-	newNode, ok := cmd["register_device"]
-	fmt.Println(newNode)
-	if !ok {
-		return map[string]interface{}{}, errors.New("couldnt get node")
+	if _, ok := cmd["validate"]; ok {
+		return map[string]interface{}{"validate": 1}, nil
 	}
 
-	newN, ok := newNode.(map[string]interface{})
+	// if newNode, ok := cmd["validate"]; ok {
+	// 	return map[string]interface{}{"validate": 1}, nil
+	// }
 
-	fmt.Println(newN)
-	fmt.Println(ok)
-	fmt.Println("Type:", reflect.TypeOf(newNode))
+	// fmt.Println("IN DO COMMAND")
+	// // Register the nodes
+	// newNode, ok := cmd["register_device"]
+	// fmt.Println(newNode)
+	// if !ok {
+	// 	return map[string]interface{}{}, errors.New("couldnt get node")
+	// }
 
-	fmt.Println(newN["Addr"])
+	// newN, ok := newNode.(map[string]interface{})
 
-	// map[Addr:[226 115 101 102] AlwaysRebuild:map[] AppKey:[] AppSKey:[85 114 64 76 105 110 107 76 111 82 97 50 48 49 56 35] DecoderPath:/home/olivia/decoder.js DevEui:[] Named:map[]]
+	// fmt.Println(newN)
+	// fmt.Println(ok)
+	// fmt.Println("Type:", reflect.TypeOf(newNode))
 
-	node := &node.Node{DecoderPath: newN["DecoderPath"].(string)}
+	// fmt.Println(newN["Addr"])
 
-	node.AppSKey = []byte(newN["AppSKey"].(string))
-	node.AppKey = []byte(newN["AppKey"].(string))
+	// // map[Addr:[226 115 101 102] AlwaysRebuild:map[] AppKey:[] AppSKey:[85 114 64 76 105 110 107 76 111 82 97 50 48 49 56 35] DecoderPath:/home/olivia/decoder.js DevEui:[] Named:map[]]
 
-	// node.DevEui = newN["DevEui"].([]byte)
-	// node.Addr = newN["Addr"].([]byte)
+	// node := &node.Node{DecoderPath: newN["DecoderPath"].(string)}
 
-	g.devices["dragino"] = node
+	// node.AppSKey = []byte(newN["AppSKey"].(string))
+	// node.AppKey = []byte(newN["AppKey"].(string))
+
+	// // node.DevEui = newN["DevEui"].([]byte)
+	// // node.Addr = newN["Addr"].([]byte)
+
+	// g.devices["dragino"] = node
 
 	return nil, nil
 
