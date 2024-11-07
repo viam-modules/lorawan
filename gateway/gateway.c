@@ -43,10 +43,12 @@ int setUpGateway(int bus) {
     boardconf.com_type =  LGW_COM_SPI; // spi
 
     const char * com_path;
-    if (bus == 1) {
-        com_path = "/dev/spidev0.1";
-    } else {
-        com_path = "/dev/spidev0.0";
+
+    switch(bus) {
+        case 1:
+            com_path = "/dev/spidev0.1";
+        default:
+            com_path = "/dev/spidev0.0";
     }
 
     strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);

@@ -25,7 +25,7 @@ import (
 	"go.viam.com/utils"
 )
 
-type JoinRequest struct {
+type joinRequest struct {
 	joinEUI  []byte
 	devEUI   []byte
 	devNonce []byte
@@ -50,7 +50,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	joinAccept, err := device.GenerateJoinAccept(ctx, jr)
+	joinAccept, err := device.generateJoinAccept(ctx, jr)
 	if err != nil {
 		return err
 	}
@@ -93,8 +93,9 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 // payload of join request consists of
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
-func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinRequest, *Device, error) {
-	var joinRequest JoinRequest
+// https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
+func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (joinRequest, *Device, error) {
+	var joinRequest joinRequest
 
 	// everything in the join request payload is little endian
 	joinRequest.joinEUI = payload[1:9]
@@ -115,12 +116,12 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 	}
 
 	if matched.name == "" {
-		return JoinRequest{}, nil, errNoDevice
+		return joinRequest, nil, errNoDevice
 	}
 
-	err := validateMIC(types.AES128Key(matched.AppKey), payload)
+	err := validateMIC(matched.AppKey, payload)
 	if err != nil {
-		return JoinRequest{}, nil, err
+		return joinRequest, nil, err
 	}
 
 	return joinRequest, matched, nil
@@ -130,7 +131,8 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (JoinReq
 // Format of Join Accept message:
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
-func (d *Device) GenerateJoinAccept(ctx context.Context, jr JoinRequest) ([]byte, error) {
+// https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
+func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte, error) {
 	// generate random join nonce.
 	jn := generateJoinNonce()
 
@@ -244,6 +246,7 @@ func generateJoinNonce() []byte {
 }
 
 // reverseByteArray creates a new array reversed of the input.
+// Used to convert little endian fields to big endian and vice versa.
 func reverseByteArray(arr []byte) []byte {
 	reversed := make([]byte, len(arr))
 
