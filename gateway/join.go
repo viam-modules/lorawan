@@ -45,7 +45,7 @@ var errNoDevice = errors.New("received join request from unknown device")
 var netID = []byte{1, 2, 3}
 
 func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
-	jr, device, err := parseJoinRequestPacket(payload, g.devices)
+	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
-func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (joinRequest, *Device, error) {
+func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *Device, error) {
 	var joinRequest joinRequest
 
 	// everything in the join request payload is little endian
@@ -108,17 +108,15 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (joinReq
 	// device.devEUI is in big endian - reverse to compare and find device.
 	devEUIBE := reverseByteArray(joinRequest.devEUI)
 
-	fmt.Println(devEUIBE)
-	fmt.Println(devices["test"].devEui)
-
 	// match the dev eui to gateway device
-	for _, device := range devices {
+	for _, device := range g.devices {
 		if bytes.Equal(device.devEui, devEUIBE) {
 			matched = device
 		}
 	}
 
 	if matched.name == "" {
+		g.logger.Debugf("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest, nil, errNoDevice
 	}
 

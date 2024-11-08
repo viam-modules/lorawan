@@ -270,7 +270,6 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
-					g.logger.Debug("received join request from unknown device - ignoring")
 					return
 				}
 				g.logger.Errorf("couldn't handle join request: %w", err)
