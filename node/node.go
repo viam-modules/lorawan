@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"sync"
 
 	"go.viam.com/rdk/components/sensor"
@@ -24,7 +23,6 @@ type Config struct {
 	AppSKey     string `json:"app_s_key,omitempty"`
 	NwkSKey     string `json:"network_s_key,omitempty"`
 	DevAddr     string `json:"dev_addr,omitempty"`
-	GatewayName string `json:"gateway,omitempty"`
 }
 
 func init() {
@@ -49,7 +47,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		return conf.validateOTAAAttributes(path)
 	default:
 		return nil, resource.NewConfigValidationError(path,
-			errors.New("join type is OTAA or ABP"))
+			errors.New("join type is OTAA or ABP - defaults to OTAA"))
 	}
 }
 
@@ -120,7 +118,8 @@ type Node struct {
 	Addr   []byte
 	DevEui []byte
 
-	gateway sensor.Sensor
+	gateway  sensor.Sensor
+	NodeName string
 }
 
 func newNode(
@@ -138,6 +137,7 @@ func newNode(
 		Named:       conf.ResourceName().AsNamed(),
 		logger:      logger,
 		DecoderPath: cfg.DecoderPath,
+		NodeName:    conf.ResourceName().AsNamed().Name().Name,
 	}
 
 	var dep resource.Resource
@@ -199,8 +199,6 @@ func newNode(
 
 	regCmd["register_device"] = n
 
-	fmt.Println("doing do command")
-
 	_, err = gateway.DoCommand(ctx, regCmd)
 	if err != nil {
 		return nil, err
@@ -218,6 +216,12 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 	if err != nil {
 		return map[string]interface{}{}, err
 	}
-	// return allReadings[n.Name().Name].(map[string]interface{}), nil
-	return allReadings, nil
+
+	reading, ok := allReadings[n.NodeName]
+	if !ok {
+		// no readings avaliable yet
+		return map[string]interface{}{}, nil
+	}
+
+	return reading.(map[string]interface{}), nil
 }

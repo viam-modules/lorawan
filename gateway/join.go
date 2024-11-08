@@ -23,9 +23,10 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"go.viam.com/utils"
 )
 
-type JoinRequest struct {
+type joinRequest struct {
 	joinEUI  []byte
 	devEUI   []byte
 	devNonce []byte
@@ -39,16 +40,18 @@ const (
 	rx2Bandwidth     = 0x06      // 500k bandwidth
 )
 
-// network id for the device to identify the network.
+var errNoDevice = errors.New("received join request from unknown device")
+
+// network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
 func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
-	jr, device, err := parseJoinRequestPacket(payload, g.devices)
+	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
 	}
 
-	joinAccept, err := GenerateJoinAccept(ctx, jr, device)
+	joinAccept, err := generateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
@@ -73,7 +76,9 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 	txPkt.payload = cPayload
 
 	// send on rx2 window - opens 6 seconds after join request.
-	time.Sleep(joinRx2WindowSec * time.Second)
+	if !utils.SelectContextOrWait(ctx, time.Second*joinRx2WindowSec) {
+		return nil
+	}
 
 	// lock so there is not two sends at the same time.
 	g.mu.Lock()
@@ -89,8 +94,9 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 // payload of join request consists of
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
-func parseJoinRequestPacket(payload []byte, devices map[string]*node.Node) (JoinRequest, *node.Node, error) {
-	var joinRequest JoinRequest
+// https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
+func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
+	var joinRequest joinRequest
 
 	// everything in the join request payload is little endian
 	joinRequest.joinEUI = payload[1:9]
@@ -104,23 +110,20 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*node.Node) (Join
 	devEUIBE := reverseByteArray(joinRequest.devEUI)
 
 	// match the dev eui to gateway device
-	for _, device := range devices {
-		fmt.Println(device.DevEui)
+	for _, device := range g.devices {
 		if bytes.Equal(device.DevEui, devEUIBE) {
 			matched = device
 		}
 	}
 
-	fmt.Println("AMRCH IS")
-	fmt.Println(matched)
-
-	if matched.Named == nil {
-		return JoinRequest{}, nil, errors.New("received join request from unknown device")
+	if matched.NodeName == "" {
+		g.logger.Debugf("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
+		return joinRequest, nil, errNoDevice
 	}
 
 	err := validateMIC(types.AES128Key(matched.AppKey), payload)
 	if err != nil {
-		return JoinRequest{}, nil, err
+		return joinRequest, nil, err
 	}
 
 	return joinRequest, matched, nil
@@ -130,7 +133,8 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*node.Node) (Join
 // Format of Join Accept message:
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
-func GenerateJoinAccept(ctx context.Context, jr JoinRequest, d *node.Node) ([]byte, error) {
+// https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
+func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn := generateJoinNonce()
 
@@ -162,6 +166,9 @@ func GenerateJoinAccept(ctx context.Context, jr JoinRequest, d *node.Node) ([]by
 	payload = append(payload, resMIC[:]...)
 
 	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
+	if err != nil {
+		return nil, err
+	}
 
 	ja := make([]byte, 0)
 	//add back mhdr
@@ -181,6 +188,7 @@ func GenerateJoinAccept(ctx context.Context, jr JoinRequest, d *node.Node) ([]by
 
 }
 
+// Generates random 4 byte dev addr. This is used for the network to identify device's data uplinks.
 func generateDevAddr() []byte {
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
@@ -192,6 +200,8 @@ func generateDevAddr() []byte {
 	return []byte{1, 2, byte(num1), byte(num2)}
 }
 
+// Validates the message integrity code sent in the join request.
+// the MIC is used to verify authenticity of the message.
 func validateMIC(appKey types.AES128Key, payload []byte) error {
 	mic, err := crypto.ComputeJoinRequestMIC(appKey, payload[:19])
 	if err != nil {
@@ -232,6 +242,7 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 
 }
 
+// generates random 3 byte join nonce
 func generateJoinNonce() []byte {
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
@@ -244,6 +255,7 @@ func generateJoinNonce() []byte {
 }
 
 // reverseByteArray creates a new array reversed of the input.
+// Used to convert little endian fields to big endian and vice versa.
 func reverseByteArray(arr []byte) []byte {
 	reversed := make([]byte, len(arr))
 

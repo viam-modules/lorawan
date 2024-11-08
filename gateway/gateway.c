@@ -32,9 +32,9 @@ const int32_t rfChains [9] = {0, 0, 0, 0, 1, 1, 1};
 
 
 int setUpGateway(int bus) {
+
+    // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
-    struct lgw_conf_rxrf_s rfconf;
-    struct lgw_conf_rxif_s ifconf;
 
     memset( &boardconf, 0, sizeof boardconf);
     boardconf.lorawan_public = true;
@@ -43,10 +43,12 @@ int setUpGateway(int bus) {
     boardconf.com_type =  LGW_COM_SPI; // spi
 
     const char * com_path;
-    if (bus == 1) {
-        com_path = "/dev/spidev0.1";
-    } else {
-        com_path = "/dev/spidev0.0";
+
+    switch(bus) {
+        case 1:
+            com_path = "/dev/spidev0.1";
+        default:
+            com_path = "/dev/spidev0.0";
     }
 
     strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
@@ -55,7 +57,12 @@ int setUpGateway(int bus) {
         return EXIT_FAILURE;
     }
 
-   // set configuration for RF chains
+    // The rfConf configures the two RF chains the gateway HAT has.
+    struct lgw_conf_rxrf_s rfconf;
+
+    // set configuration for RF (radio frequency) chains on the gateway.
+    // There are two sx1250 radios on the gateway - these can be used to listen on two different frequency bands.
+    // We are setting default frequencies for the RF chains to listen on US915 band at two different frequencies.
     memset( &rfconf, 0, sizeof rfconf);
     rfconf.enable = true;
     rfconf.freq_hz = RADIO_0_FREQ;
@@ -73,7 +80,11 @@ int setUpGateway(int bus) {
 
     }
 
-    // set config for intermediate frequency chains.
+    // set config for intermediate frequency chains to listen for downlink messages.
+    // the if (intermediate frequency chain) is used to listen to different frequency channels within the band.
+    // the freq_hz field should be set as the difference from the main frequency ie if the rf chain is set to 902.7MHz,
+    // to get an if chain for frequency 902.5MHz, set freq_hz to -2 MHz.
+    struct lgw_conf_rxif_s ifconf;
     memset(&ifconf, 0, sizeof(ifconf));
     ifconf.enable = true;
     ifconf.datarate = DR_LORA_SF7;
@@ -90,6 +101,7 @@ int setUpGateway(int bus) {
     if (lgw_start() != LGW_HAL_SUCCESS) {
             return EXIT_FAILURE;
         }
+    return 0;
  }
 
 int stopGateway() {

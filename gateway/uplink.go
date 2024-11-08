@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -17,7 +18,7 @@ import (
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
-func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interface{}, error) {
+func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (string, map[string]interface{}, error) {
 
 	devAddr := phyPayload[1:5]
 
@@ -29,8 +30,7 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 		g.logger.Infof("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, nil
 	}
-
-	// Frame control byte contains settings
+	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
 	foptsLength := fctrl & 0x0F
@@ -46,7 +46,7 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
 	fPort := phyPayload[8+foptsLength]
 
-	// device data in the message/
+	// device data in the message.
 	framePayload := phyPayload[8+foptsLength+1 : len(phyPayload)-4]
 
 	dAddr := types.MustDevAddr(devAddrBE)
@@ -57,13 +57,13 @@ func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interfa
 		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
 	}
 
-	// decode using codec
-	readings, err := decodePayload(fPort, device.DecoderPath, decryptedPayload)
+	// decode using the codec.
+	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
 		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
 	}
 
-	return device.Name().Name, readings, nil
+	return device.NodeName, readings, nil
 }
 
 func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node, error) {
@@ -72,10 +72,10 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node,
 			return dev, nil
 		}
 	}
-	return nil, errors.New("no match")
+	return nil, fmt.Errorf("no match for DeviceAddress %v", devAddr)
 }
 
-func decodePayload(fPort uint8, path string, data []byte) (map[string]interface{}, error) {
+func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
 	decoder, err := os.ReadFile(path)
 	if err != nil {
 		return map[string]interface{}{}, err
@@ -84,12 +84,12 @@ func decodePayload(fPort uint8, path string, data []byte) (map[string]interface{
 	// Convert the byte slice to a string
 	fileContent := string(decoder)
 
-	readingsMap, err := convertBinaryToMap(fPort, fileContent, data)
+	readingsMap, err := convertBinaryToMap(ctx, fPort, fileContent, data)
 
 	return readingsMap, nil
 }
 
-func convertBinaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]interface{}, error) {
+func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b []byte) (map[string]interface{}, error) {
 
 	decodeScript = decodeScript + "\n\nDecode(fPort, bytes);\n"
 
@@ -98,7 +98,7 @@ func convertBinaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]
 	vars["fPort"] = fPort
 	vars["bytes"] = b
 
-	v, err := executeDecoder(decodeScript, vars)
+	v, err := executeDecoder(ctx, decodeScript, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,13 @@ func convertBinaryToMap(fPort uint8, decodeScript string, b []byte) (map[string]
 	return readings, nil
 }
 
-func executeDecoder(script string, vars map[string]interface{}) (out interface{}, err error) {
+// struct to hold both value and error to send through channel.
+type result struct {
+	val otto.Value
+	err error
+}
+
+func executeDecoder(ctx context.Context, script string, vars map[string]interface{}) (out interface{}, err error) {
 	defer func() {
 		if caught := recover(); caught != nil {
 			err = fmt.Errorf("%s", caught)
@@ -131,19 +137,27 @@ func executeDecoder(script string, vars map[string]interface{}) (out interface{}
 		}
 	}
 
-	// interrupt the decoder if it takes more than 10 ms to run.
+	resultChan := make(chan result)
+	timeoutCtx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
+
 	go func() {
-		time.Sleep(10 * time.Millisecond)
-		vm.Interrupt <- func() {
-			errors.New("execution timeout")
-		}
+		var res result
+		res.val, res.err = vm.Run(script)
+		resultChan <- res
 	}()
 
-	var val otto.Value
-	val, err = vm.Run(script)
-	if err != nil {
-		return nil, err
+	select {
+	case <-timeoutCtx.Done():
+		vm.Interrupt <- func() {
+			errors.New("ctx canceled")
+		}
+		return nil, ctx.Err()
+	case res := <-resultChan:
+		// the decoder completed
+		if res.err != nil {
+			return nil, res.err
+		}
+		return res.val.Export()
 	}
 
-	return val.Export()
 }
