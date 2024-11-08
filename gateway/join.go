@@ -41,7 +41,7 @@ const (
 
 var errNoDevice = errors.New("received join request from unknown device")
 
-// network id for the device to identify the network.
+// network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
 func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
@@ -107,6 +107,9 @@ func parseJoinRequestPacket(payload []byte, devices map[string]*Device) (joinReq
 
 	// device.devEUI is in big endian - reverse to compare and find device.
 	devEUIBE := reverseByteArray(joinRequest.devEUI)
+
+	fmt.Println(devEUIBE)
+	fmt.Println(devices["test"].devEui)
 
 	// match the dev eui to gateway device
 	for _, device := range devices {
@@ -183,6 +186,7 @@ func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte
 
 }
 
+// Generates random 4 byte dev addr. This is used for the network to identify device's data uplinks.
 func generateDevAddr() []byte {
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
@@ -194,6 +198,8 @@ func generateDevAddr() []byte {
 	return []byte{1, 2, byte(num1), byte(num2)}
 }
 
+// Validates the message integrity code sent in the join request.
+// the MIC is used to verify authenticity of the message.
 func validateMIC(appKey types.AES128Key, payload []byte) error {
 	mic, err := crypto.ComputeJoinRequestMIC(appKey, payload[:19])
 	if err != nil {
@@ -207,6 +213,7 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 
 }
 
+// Generates the session keys from the join request fields and app key.
 func (d *Device) generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte) (types.AES128Key, error) {
 	cryptoDev := &ttnpb.EndDevice{
 		Ids: &ttnpb.EndDeviceIdentifiers{JoinEui: joinEUI, DevEui: devEUI},
@@ -234,6 +241,7 @@ func (d *Device) generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI
 
 }
 
+// generates random 3 byte join nonce
 func generateJoinNonce() []byte {
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)

@@ -79,7 +79,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 			return d.validateOTAAAttributes(path)
 		default:
 			return nil, resource.NewConfigValidationError(path,
-				errors.New("join type is OTAA or ABP"))
+				errors.New("join type is OTAA or ABP - Default is OTAA"))
 		}
 
 	}
@@ -277,7 +277,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			}
 		case 0x40:
 			g.logger.Infof("received data uplink")
-			name, readings, err := g.parseDataUplink(payload)
+			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				g.logger.Errorf("error parsing uplink message: %w", err)
 			}

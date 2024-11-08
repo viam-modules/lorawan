@@ -101,6 +101,7 @@ int setUpGateway(int bus) {
     if (lgw_start() != LGW_HAL_SUCCESS) {
             return EXIT_FAILURE;
         }
+    return 0;
  }
 
 int stopGateway() {
