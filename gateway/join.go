@@ -165,6 +165,9 @@ func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte
 	payload = append(payload, resMIC[:]...)
 
 	enc, err := crypto.EncryptJoinAccept(d.AppKey, payload)
+	if err != nil {
+		return nil, err
+	}
 
 	ja := make([]byte, 0)
 	//add back mhdr

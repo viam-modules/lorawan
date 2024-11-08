@@ -73,7 +73,7 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*Device) (*Device, error
 			return dev, nil
 		}
 	}
-	return nil, errors.New("no match")
+	return nil, fmt.Errorf("no match for DeviceAddress %v", devAddr)
 }
 
 func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
