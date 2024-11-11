@@ -220,6 +220,7 @@ func convertToNode(mapNode map[string]interface{}) *node.Node {
 	return node
 }
 
+// convertToBytes converts the interface{} field from the docommand map into a byte array.
 func convertToBytes(key interface{}) []byte {
 	bytes := key.([]interface{})
 	res := make([]byte, 0)
