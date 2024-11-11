@@ -1,7 +1,7 @@
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc  -I./sx1302/packet_forwarder/inc
+#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
 #cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
@@ -12,15 +12,12 @@ package gateway
 import "C"
 import (
 	"context"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"gateway/gpio"
-	"gateway/parser"
+	"sync"
 	"time"
 
-	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -29,12 +26,7 @@ import (
 )
 
 // Model represents a lorawan gateway model.
-var Model = resource.NewModel("viam", "lorawan", "sx1302")
-
-const (
-	radio0Freq = 902700000
-	radio1Freq = 903700000
-)
+var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
 // Config describes the configuration of the gateway
 type Config struct {
@@ -43,18 +35,25 @@ type Config struct {
 
 type DeviceConfig struct {
 	Name        string `json:"name"`
-	DevEUI      string `json:"dev_eui"`
-	AppSKey     string `json:"app_s_key"`
-	DevAddr     string `json:"dev_addr"`
-	DecoderPath string `json:"codec_path"`
+	JoinType    string `json:"join_type,omitempty"`
+	DevEUI      string `json:"dev_eui,omitempty"`
+	AppSKey     string `json:"app_s_key,omitempty"`
+	NwkSKey     string `json:"network_s_key,omitempty"`
+	DevAddr     string `json:"dev_addr,omitempty"`
+	DecoderPath string `json:"decoder_path"`
+	AppKey      string `json:"app_key,omitempty"`
 }
 
 type Device struct {
-	name            string
-	appSKey         []byte
-	addr            []byte
-	decoderPath     string
-	lastReadingTime time.Time
+	name        string
+	decoderPath string
+
+	nwkSKey types.AES128Key
+	appSKey types.AES128Key
+	AppKey  types.AES128Key
+
+	addr   []byte
+	devEui []byte
 }
 
 func init() {
@@ -68,7 +67,73 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
+	for _, d := range conf.Devices {
+		if d.DecoderPath == "" {
+			return nil, resource.NewConfigValidationError(path,
+				errors.New("decoder path is required"))
+		}
+		switch d.JoinType {
+		case "ABP":
+			return d.validateABPAttributes(path)
+		case "OTAA", "":
+			return d.validateOTAAAttributes(path)
+		default:
+			return nil, resource.NewConfigValidationError(path,
+				errors.New("join type is OTAA or ABP - Default is OTAA"))
+		}
+
+	}
 	return nil, nil
+}
+
+func (conf *DeviceConfig) validateOTAAAttributes(path string) ([]string, error) {
+	if conf.DevEUI == "" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("dev EUI is required for OTAA join type"))
+	}
+	if len(conf.DevEUI) != 16 {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("dev EUI must be 8 bytes"))
+	}
+	if conf.AppKey == "" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("app key is required for OTAA join type"))
+	}
+	if len(conf.AppKey) != 32 {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("app key must be 16 bytes"))
+	}
+	return nil, nil
+}
+
+func (conf *DeviceConfig) validateABPAttributes(path string) ([]string, error) {
+	if conf.AppSKey == "" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("app session key is required for ABP join type"))
+	}
+	if len(conf.AppSKey) != 32 {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("app session key must be 16 bytes"))
+	}
+	if conf.NwkSKey == "" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("network session key is required for ABP join type"))
+	}
+	if len(conf.NwkSKey) != 32 {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("network session key must be 16 bytes"))
+	}
+	if conf.DevAddr == "" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("device address is required for ABP join type"))
+	}
+	if len(conf.DevAddr) != 8 {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("device address must be 4 bytes"))
+	}
+
+	return nil, nil
+
 }
 
 type Gateway struct {
@@ -77,13 +142,13 @@ type Gateway struct {
 	logger logging.Logger
 
 	workers *utils.StoppableWorkers
+	mu      sync.Mutex
 
-	lastReadings map[string]interface{} // map devices to their last reading
+	lastReadings map[string]interface{} // map of devices to readings
+	readingsMu   sync.Mutex
 
-	// devices map[string]string // map of names and device addresses - gateway will ignore any other devices.
-	appSKey string // app session key used to decrypt messages.
+	devices map[string]*Device // map of name to devices
 
-	devices map[string]Device
 }
 
 func newGateway(
@@ -107,53 +172,46 @@ func newGateway(
 	gpio.InitGPIO()
 	gpio.ResetGPIO()
 
-	// set gateway HAT config
-	err = setGatewayConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure gateway board: %w", err)
-	}
-
-	// set rf chain 0 config
-	err = setRfChainConfig(0, radio0Freq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure rf chain 0: %w", err)
-	}
-
-	// set rf chain 1 config
-	err = setRfChainConfig(1, radio1Freq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure rf chain 1: %w", err)
-	}
-
-	err = setIfChainConfigs()
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure if chain: %w", err)
-	}
-
-	// start the gateway
-	errorCode := int(C.startGateway())
-	if errorCode != 0 {
+	errCode := C.setUpGateway(C.int(0))
+	if errCode != 0 {
 		return nil, errors.New("failed to start the gateway")
 	}
 
-	g.devices = make(map[string]Device)
+	g.devices = make(map[string]*Device)
 
 	for _, device := range cfg.Devices {
-		devAddr, err := hex.DecodeString(device.DevAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		appSKey, err := hex.DecodeString(device.AppSKey)
-		if err != nil {
-			return nil, err
-		}
-
-		dev := Device{
+		dev := &Device{
 			name:        device.Name,
-			appSKey:     appSKey,
-			addr:        devAddr,
 			decoderPath: device.DecoderPath,
+		}
+
+		switch device.JoinType {
+		case "OTAA", "":
+			appKey, err := hex.DecodeString(device.AppKey)
+			if err != nil {
+				return nil, err
+			}
+			dev.AppKey = types.AES128Key(appKey)
+
+			devEui, err := hex.DecodeString(device.DevEUI)
+			if err != nil {
+				return nil, err
+			}
+			dev.devEui = devEui
+		case "ABP":
+			devAddr, err := hex.DecodeString(device.DevAddr)
+			if err != nil {
+				return nil, err
+			}
+
+			dev.addr = devAddr
+
+			appSKey, err := hex.DecodeString(device.AppSKey)
+			if err != nil {
+				return nil, err
+			}
+
+			dev.appSKey = types.AES128Key(appSKey)
 		}
 		g.devices[device.Name] = dev
 	}
@@ -165,7 +223,7 @@ func newGateway(
 
 func (g *Gateway) receivePackets() {
 	// receive the radio packets
-	packet := C.create_rxpkt_array()
+	packet := C.createRxPacketArray()
 	g.workers = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) {
 		for {
 			select {
@@ -174,139 +232,89 @@ func (g *Gateway) receivePackets() {
 			default:
 			}
 			numPackets := int(C.receive(packet))
-			if numPackets < 0 || numPackets > 1 {
-				g.logger.Errorf("error receiving lora packet")
-			}
-			if numPackets != 0 {
-				var payload []byte
-				for i := 0; i < numPackets; i++ {
-					// Convert packet to go byte array
-					for i := 0; i < int(packet.size); i++ {
-						payload = append(payload, byte(packet.payload[i]))
-					}
-					g.handlePacket(payload)
-				}
-			} else {
-				// wait 10 ms to receive another packet
+			switch numPackets {
+			case 0:
+				// no packet received, wait 10 ms to receive again.
 				select {
 				case <-ctx.Done():
 					return
 				case <-time.After(10 * time.Millisecond):
 				}
+			case 1:
+				// received a LORA packet
+				var payload []byte
+				for i := 0; i < numPackets; i++ {
+					if packet.size == 0 {
+						continue
+					}
+					// Convert packet to go byte array
+					for i := 0; i < int(packet.size); i++ {
+						payload = append(payload, byte(packet.payload[i]))
+					}
+					g.handlePacket(ctx, payload)
+				}
+			default:
+				g.logger.Errorf("error receiving lora packet")
 			}
 		}
 	})
 }
 
-func (g *Gateway) handlePacket(payload []byte) {
-	// first byte is MHDR - specifies message type
-	switch payload[0] {
-	case 0x0:
-		g.logger.Errorf("OTAA not supported - use ABP")
-	case 0x40:
-		g.logger.Infof("received data uplink")
-		name, readings, err := g.parseDataUplink(payload)
-		if err != nil {
-			g.logger.Errorf("error parsing uplink message: %w", err)
-		} else if name != "" {
-			// the milesight lora sensor sends two data uplink messages close together, we want both of these in the map.
+func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
+	g.workers.Add(func(ctx context.Context) {
+		// first byte is MHDR - specifies message type
+		switch payload[0] {
+		case 0x0:
+			g.logger.Infof("received join request")
+			err := g.handleJoin(ctx, payload)
+			if err != nil {
+				// don't log as error if it was a request from unknown device.
+				if errors.Is(errNoDevice, err) {
+					return
+				}
+				g.logger.Errorf("couldn't handle join request: %w", err)
+			}
+		case 0x40:
+			g.logger.Infof("received data uplink")
+			name, readings, err := g.parseDataUplink(ctx, payload)
+			if err != nil {
+				g.logger.Errorf("error parsing uplink message: %w", err)
+			}
 			g.updateReadings(name, readings)
+
+		default:
+			g.logger.Warnf("received unsupported packet type")
 		}
-	default:
-		g.logger.Warnf("received unsupported packet type")
-	}
+	})
 }
 
 func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}) {
+	g.readingsMu.Lock()
+	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
 	if !ok {
 		// readings for this device does not exist yet
 		g.lastReadings[name] = newReadings
 		return
 	}
+
+	if readings == nil {
+		g.lastReadings[name] = make(map[string]interface{})
+	}
 	for key, val := range newReadings {
 		readings[key] = val
 	}
 
 	g.lastReadings[name] = readings
-
-	if dev, ok := g.devices[name]; ok {
-		dev.lastReadingTime = time.Now()
-		g.devices[name] = dev
-	}
-
 }
 func (g *Gateway) Close(ctx context.Context) error {
 	g.workers.Stop()
-	C.lgw_stop()
+	C.stopGateway()
 	return nil
 }
 
 func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+	g.readingsMu.Lock()
+	defer g.readingsMu.Unlock()
 	return g.lastReadings, nil
-}
-
-func matchDevice(devAddr []byte, devices map[string]Device) (Device, error) {
-	for _, dev := range devices {
-		if string(devAddr) == string(dev.addr) {
-			return dev, nil
-		}
-	}
-	return Device{}, errors.New("no match")
-}
-
-// Structure of phyPayload:
-// | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
-// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
-func (g *Gateway) parseDataUplink(phyPayload []byte) (string, map[string]interface{}, error) {
-
-	/// devAddr is bytes one to five - little endian
-	devAddr := phyPayload[1:5]
-
-	// need to reserve the bytes because packet in LE but TN library expects BE.
-	devAddr = parser.ReverseBytes(devAddr)
-
-	device, err := matchDevice(devAddr, g.devices)
-	if err != nil {
-		g.logger.Infof("received packet from unknown device, ignoring")
-		return "", map[string]interface{}{}, nil
-	}
-
-	dAddr := types.MustDevAddr(devAddr)
-
-	// Frame control byte contains settings
-	// the last 4 bits is the fopts length
-	fctrl := phyPayload[5]
-	foptsLength := fctrl & 0x0F
-
-	// frame count - should increase by 1 with each packet sent
-	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
-
-	// fopts not supported in this module yet.
-	if foptsLength != 0 {
-		_ = phyPayload[8 : 8+foptsLength]
-	}
-
-	// frame port specifies application port - 0 is for MAC commands 1-255 for device messsages.
-	fPort := phyPayload[8+foptsLength]
-
-	framePayload := phyPayload[8+foptsLength+1 : len(phyPayload)-4]
-
-	//TODO: validate the MIC - last 4 bytes
-
-	key := types.AES128Key(device.appSKey)
-
-	// decrypt the frame payload
-	decryptedPayload, err := crypto.DecryptUplink(key, *dAddr, (uint32)(frameCnt), framePayload)
-	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
-	}
-
-	// decode using codec
-	readings, err := parser.DecodePayload(fPort, device.decoderPath, decryptedPayload)
-	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
-	}
-
-	return device.name, readings, nil
 }
