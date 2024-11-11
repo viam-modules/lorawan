@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"sync"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/utils"
 )
 
 // Model represents a lorawan node model.
@@ -106,11 +104,6 @@ type Node struct {
 	resource.AlwaysRebuild
 	logger logging.Logger
 
-	workers *utils.StoppableWorkers
-	mu      sync.Mutex
-
-	DecoderPath string
-
 	nwkSKey []byte
 	AppSKey []byte
 	AppKey  []byte
@@ -118,8 +111,9 @@ type Node struct {
 	Addr   []byte
 	DevEui []byte
 
-	gateway  sensor.Sensor
-	NodeName string
+	DecoderPath string
+	NodeName    string
+	gateway     sensor.Sensor
 }
 
 func newNode(
@@ -186,6 +180,7 @@ func newNode(
 	return n, nil
 }
 
+// getGateway sends the validate docommand to the gateway to confirm the dependency.
 func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
 	if len(deps) == 0 {
 		return nil, errors.New("must add sx1302-gateway as dependency")
