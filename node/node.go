@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 )
@@ -177,6 +178,8 @@ func newNode(
 		return nil, err
 	}
 
+	n.gateway = gateway
+
 	return n, nil
 }
 
@@ -221,16 +224,19 @@ func (n *Node) Close(ctx context.Context) error {
 }
 
 func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
-	allReadings, err := n.gateway.Readings(ctx, nil)
-	if err != nil {
-		return map[string]interface{}{}, err
-	}
+	if n.gateway != nil {
+		allReadings, err := n.gateway.Readings(ctx, nil)
+		if err != nil {
+			return map[string]interface{}{}, err
+		}
 
-	reading, ok := allReadings[n.NodeName]
-	if !ok {
-		// no readings avaliable yet
-		return map[string]interface{}{}, nil
+		reading, ok := allReadings[n.NodeName]
+		if !ok {
+			// no readings availiable yet
+			return map[string]interface{}{}, data.ErrNoCaptureToStore
+		}
+		return reading.(map[string]interface{}), nil
 	}
+	return map[string]interface{}{}, errors.New("node does not have gateway")
 
-	return reading.(map[string]interface{}), nil
 }
