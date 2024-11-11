@@ -207,6 +207,7 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 }
 
+// convertToNode converts the map from the docommand into the node struct.
 func convertToNode(mapNode map[string]interface{}) *node.Node {
 	node := &node.Node{DecoderPath: mapNode["DecoderPath"].(string)}
 
