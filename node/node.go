@@ -140,32 +140,6 @@ func newNode(
 		NodeName:    conf.ResourceName().AsNamed().Name().Name,
 	}
 
-	var dep resource.Resource
-	for _, val := range deps {
-		dep = val
-	}
-
-	gateway, ok := dep.(sensor.Sensor)
-	if !ok {
-		return nil, errors.New("dependency must be a sensor")
-	}
-
-	cmd := make(map[string]interface{})
-
-	cmd["validate"] = 1
-
-	// Validate that its the gateway
-	ret, err := gateway.DoCommand(ctx, cmd)
-
-	retVal, ok := ret["validate"]
-	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway")
-	}
-	if retVal.(float64) != 1 {
-		return nil, errors.New("dependency must be the sx1302-gateway")
-	}
-	n.gateway = gateway
-
 	switch cfg.JoinType {
 	case "OTAA", "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
@@ -195,16 +169,56 @@ func newNode(
 		n.AppSKey = appSKey
 	}
 
-	regCmd := make(map[string]interface{})
+	gateway, err := getGateway(ctx, deps)
+	if err != nil {
+		return nil, err
+	}
 
-	regCmd["register_device"] = n
+	// send the device to the gateway.
+	cmd := make(map[string]interface{})
+	cmd["register_device"] = n
 
-	_, err = gateway.DoCommand(ctx, regCmd)
+	_, err = gateway.DoCommand(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
 
 	return n, nil
+}
+
+func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
+	if len(deps) == 0 {
+		return nil, errors.New("must add sx1302-gateway as dependency")
+	}
+	var dep resource.Resource
+
+	// Assuming there's only one dep.
+	for _, val := range deps {
+		dep = val
+	}
+
+	gateway, ok := dep.(sensor.Sensor)
+	if !ok {
+		return nil, errors.New("dependency must be the sx1302-gateway")
+	}
+
+	cmd := make(map[string]interface{})
+	cmd["validate"] = 1
+
+	// Validate that the dependency is the gateway - gateway will return 1.
+	ret, err := gateway.DoCommand(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	retVal, ok := ret["validate"]
+	if !ok {
+		return nil, errors.New("dependency must be the sx1302-gateway")
+	}
+	if retVal.(float64) != 1 {
+		return nil, errors.New("dependency must be the sx1302-gateway")
+	}
+	return gateway, nil
 }
 
 func (n *Node) Close(ctx context.Context) error {
