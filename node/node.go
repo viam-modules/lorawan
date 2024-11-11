@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"strconv"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -17,6 +19,7 @@ var Model = resource.NewModel("viam", "lorawan", "node")
 type Config struct {
 	JoinType    string `json:"join_type,omitempty"`
 	DecoderPath string `json:"decoder_path"`
+	Interval    string `json:"uplink_interval_mins"`
 	DevEUI      string `json:"dev_eui,omitempty"`
 	AppKey      string `json:"app_key,omitempty"`
 	AppSKey     string `json:"app_s_key,omitempty"`
@@ -112,9 +115,12 @@ type Node struct {
 	Addr   []byte
 	DevEui []byte
 
-	DecoderPath string
-	NodeName    string
-	gateway     sensor.Sensor
+	DecoderPath      string
+	NodeName         string
+	gateway          sensor.Sensor
+	expectedInterval int
+
+	LastReadingTime int
 }
 
 func newNode(
@@ -134,6 +140,12 @@ func newNode(
 		DecoderPath: cfg.DecoderPath,
 		NodeName:    conf.ResourceName().AsNamed().Name().Name,
 	}
+
+	interval, err := strconv.Atoi(cfg.Interval)
+	if err != nil {
+		return nil, err
+	}
+	n.expectedInterval = interval
 
 	switch cfg.JoinType {
 	case "OTAA", "":
@@ -232,11 +244,10 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 
 		reading, ok := allReadings[n.NodeName]
 		if !ok {
-			// no readings availiable yet
-			return map[string]interface{}{}, data.ErrNoCaptureToStore
+			// no readings available yet
+			return map[string]interface{}{}, fmt.Errorf("no readings available yet: %w", data.ErrNoCaptureToStore)
 		}
 		return reading.(map[string]interface{}), nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
-
 }

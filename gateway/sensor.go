@@ -146,7 +146,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
-			g.logger.Infof("received join request")
+			g.logger.Infof("recieved join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -156,14 +156,14 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				g.logger.Errorf("couldn't handle join request: %w", err)
 			}
 		case 0x40:
-			g.logger.Infof("received data uplink")
+			g.logger.Infof("recieved data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				g.logger.Errorf("error parsing uplink message: %w", err)
 			}
 			g.updateReadings(name, readings)
 		default:
-			g.logger.Warnf("received unsupported packet type")
+			g.logger.Warnf("recieved unsupported packet type")
 		}
 	})
 }

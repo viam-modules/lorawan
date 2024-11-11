@@ -63,6 +63,16 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
 	}
 
+	// update the last reading timestamp
+	device.LastReadingTime = int(time.Now().Unix())
+
+	unix := int(time.Now().Unix())
+	t := time.Unix(int64(unix), 0)
+
+	// Format the Time object into a timestamp string
+	timestamp := t.Format(time.RFC3339)
+	readings["time"] = timestamp
+
 	return device.NodeName, readings, nil
 }
 
