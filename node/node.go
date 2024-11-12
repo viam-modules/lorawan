@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -192,6 +193,25 @@ func newNode(
 
 	n.gateway = gateway
 
+	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+	inter, err := strconv.Atoi(cfg.Interval)
+	if err != nil {
+		return nil, err
+	}
+	intervalSeconds := (time.Duration(inter) * time.Minute).Seconds()
+	expectedFreq := 1 / intervalSeconds
+
+	if captureFreq > expectedFreq {
+		return nil,
+			fmt.Errorf("configured capture frequency (%v) is greater than the frequency (%v) of expected uplink interval for node %v: lower capture frequency to avoid duplicate data",
+				captureFreq,
+				expectedFreq,
+				n.NodeName)
+	}
+
 	return n, nil
 }
 
@@ -250,4 +270,25 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		return reading.(map[string]interface{}), nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
+}
+
+// getCaptureFrequencyHzFromConfig extract the capture_frequency_hz from the device config
+func getCaptureFrequencyHzFromConfig(c resource.Config) (float64, error) {
+	var captureFreqHz float64
+	var captureMethodFound bool
+	for _, assocResourceCfg := range c.AssociatedResourceConfigs {
+		if captureMethodsMapInterface := assocResourceCfg.Attributes["capture_methods"]; captureMethodsMapInterface != nil {
+			captureMethodFound = true
+			for _, captureMethodsInterface := range captureMethodsMapInterface.([]interface{}) {
+				captureMethods := captureMethodsInterface.(map[string]interface{})
+				if captureMethods["method"].(string) == "Readings" {
+					captureFreqHz = captureMethods["capture_frequency_hz"].(float64)
+				}
+			}
+		}
+	}
+	if captureMethodFound && captureFreqHz <= 0 {
+		return 0.0, errors.New("zero or negative capture frequency")
+	}
+	return captureFreqHz, nil
 }

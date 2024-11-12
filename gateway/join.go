@@ -35,7 +35,7 @@ type joinRequest struct {
 
 const (
 	joinRx2WindowSec = 6         // rx2 delay for sending join accept message.
-	rx2Frequenecy    = 923300000 // Frequency to send downlinks on rx2 winddow
+	rx2Frequenecy    = 923300000 // Frequency to send downlinks on rx2 window
 	rx2SF            = 12        // spreading factor for rx2 window
 	rx2Bandwidth     = 0x06      // 500k bandwidth
 )
