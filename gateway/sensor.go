@@ -13,7 +13,6 @@ import "C"
 import (
 	"context"
 	"errors"
-	"fmt"
 	"gateway/gpio"
 	"gateway/node"
 	"sync"
@@ -59,6 +58,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 
 type Gateway struct {
 	resource.Named
+	resource.AlwaysRebuild
 	logger logging.Logger
 
 	workers *utils.StoppableWorkers
@@ -71,11 +71,6 @@ type Gateway struct {
 
 }
 
-func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-	fmt.Println("reconfiguring gateway")
-	return nil
-}
-
 func newGateway(
 	ctx context.Context,
 	_ resource.Dependencies,
@@ -86,8 +81,6 @@ func newGateway(
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("building gateway")
 
 	g := &Gateway{
 		Named:        conf.ResourceName().AsNamed(),
@@ -213,12 +206,15 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		}
 	}
 
-	// Remove a node from the device map.
+	// Remove a node from the device map and readings map.
 	if name, ok := cmd["remove_device"]; ok {
 		if n, ok := name.(string); ok {
-			fmt.Println("REMOVING")
 			delete(g.devices, n)
+			g.readingsMu.Lock()
+			delete(g.lastReadings, n)
+			g.readingsMu.Unlock()
 		}
+
 	}
 
 	return nil, nil

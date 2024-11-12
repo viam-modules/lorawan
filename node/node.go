@@ -129,9 +129,58 @@ func newNode(
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
-	fmt.Println("build")
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return nil, err
+	}
 
-	n.Reconfigure(ctx, deps, conf)
+	switch cfg.JoinType {
+	case "OTAA", "":
+		appKey, err := hex.DecodeString(cfg.AppKey)
+		if err != nil {
+			return nil, err
+		}
+		n.AppKey = appKey
+
+		devEui, err := hex.DecodeString(cfg.DevEUI)
+		if err != nil {
+			return nil, err
+		}
+		n.DevEui = devEui
+	case "ABP":
+		devAddr, err := hex.DecodeString(cfg.DevAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		n.Addr = devAddr
+
+		appSKey, err := hex.DecodeString(cfg.AppSKey)
+		if err != nil {
+			return nil, err
+		}
+
+		n.AppSKey = appSKey
+	}
+
+	n.DecoderPath = cfg.DecoderPath
+
+	gateway, err := getGateway(ctx, deps)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := make(map[string]interface{})
+
+	// send the device to the gateway.
+	cmd["register_device"] = n
+
+	_, err = gateway.DoCommand(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	n.gateway = gateway
 
 	return n, nil
 }
@@ -142,14 +191,10 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 		return err
 	}
 
-	fmt.Println("in RECONFIGURE node")
-
 	gateway, err := getGateway(ctx, deps)
 	if err != nil {
 		return err
 	}
-
-	fmt.Println(n.NodeName)
 
 	// node name changed, remove the old device name from the gateway
 	if n.NodeName != conf.ResourceName().AsNamed().Name().Name {
@@ -240,6 +285,9 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 }
 
 func (n *Node) Close(ctx context.Context) error {
+	cmd := make(map[string]interface{})
+	cmd["remove_device"] = n.NodeName
+	n.gateway.DoCommand(ctx, cmd)
 	return nil
 }
 
