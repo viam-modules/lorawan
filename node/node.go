@@ -103,7 +103,6 @@ func (conf *Config) validateABPAttributes(path string) ([]string, error) {
 
 type Node struct {
 	resource.Named
-	resource.AlwaysRebuild
 	logger logging.Logger
 
 	nwkSKey []byte
@@ -124,51 +123,71 @@ func newNode(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	cfg, err := resource.NativeConfig[*Config](conf)
-	if err != nil {
-		return nil, err
+	n := &Node{
+		Named:    conf.ResourceName().AsNamed(),
+		logger:   logger,
+		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
-	n := &Node{
-		Named:       conf.ResourceName().AsNamed(),
-		logger:      logger,
-		DecoderPath: cfg.DecoderPath,
-		NodeName:    conf.ResourceName().AsNamed().Name().Name,
+	fmt.Println("build")
+
+	n.Reconfigure(ctx, deps, conf)
+
+	return n, nil
+}
+
+func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("in RECONFIGURE node")
+
+	gateway, err := getGateway(ctx, deps)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(n.NodeName)
+
+	// node name changed, remove the old device name from the gateway
+	if n.NodeName != conf.ResourceName().AsNamed().Name().Name {
+		cmd := make(map[string]interface{})
+		cmd["remove_device"] = n.NodeName
+		n.NodeName = conf.ResourceName().AsNamed().Name().Name
 	}
 
 	switch cfg.JoinType {
 	case "OTAA", "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		n.AppKey = appKey
 
 		devEui, err := hex.DecodeString(cfg.DevEUI)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		n.DevEui = devEui
 	case "ABP":
 		devAddr, err := hex.DecodeString(cfg.DevAddr)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		n.Addr = devAddr
 
 		appSKey, err := hex.DecodeString(cfg.AppSKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		n.AppSKey = appSKey
 	}
 
-	gateway, err := getGateway(ctx, deps)
-	if err != nil {
-		return nil, err
-	}
+	n.DecoderPath = cfg.DecoderPath
 
 	// send the device to the gateway.
 	cmd := make(map[string]interface{})
@@ -176,12 +195,12 @@ func newNode(
 
 	_, err = gateway.DoCommand(ctx, cmd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	n.gateway = gateway
+	return nil
 
-	return n, nil
 }
 
 // getGateway sends the validate docommand to the gateway to confirm the dependency.
