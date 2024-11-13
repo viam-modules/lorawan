@@ -106,7 +106,6 @@ func (conf *Config) validateABPAttributes(path string) ([]string, error) {
 
 type Node struct {
 	resource.Named
-	resource.AlwaysRebuild
 	logger logging.Logger
 
 	nwkSKey []byte
@@ -130,16 +129,15 @@ func newNode(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
+	n := &Node{
+		Named:    conf.ResourceName().AsNamed(),
+		logger:   logger,
+		NodeName: conf.ResourceName().AsNamed().Name().Name,
+	}
+
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return nil, err
-	}
-
-	n := &Node{
-		Named:       conf.ResourceName().AsNamed(),
-		logger:      logger,
-		DecoderPath: cfg.DecoderPath,
-		NodeName:    conf.ResourceName().AsNamed().Name().Name,
 	}
 
 	interval, err := strconv.Atoi(cfg.Interval)
@@ -177,13 +175,16 @@ func newNode(
 		n.AppSKey = appSKey
 	}
 
+	n.DecoderPath = cfg.DecoderPath
+
 	gateway, err := getGateway(ctx, deps)
 	if err != nil {
 		return nil, err
 	}
 
-	// send the device to the gateway.
 	cmd := make(map[string]interface{})
+
+	// send the device to the gateway.
 	cmd["register_device"] = n
 
 	_, err = gateway.DoCommand(ctx, cmd)
@@ -193,6 +194,7 @@ func newNode(
 
 	n.gateway = gateway
 
+	// Warn if user's configured capture frequency is more than the expected uplink interval.
 	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
 	if err != nil {
 		return nil, err
@@ -205,14 +207,76 @@ func newNode(
 	expectedFreq := 1 / intervalSeconds
 
 	if captureFreq > expectedFreq {
-		return nil,
-			fmt.Errorf("configured capture frequency (%v) is greater than the frequency (%v) of expected uplink interval for node %v: lower capture frequency to avoid duplicate data",
-				captureFreq,
-				expectedFreq,
-				n.NodeName)
+		n.logger.Warnf("configured capture frequency (%v) is greater than the frequency (%v) of expected uplink interval for node %v: lower capture frequency to avoid duplicate data",
+			captureFreq,
+			expectedFreq,
+			n.NodeName)
 	}
 
 	return n, nil
+}
+
+func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
+	}
+
+	gateway, err := getGateway(ctx, deps)
+	if err != nil {
+		return err
+	}
+
+	// node name changed, remove the old device name from the gateway
+	if n.NodeName != conf.ResourceName().AsNamed().Name().Name {
+		cmd := make(map[string]interface{})
+		cmd["remove_device"] = n.NodeName
+		n.NodeName = conf.ResourceName().AsNamed().Name().Name
+	}
+
+	switch cfg.JoinType {
+	case "OTAA", "":
+		appKey, err := hex.DecodeString(cfg.AppKey)
+		if err != nil {
+			return err
+		}
+		n.AppKey = appKey
+
+		devEui, err := hex.DecodeString(cfg.DevEUI)
+		if err != nil {
+			return err
+		}
+		n.DevEui = devEui
+	case "ABP":
+		devAddr, err := hex.DecodeString(cfg.DevAddr)
+		if err != nil {
+			return err
+		}
+
+		n.Addr = devAddr
+
+		appSKey, err := hex.DecodeString(cfg.AppSKey)
+		if err != nil {
+			return err
+		}
+
+		n.AppSKey = appSKey
+	}
+
+	n.DecoderPath = cfg.DecoderPath
+
+	// send the device to the gateway.
+	cmd := make(map[string]interface{})
+	cmd["register_device"] = n
+
+	_, err = gateway.DoCommand(ctx, cmd)
+	if err != nil {
+		return err
+	}
+
+	n.gateway = gateway
+	return nil
+
 }
 
 // getGateway sends the validate docommand to the gateway to confirm the dependency.
@@ -252,6 +316,9 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 }
 
 func (n *Node) Close(ctx context.Context) error {
+	cmd := make(map[string]interface{})
+	cmd["remove_device"] = n.NodeName
+	n.gateway.DoCommand(ctx, cmd)
 	return nil
 }
 

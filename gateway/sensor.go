@@ -161,6 +161,10 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			if err != nil {
 				g.logger.Errorf("error parsing uplink message: %w", err)
 			}
+			// Ignore packets from unknown devices.
+			if errors.Is(errNoDevice, err) {
+				return
+			}
 			g.updateReadings(name, readings)
 		default:
 			g.logger.Warnf("recieved unsupported packet type")
@@ -198,9 +202,23 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
-			node := convertToNode(newN)
+			node, err := convertToNode(newN)
+			if err != nil {
+				return nil, err
+			}
 			g.devices[node.NodeName] = node
 		}
+	}
+
+	// Remove a node from the device map and readings map.
+	if name, ok := cmd["remove_device"]; ok {
+		if n, ok := name.(string); ok {
+			delete(g.devices, n)
+			g.readingsMu.Lock()
+			delete(g.lastReadings, n)
+			g.readingsMu.Unlock()
+		}
+
 	}
 
 	return nil, nil
@@ -208,21 +226,38 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 }
 
 // convertToNode converts the map from the docommand into the node struct.
-func convertToNode(mapNode map[string]interface{}) *node.Node {
+func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 	node := &node.Node{DecoderPath: mapNode["DecoderPath"].(string)}
 
-	node.AppKey = convertToBytes(mapNode["AppKey"])
-	node.AppSKey = convertToBytes(mapNode["AppSKey"])
-	node.DevEui = convertToBytes(mapNode["DevEui"])
-	node.Addr = convertToBytes(mapNode["Addr"])
+	var err error
+	node.AppKey, err = convertToBytes(mapNode["AppKey"])
+	if err != nil {
+		return nil, err
+	}
+	node.AppSKey, err = convertToBytes(mapNode["AppSKey"])
+	if err != nil {
+		return nil, err
+	}
+	node.DevEui, err = convertToBytes(mapNode["DevEui"])
+	if err != nil {
+		return nil, err
+	}
+	node.Addr, err = convertToBytes(mapNode["Addr"])
+	if err != nil {
+		return nil, err
+	}
+
 	node.NodeName = mapNode["NodeName"].(string)
 
-	return node
+	return node, nil
 }
 
 // convertToBytes converts the interface{} field from the docommand map into a byte array.
-func convertToBytes(key interface{}) []byte {
-	bytes := key.([]interface{})
+func convertToBytes(key interface{}) ([]byte, error) {
+	bytes, ok := key.([]interface{})
+	if !ok {
+		return nil, errors.New("expected node map val to be type []interface{}, but it wasn't")
+	}
 	res := make([]byte, 0)
 
 	if len(bytes) > 0 {
@@ -232,7 +267,7 @@ func convertToBytes(key interface{}) []byte {
 		}
 	}
 
-	return res
+	return res, nil
 
 }
 func (g *Gateway) Close(ctx context.Context) error {

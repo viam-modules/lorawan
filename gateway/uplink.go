@@ -28,7 +28,7 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
 		g.logger.Infof("received packet from unknown device, ignoring")
-		return "", map[string]interface{}{}, nil
+		return "", map[string]interface{}{}, errNoDevice
 	}
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
