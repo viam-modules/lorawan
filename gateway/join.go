@@ -154,6 +154,11 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 	payload = append(payload, 0x00) // dl settings: default
 	payload = append(payload, 0x01) // rx delay: 1 second
 
+	// enable channels 0-7
+	cfList := []byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+
+	payload = append(payload, cfList...)
+
 	// generate MIC
 	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)
 	if err != nil {

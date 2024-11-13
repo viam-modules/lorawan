@@ -13,6 +13,7 @@ import "C"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gateway/gpio"
 	"gateway/node"
 	"sync"
@@ -132,6 +133,7 @@ func (g *Gateway) receivePackets() {
 					for i := 0; i < int(packet.size); i++ {
 						payload = append(payload, byte(packet.payload[i]))
 					}
+					fmt.Println(packet)
 					g.handlePacket(ctx, payload)
 				}
 			default:
@@ -153,7 +155,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				if errors.Is(errNoDevice, err) {
 					return
 				}
-				g.logger.Errorf("couldn't handle join request: %w", err)
+				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
 			g.logger.Infof("received data uplink")
