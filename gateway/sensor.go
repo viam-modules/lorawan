@@ -274,7 +274,9 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 }
 func (g *Gateway) Close(ctx context.Context) error {
-	g.workers.Stop()
+	if g.workers != nil {
+		g.workers.Stop()
+	}
 	C.stopGateway()
 	return nil
 }

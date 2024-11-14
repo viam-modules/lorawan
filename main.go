@@ -10,11 +10,8 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
-const moduleName = "lorawan"
-
 func main() {
 	module.ModularMain(
-		moduleName,
 		resource.APIModel{API: sensor.API, Model: gateway.Model},
 		resource.APIModel{API: sensor.API, Model: node.Model},
 	)

@@ -40,7 +40,7 @@ const (
 	rx2Bandwidth     = 0x06      // 500k bandwidth
 )
 
-var errNoDevice = errors.New("received join request from unknown device")
+var errNoDevice = errors.New("received packet from unknown device")
 
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
