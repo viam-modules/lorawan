@@ -18,9 +18,12 @@ func pinctrlSet(pin string, state string) {
 	}
 }
 
-func InitGateway(resetPin, powerPin int) {
-	rst := strconv.Itoa(resetPin)
-	pwr := strconv.Itoa(powerPin)
+func InitGateway(resetPin, powerPin *int) {
+	rst := strconv.Itoa(*resetPin)
+	var pwr string
+	if powerPin != nil {
+		pwr = strconv.Itoa(*powerPin)
+	}
 	initGPIO(rst, pwr)
 	resetGPIO(rst)
 }
@@ -29,7 +32,7 @@ func initGPIO(resetPin, powerPin string) {
 	// Set GPIOs as output
 	pinctrlSet(resetPin, "op")
 	waitGPIO()
-	if powerPin != "0" {
+	if powerPin != "" {
 		pinctrlSet(powerPin, "op")
 		waitGPIO()
 	}

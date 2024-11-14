@@ -29,9 +29,9 @@ var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
 // Config describes the configuration of the gateway
 type Config struct {
-	Bus      int `json:"spi_bus,omitempty"`
-	PowerPin int `json:"power_en_pin,omitempty"`
-	ResetPin int `json:"reset_pin"`
+	Bus      int  `json:"spi_bus,omitempty"`
+	PowerPin *int `json:"power_en_pin,omitempty"`
+	ResetPin *int `json:"reset_pin"`
 }
 
 func init() {
@@ -45,7 +45,7 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	if conf.ResetPin == 0 {
+	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("reset pin is required"))
 	}
@@ -161,6 +161,10 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			if err != nil {
 				g.logger.Errorf("error parsing uplink message: %w", err)
 			}
+			// don't update readings from unknown device
+			if errors.Is(errNoDevice, err) {
+				return
+			}
 			g.updateReadings(name, readings)
 		default:
 			g.logger.Warnf("received unsupported packet type")
@@ -217,7 +221,7 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 	}
 
-	return nil, nil
+	return map[string]interface{}{}, nil
 
 }
 
@@ -258,7 +262,10 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 	if len(bytes) > 0 {
 		for _, b := range bytes {
-			val, _ := b.(float64)
+			val, ok := b.(float64)
+			if !ok {
+				return nil, errors.New("expected node byte array val to be floar64, but it wasn't")
+			}
 			res = append(res, byte(val))
 		}
 	}
