@@ -13,7 +13,6 @@ import "C"
 import (
 	"context"
 	"errors"
-	"fmt"
 	"gateway/gpio"
 	"gateway/node"
 	"sync"
@@ -135,9 +134,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	g.started = true
-
-	fmt.Println("gateway set up")
-	fmt.Println("recieving packets")
 	g.receivePackets()
 
 	return nil
@@ -234,7 +230,6 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
@@ -247,7 +242,18 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			if err != nil {
 				return nil, err
 			}
-			g.devices[node.NodeName] = node
+
+			oldNode, exists := g.devices[node.NodeName]
+			if !exists {
+				g.devices[node.NodeName] = node
+				return map[string]interface{}{}, nil
+			}
+			// node with that name already exists, merge them
+			mergedNode, err := mergeNodes(node, oldNode)
+			if err != nil {
+				return nil, err
+			}
+			g.devices[node.NodeName] = mergedNode
 		}
 	}
 
@@ -263,6 +269,36 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+
+}
+
+// mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
+func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
+	mergedNode := &node.Node{}
+	mergedNode.DecoderPath = newNode.DecoderPath
+	mergedNode.NodeName = newNode.NodeName
+	mergedNode.JoinType = newNode.JoinType
+
+	switch mergedNode.JoinType {
+	case "OTAA":
+		// if join type is OTAA - keep the appSKey, dev addr from the old node.
+		// These fields were determined by the gateway if the join procedure was done.
+		mergedNode.Addr = oldNode.Addr
+		mergedNode.AppSKey = oldNode.AppSKey
+		// The appkey and deveui are obtained by the config in OTAA,
+		// if these were changed during reconfigure the join procedure needs to be redone
+		mergedNode.AppKey = newNode.AppKey
+		mergedNode.DevEui = newNode.DevEui
+	case "ABP":
+		// if join type is ABP get the new appSKey and addr from the new config.
+		// Don't need appkey and DevEui for ABP.
+		mergedNode.Addr = newNode.Addr
+		mergedNode.AppSKey = newNode.AppSKey
+	default:
+		return nil, errors.New("unexpected join type when adding node to gateway")
+	}
+
+	return mergedNode, nil
 
 }
 
@@ -289,6 +325,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 	}
 
 	node.NodeName = mapNode["NodeName"].(string)
+	node.JoinType = mapNode["JoinType"].(string)
 
 	return node, nil
 }

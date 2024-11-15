@@ -103,7 +103,6 @@ func (conf *Config) validateABPAttributes(path string) ([]string, error) {
 
 type Node struct {
 	resource.Named
-	resource.AlwaysRebuild
 	logger logging.Logger
 
 	nwkSKey []byte
@@ -116,6 +115,7 @@ type Node struct {
 	DecoderPath string
 	NodeName    string
 	gateway     sensor.Sensor
+	JoinType    string
 }
 
 func newNode(
@@ -130,45 +130,59 @@ func newNode(
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
-	cfg, err := resource.NativeConfig[*Config](conf)
+	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
+	}
+
+	return n, nil
+}
+
+func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
 	}
 
 	switch cfg.JoinType {
 	case "OTAA", "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		n.AppKey = appKey
 
 		devEui, err := hex.DecodeString(cfg.DevEUI)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		n.DevEui = devEui
 	case "ABP":
 		devAddr, err := hex.DecodeString(cfg.DevAddr)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		n.Addr = devAddr
 
 		appSKey, err := hex.DecodeString(cfg.AppSKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		n.AppSKey = appSKey
 	}
 
 	n.DecoderPath = cfg.DecoderPath
+	n.JoinType = cfg.JoinType
+
+	if n.JoinType == "" {
+		n.JoinType = "OTAA"
+	}
 
 	gateway, err := getGateway(ctx, deps)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	cmd := make(map[string]interface{})
@@ -178,12 +192,13 @@ func newNode(
 
 	_, err = gateway.DoCommand(ctx, cmd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	n.gateway = gateway
 
-	return n, nil
+	return nil
+
 }
 
 // getGateway sends the validate docommand to the gateway to confirm the dependency.
