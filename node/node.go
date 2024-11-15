@@ -115,6 +115,7 @@ type Node struct {
 	DecoderPath string
 	NodeName    string
 	gateway     sensor.Sensor
+	JoinType    string
 }
 
 func newNode(
@@ -129,58 +130,10 @@ func newNode(
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
-	cfg, err := resource.NativeConfig[*Config](conf)
+	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
-
-	switch cfg.JoinType {
-	case "OTAA", "":
-		appKey, err := hex.DecodeString(cfg.AppKey)
-		if err != nil {
-			return nil, err
-		}
-		n.AppKey = appKey
-
-		devEui, err := hex.DecodeString(cfg.DevEUI)
-		if err != nil {
-			return nil, err
-		}
-		n.DevEui = devEui
-	case "ABP":
-		devAddr, err := hex.DecodeString(cfg.DevAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		n.Addr = devAddr
-
-		appSKey, err := hex.DecodeString(cfg.AppSKey)
-		if err != nil {
-			return nil, err
-		}
-
-		n.AppSKey = appSKey
-	}
-
-	n.DecoderPath = cfg.DecoderPath
-
-	gateway, err := getGateway(ctx, deps)
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := make(map[string]interface{})
-
-	// send the device to the gateway.
-	cmd["register_device"] = n
-
-	_, err = gateway.DoCommand(ctx, cmd)
-	if err != nil {
-		return nil, err
-	}
-
-	n.gateway = gateway
 
 	return n, nil
 }
@@ -191,18 +144,6 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 		return err
 	}
 
-	gateway, err := getGateway(ctx, deps)
-	if err != nil {
-		return err
-	}
-
-	// node name changed, remove the old device name from the gateway
-	if n.NodeName != conf.ResourceName().AsNamed().Name().Name {
-		cmd := make(map[string]interface{})
-		cmd["remove_device"] = n.NodeName
-		n.NodeName = conf.ResourceName().AsNamed().Name().Name
-	}
-
 	switch cfg.JoinType {
 	case "OTAA", "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
@@ -233,9 +174,20 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	}
 
 	n.DecoderPath = cfg.DecoderPath
+	n.JoinType = cfg.JoinType
+
+	if n.JoinType == "" {
+		n.JoinType = "OTAA"
+	}
+
+	gateway, err := getGateway(ctx, deps)
+	if err != nil {
+		return err
+	}
+
+	cmd := make(map[string]interface{})
 
 	// send the device to the gateway.
-	cmd := make(map[string]interface{})
 	cmd["register_device"] = n
 
 	_, err = gateway.DoCommand(ctx, cmd)
@@ -244,6 +196,7 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	}
 
 	n.gateway = gateway
+
 	return nil
 
 }
@@ -262,7 +215,7 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 
 	gateway, ok := dep.(sensor.Sensor)
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway")
+		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
 
 	cmd := make(map[string]interface{})
@@ -276,10 +229,10 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway")
+		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
 	if retVal.(float64) != 1 {
-		return nil, errors.New("dependency must be the sx1302-gateway")
+		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
 	return gateway, nil
 }
@@ -287,8 +240,8 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 func (n *Node) Close(ctx context.Context) error {
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
-	n.gateway.DoCommand(ctx, cmd)
-	return nil
+	_, err := n.gateway.DoCommand(ctx, cmd)
+	return err
 }
 
 func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
