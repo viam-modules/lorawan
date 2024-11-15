@@ -73,6 +73,8 @@ type Gateway struct {
 	resetPin   int
 	powerEnPin int
 	bus        int
+
+	started bool
 }
 
 func newGateway(
@@ -81,15 +83,11 @@ func newGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	// stop the gateway just in case.
-	C.stopGateway()
-
 	g := &Gateway{
-		Named:  conf.ResourceName().AsNamed(),
-		logger: logger,
+		Named:   conf.ResourceName().AsNamed(),
+		logger:  logger,
+		started: false,
 	}
-
-	fmt.Println("new gateway")
 
 	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
@@ -101,23 +99,23 @@ func newGateway(
 
 func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 
-	fmt.Println("reconfiguring!!!!")
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
 	}
 
-	// // reinit the gateway
-	// gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
-
-	// // close the background routine and stop the gateway before reconfiguring.
-	// err = g.Close(ctx)
-	// if err != nil {
-	// 	g.logger.Errorf(err.Error())
-	// 	return err
-	// }
-
-	// time.Sleep(1 * time.Second)
+	// If the gateway hardware was already started, stop gateway and the background worker.
+	// Make sure to always call stopGateway() before making any changes to the c config or
+	// errors will occur.
+	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
+	// started, so only call stopGateway if this module already started the gateway.
+	if g.started {
+		err = g.Close(ctx)
+		if err != nil {
+			return err
+		}
+		g.started = false
+	}
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -128,13 +126,15 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// reinit the gateway
+	// init the gateway
 	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
 		return errors.New("failed to start the gateway")
 	}
+
+	g.started = true
 
 	fmt.Println("gateway set up")
 	fmt.Println("recieving packets")
