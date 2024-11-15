@@ -13,6 +13,7 @@ import "C"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gateway/gpio"
 	"gateway/node"
 	"sync"
@@ -67,39 +68,79 @@ type Gateway struct {
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
-	devices map[string]*node.Node // map of device address to node struct
+	devices map[string]*node.Node // map of node name to node struct
 
+	resetPin   int
+	powerEnPin int
+	bus        int
 }
 
 func newGateway(
 	ctx context.Context,
-	_ resource.Dependencies,
+	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	cfg, err := resource.NativeConfig[*Config](conf)
+	// stop the gateway just in case.
+	C.stopGateway()
+
+	g := &Gateway{
+		Named:  conf.ResourceName().AsNamed(),
+		logger: logger,
+	}
+
+	fmt.Println("new gateway")
+
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	g := &Gateway{
-		Named:        conf.ResourceName().AsNamed(),
-		logger:       logger,
-		lastReadings: map[string]interface{}{},
+	return g, nil
+}
+
+func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+
+	fmt.Println("reconfiguring!!!!")
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
 	}
 
-	// reset and start the gateway.
+	// // reinit the gateway
+	// gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+
+	// // close the background routine and stop the gateway before reconfiguring.
+	// err = g.Close(ctx)
+	// if err != nil {
+	// 	g.logger.Errorf(err.Error())
+	// 	return err
+	// }
+
+	// time.Sleep(1 * time.Second)
+
+	// maintain devices and lastReadings through reconfigure.
+	if g.devices == nil {
+		g.devices = make(map[string]*node.Node)
+	}
+
+	if g.lastReadings == nil {
+		g.lastReadings = make(map[string]interface{})
+	}
+
+	// reinit the gateway
 	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return nil, errors.New("failed to start the gateway")
+		return errors.New("failed to start the gateway")
 	}
 
-	g.devices = make(map[string]*node.Node)
+	fmt.Println("gateway set up")
+	fmt.Println("recieving packets")
 	g.receivePackets()
 
-	return g, nil
+	return nil
 }
 
 func (g *Gateway) receivePackets() {
@@ -153,13 +194,13 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				if errors.Is(errNoDevice, err) {
 					return
 				}
-				g.logger.Errorf("couldn't handle join request: %w", err)
+				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
 			g.logger.Infof("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
-				g.logger.Errorf("error parsing uplink message: %w", err)
+				g.logger.Errorf("error parsing uplink message: %s", err)
 			}
 			// don't update readings from unknown device
 			if errors.Is(errNoDevice, err) {
@@ -277,7 +318,10 @@ func (g *Gateway) Close(ctx context.Context) error {
 	if g.workers != nil {
 		g.workers.Stop()
 	}
-	C.stopGateway()
+	errCode := C.stopGateway()
+	if errCode != 0 {
+		g.logger.Errorf("error stopping gateway")
+	}
 	return nil
 }
 
