@@ -29,9 +29,9 @@ var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
 // Config describes the configuration of the gateway
 type Config struct {
-	Bus      int `json:"spi_bus,omitempty"`
-	PowerPin int `json:"power_en_pin,omitempty"`
-	ResetPin int `json:"reset_pin"`
+	Bus      int  `json:"spi_bus,omitempty"`
+	PowerPin *int `json:"power_en_pin,omitempty"`
+	ResetPin *int `json:"reset_pin"`
 }
 
 func init() {
@@ -45,7 +45,7 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	if conf.ResetPin == 0 {
+	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("reset pin is required"))
 	}
@@ -67,39 +67,77 @@ type Gateway struct {
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
-	devices map[string]*node.Node // map of device address to node struct
+	devices map[string]*node.Node // map of node name to node struct
 
+	resetPin   int
+	powerEnPin int
+	bus        int
+
+	started bool
 }
 
 func newGateway(
 	ctx context.Context,
-	_ resource.Dependencies,
+	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	cfg, err := resource.NativeConfig[*Config](conf)
+	g := &Gateway{
+		Named:   conf.ResourceName().AsNamed(),
+		logger:  logger,
+		started: false,
+	}
+
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	g := &Gateway{
-		Named:        conf.ResourceName().AsNamed(),
-		logger:       logger,
-		lastReadings: map[string]interface{}{},
+	return g, nil
+}
+
+func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
 	}
 
-	// reset and start the gateway.
+	// If the gateway hardware was already started, stop gateway and the background worker.
+	// Make sure to always call stopGateway() before making any changes to the c config or
+	// errors will occur.
+	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
+	// started, so only call stopGateway if this module already started the gateway.
+	if g.started {
+		err = g.Close(ctx)
+		if err != nil {
+			return err
+		}
+		g.started = false
+	}
+
+	// maintain devices and lastReadings through reconfigure.
+	if g.devices == nil {
+		g.devices = make(map[string]*node.Node)
+	}
+
+	if g.lastReadings == nil {
+		g.lastReadings = make(map[string]interface{})
+	}
+
+	// init the gateway
 	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return nil, errors.New("failed to start the gateway")
+		return errors.New("failed to start the gateway")
 	}
 
-	g.devices = make(map[string]*node.Node)
+	g.started = true
 	g.receivePackets()
 
-	return g, nil
+
+	return nil
 }
 
 func (g *Gateway) receivePackets() {
@@ -153,16 +191,17 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				if errors.Is(errNoDevice, err) {
 					return
 				}
-				g.logger.Errorf("couldn't handle join request: %w", err)
+				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
 			g.logger.Infof("recieved data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
-				g.logger.Errorf("error parsing uplink message: %w", err)
-			}
-			// Ignore packets from unknown devices.
-			if errors.Is(errNoDevice, err) {
+				// don't update readings or log if from unknown device
+				if errors.Is(errNoDevice, err) {
+					return
+				}
+				g.logger.Errorf("error parsing uplink message: %s", err)
 				return
 			}
 			g.updateReadings(name, readings)
@@ -193,7 +232,6 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
@@ -206,7 +244,18 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			if err != nil {
 				return nil, err
 			}
-			g.devices[node.NodeName] = node
+
+			oldNode, exists := g.devices[node.NodeName]
+			if !exists {
+				g.devices[node.NodeName] = node
+				return map[string]interface{}{}, nil
+			}
+			// node with that name already exists, merge them
+			mergedNode, err := mergeNodes(node, oldNode)
+			if err != nil {
+				return nil, err
+			}
+			g.devices[node.NodeName] = mergedNode
 		}
 	}
 
@@ -221,7 +270,37 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 	}
 
-	return nil, nil
+	return map[string]interface{}{}, nil
+
+}
+
+// mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
+func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
+	mergedNode := &node.Node{}
+	mergedNode.DecoderPath = newNode.DecoderPath
+	mergedNode.NodeName = newNode.NodeName
+	mergedNode.JoinType = newNode.JoinType
+
+	switch mergedNode.JoinType {
+	case "OTAA":
+		// if join type is OTAA - keep the appSKey, dev addr from the old node.
+		// These fields were determined by the gateway if the join procedure was done.
+		mergedNode.Addr = oldNode.Addr
+		mergedNode.AppSKey = oldNode.AppSKey
+		// The appkey and deveui are obtained by the config in OTAA,
+		// if these were changed during reconfigure the join procedure needs to be redone
+		mergedNode.AppKey = newNode.AppKey
+		mergedNode.DevEui = newNode.DevEui
+	case "ABP":
+		// if join type is ABP get the new appSKey and addr from the new config.
+		// Don't need appkey and DevEui for ABP.
+		mergedNode.Addr = newNode.Addr
+		mergedNode.AppSKey = newNode.AppSKey
+	default:
+		return nil, errors.New("unexpected join type when adding node to gateway")
+	}
+
+	return mergedNode, nil
 
 }
 
@@ -248,6 +327,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 	}
 
 	node.NodeName = mapNode["NodeName"].(string)
+	node.JoinType = mapNode["JoinType"].(string)
 
 	return node, nil
 }
@@ -262,7 +342,10 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 	if len(bytes) > 0 {
 		for _, b := range bytes {
-			val, _ := b.(float64)
+			val, ok := b.(float64)
+			if !ok {
+				return nil, errors.New("expected node byte array val to be floar64, but it wasn't")
+			}
 			res = append(res, byte(val))
 		}
 	}
@@ -271,8 +354,13 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 }
 func (g *Gateway) Close(ctx context.Context) error {
-	g.workers.Stop()
-	C.stopGateway()
+	if g.workers != nil {
+		g.workers.Stop()
+	}
+	errCode := C.stopGateway()
+	if errCode != 0 {
+		g.logger.Errorf("error stopping gateway")
+	}
 	return nil
 }
 

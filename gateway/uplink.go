@@ -60,7 +60,12 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
+		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload: %w", err)
+	}
+
+	// payload was empty or unparsable
+	if len(readings) == 0 {
+		return "", map[string]interface{}{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
 	}
 
 	// update the last reading timestamp

@@ -118,6 +118,7 @@ type Node struct {
 	DecoderPath      string
 	NodeName         string
 	gateway          sensor.Sensor
+	JoinType         string
 	expectedInterval int
 
 	LastReadingTime int
@@ -135,85 +136,13 @@ func newNode(
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
-	cfg, err := resource.NativeConfig[*Config](conf)
+	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	interval, err := strconv.Atoi(cfg.Interval)
-	if err != nil {
-		return nil, err
-	}
-	n.expectedInterval = interval
+	return n, err
 
-	switch cfg.JoinType {
-	case "OTAA", "":
-		appKey, err := hex.DecodeString(cfg.AppKey)
-		if err != nil {
-			return nil, err
-		}
-		n.AppKey = appKey
-
-		devEui, err := hex.DecodeString(cfg.DevEUI)
-		if err != nil {
-			return nil, err
-		}
-		n.DevEui = devEui
-	case "ABP":
-		devAddr, err := hex.DecodeString(cfg.DevAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		n.Addr = devAddr
-
-		appSKey, err := hex.DecodeString(cfg.AppSKey)
-		if err != nil {
-			return nil, err
-		}
-
-		n.AppSKey = appSKey
-	}
-
-	n.DecoderPath = cfg.DecoderPath
-
-	gateway, err := getGateway(ctx, deps)
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := make(map[string]interface{})
-
-	// send the device to the gateway.
-	cmd["register_device"] = n
-
-	_, err = gateway.DoCommand(ctx, cmd)
-	if err != nil {
-		return nil, err
-	}
-
-	n.gateway = gateway
-
-	// Warn if user's configured capture frequency is more than the expected uplink interval.
-	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
-	if err != nil {
-		return nil, err
-	}
-	inter, err := strconv.Atoi(cfg.Interval)
-	if err != nil {
-		return nil, err
-	}
-	intervalSeconds := (time.Duration(inter) * time.Minute).Seconds()
-	expectedFreq := 1 / intervalSeconds
-
-	if captureFreq > expectedFreq {
-		n.logger.Warnf("configured capture frequency (%v) is greater than the frequency (%v) of expected uplink interval for node %v: lower capture frequency to avoid duplicate data",
-			captureFreq,
-			expectedFreq,
-			n.NodeName)
-	}
-
-	return n, nil
 }
 
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
@@ -265,8 +194,9 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 
 	n.DecoderPath = cfg.DecoderPath
 
-	// send the device to the gateway.
 	cmd := make(map[string]interface{})
+
+	// send the device to the gateway.
 	cmd["register_device"] = n
 
 	_, err = gateway.DoCommand(ctx, cmd)
@@ -275,6 +205,26 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	}
 
 	n.gateway = gateway
+
+	// Warn if user's configured capture frequency is more than the expected uplink interval.
+	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
+	if err != nil {
+		return nil
+	}
+	inter, err := strconv.Atoi(cfg.Interval)
+	if err != nil {
+		return nil
+	}
+	intervalSeconds := (time.Duration(inter) * time.Minute).Seconds()
+	expectedFreq := 1 / intervalSeconds
+
+	if captureFreq > expectedFreq {
+		n.logger.Warnf("configured capture frequency (%v) is greater than the frequency (%v) of expected uplink interval for node %v: lower capture frequency to avoid duplicate data",
+			captureFreq,
+			expectedFreq,
+			n.NodeName)
+	}
+
 	return nil
 
 }
@@ -293,7 +243,7 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 
 	gateway, ok := dep.(sensor.Sensor)
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway")
+		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
 
 	cmd := make(map[string]interface{})
@@ -307,10 +257,10 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway")
+		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
 	if retVal.(float64) != 1 {
-		return nil, errors.New("dependency must be the sx1302-gateway")
+		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
 	return gateway, nil
 }
@@ -318,8 +268,8 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 func (n *Node) Close(ctx context.Context) error {
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
-	n.gateway.DoCommand(ctx, cmd)
-	return nil
+	_, err := n.gateway.DoCommand(ctx, cmd)
+	return err
 }
 
 func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
