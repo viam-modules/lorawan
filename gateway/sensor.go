@@ -69,10 +69,6 @@ type Gateway struct {
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	resetPin   int
-	powerEnPin int
-	bus        int
-
 	started bool
 }
 

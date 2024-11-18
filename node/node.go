@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"go.viam.com/rdk/components/sensor"
@@ -20,7 +19,7 @@ var Model = resource.NewModel("viam", "lorawan", "node")
 type Config struct {
 	JoinType    string `json:"join_type,omitempty"`
 	DecoderPath string `json:"decoder_path"`
-	Interval    string `json:"uplink_interval_mins"`
+	Interval    *int   `json:"uplink_interval_mins"`
 	DevEUI      string `json:"dev_eui,omitempty"`
 	AppKey      string `json:"app_key,omitempty"`
 	AppSKey     string `json:"app_s_key,omitempty"`
@@ -44,12 +43,12 @@ func (conf *Config) Validate(path string) ([]string, error) {
 			errors.New("decoder path is required"))
 	}
 
-	if conf.Interval == "" {
+	if conf.Interval == nil {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("uplink_interval_mins is required"))
 	}
 
-	if conf.Interval == "0" {
+	if *conf.Interval == 0 {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("uplink_interval_mins cannot be zero"))
 	}
@@ -220,11 +219,8 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	if err != nil {
 		return nil
 	}
-	inter, err := strconv.Atoi(cfg.Interval)
-	if err != nil {
-		return nil
-	}
-	intervalSeconds := (time.Duration(inter) * time.Minute).Seconds()
+
+	intervalSeconds := (time.Duration(*cfg.Interval) * time.Minute).Seconds()
 	expectedFreq := 1 / intervalSeconds
 
 	if captureFreq > expectedFreq {
