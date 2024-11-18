@@ -125,8 +125,10 @@ func newNode(
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
 	n := &Node{
-		Named:    conf.ResourceName().AsNamed(),
-		logger:   logger,
+		Named:  conf.ResourceName().AsNamed(),
+		logger: logger,
+		// This returns the name given to the resource by user
+		// may be different if using remotes
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
