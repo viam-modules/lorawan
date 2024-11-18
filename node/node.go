@@ -181,6 +181,16 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	}
 
 	n.DecoderPath = cfg.DecoderPath
+	n.JoinType = cfg.JoinType
+
+	if n.JoinType == "" {
+		n.JoinType = "OTAA"
+	}
+
+	gateway, err := getGateway(ctx, deps)
+	if err != nil {
+		return err
+	}
 
 	cmd := make(map[string]interface{})
 
