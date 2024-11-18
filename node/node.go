@@ -43,6 +43,17 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		return nil, resource.NewConfigValidationError(path,
 			errors.New("decoder path is required"))
 	}
+
+	if conf.Interval == "" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("uplink_interval_mins is required"))
+	}
+
+	if conf.Interval == "0" {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("uplink_interval_mins cannot be zero"))
+	}
+
 	switch conf.JoinType {
 	case "ABP":
 		return conf.validateABPAttributes(path)
