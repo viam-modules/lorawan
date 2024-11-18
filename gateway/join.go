@@ -70,7 +70,6 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 	}
 
 	var cPayload [256]C.uchar
-
 	for i, b := range joinAccept {
 		cPayload[i] = C.uchar(b)
 	}

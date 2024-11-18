@@ -120,8 +120,6 @@ type Node struct {
 	gateway          sensor.Sensor
 	JoinType         string
 	expectedInterval int
-
-	LastReadingTime int
 }
 
 func newNode(
@@ -141,7 +139,7 @@ func newNode(
 		return nil, err
 	}
 
-	return n, err
+	return n, nil
 
 }
 
@@ -149,18 +147,6 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
-	}
-
-	gateway, err := getGateway(ctx, deps)
-	if err != nil {
-		return err
-	}
-
-	// node name changed, remove the old device name from the gateway
-	if n.NodeName != conf.ResourceName().AsNamed().Name().Name {
-		cmd := make(map[string]interface{})
-		cmd["remove_device"] = n.NodeName
-		n.NodeName = conf.ResourceName().AsNamed().Name().Name
 	}
 
 	switch cfg.JoinType {

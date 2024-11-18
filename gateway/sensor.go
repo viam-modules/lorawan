@@ -136,7 +136,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.started = true
 	g.receivePackets()
 
-
 	return nil
 }
 
@@ -184,7 +183,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
-			g.logger.Infof("recieved join request")
+			g.logger.Infof("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -194,7 +193,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
-			g.logger.Infof("recieved data uplink")
+			g.logger.Infof("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't update readings or log if from unknown device
@@ -206,7 +205,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			}
 			g.updateReadings(name, readings)
 		default:
-			g.logger.Warnf("recieved unsupported packet type")
+			g.logger.Warnf("received unsupported packet type")
 		}
 	})
 }

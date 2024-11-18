@@ -68,13 +68,11 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		return "", map[string]interface{}{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
 	}
 
-	// update the last reading timestamp
-	device.LastReadingTime = int(time.Now().Unix())
-
+	// add time to the readings map
+	// Note that this wont precisely reflect when the uplink was sent, but since lorawan uplinks are sent infrequently
+	// (once per minute max),it will be accurate enough.
 	unix := int(time.Now().Unix())
 	t := time.Unix(int64(unix), 0)
-
-	// Format the Time object into a timestamp string
 	timestamp := t.Format(time.RFC3339)
 	readings["time"] = timestamp
 
