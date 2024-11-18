@@ -35,6 +35,32 @@ const (
 
 var testInterval = 5
 
+var testNodeReadings = map[string]interface{}{"reading": 1}
+
+func createMockGateway() *inject.Sensor {
+	// Create mock gateway dependency
+	mockGateway := &inject.Sensor{}
+	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+		if _, ok := cmd["validate"]; ok {
+			return map[string]interface{}{"validate": 1.0}, nil
+		}
+		return map[string]interface{}{}, nil
+	}
+	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+		readings := make(map[string]interface{})
+
+		readings["test-node"] = testNodeReadings
+
+		otherNodeReadings := make(map[string]interface{})
+		otherNodeReadings["reading"] = "fake"
+		readings["other-node"] = otherNodeReadings
+
+		return readings, nil
+
+	}
+	return mockGateway
+}
+
 func TestConfigValidate(t *testing.T) {
 	// valid config
 	conf := &Config{
@@ -238,14 +264,7 @@ func TestNewNode(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	// Create mock gateway dependency
-	mockGateway := &inject.Sensor{}
-	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		if _, ok := cmd["validate"]; ok {
-			return map[string]interface{}{"validate": 1.0}, nil
-		}
-		return map[string]interface{}{}, nil
-	}
+	mockGateway := createMockGateway()
 	deps := make(resource.Dependencies)
 	deps[encoder.Named(testGatewayName)] = mockGateway
 
@@ -300,4 +319,33 @@ func TestNewNode(t *testing.T) {
 	expectedAppSKey, err := hex.DecodeString(testAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, node.AppSKey, test.ShouldResemble, expectedAppSKey)
+}
+
+func TestReadings(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	mockGateway := createMockGateway()
+	deps := make(resource.Dependencies)
+	deps[encoder.Named(testGatewayName)] = mockGateway
+
+	validConf := resource.Config{
+		Name: "test-node",
+		ConvertedAttributes: &Config{
+			DecoderPath: testDecoderPath,
+			Interval:    &testInterval,
+			JoinType:    testJoinTypeOTAA,
+			DevEUI:      testDevEUI,
+			AppKey:      testAppKey,
+		},
+	}
+
+	n, err := newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+
+	readings, err := n.Readings(ctx, nil)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+
 }
