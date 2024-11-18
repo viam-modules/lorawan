@@ -12,13 +12,12 @@ package gateway
 import "C"
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"gateway/gpio"
+	"gateway/node"
 	"sync"
 	"time"
 
-	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -30,30 +29,9 @@ var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
 // Config describes the configuration of the gateway
 type Config struct {
-	Devices []DeviceConfig `json:"devices"`
-}
-
-type DeviceConfig struct {
-	Name        string `json:"name"`
-	JoinType    string `json:"join_type,omitempty"`
-	DevEUI      string `json:"dev_eui,omitempty"`
-	AppSKey     string `json:"app_s_key,omitempty"`
-	NwkSKey     string `json:"network_s_key,omitempty"`
-	DevAddr     string `json:"dev_addr,omitempty"`
-	DecoderPath string `json:"decoder_path"`
-	AppKey      string `json:"app_key,omitempty"`
-}
-
-type Device struct {
-	name        string
-	decoderPath string
-
-	nwkSKey types.AES128Key
-	appSKey types.AES128Key
-	AppKey  types.AES128Key
-
-	addr   []byte
-	devEui []byte
+	Bus      int  `json:"spi_bus,omitempty"`
+	PowerPin *int `json:"power_en_pin,omitempty"`
+	ResetPin *int `json:"reset_pin"`
 }
 
 func init() {
@@ -67,73 +45,15 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	for _, d := range conf.Devices {
-		if d.DecoderPath == "" {
-			return nil, resource.NewConfigValidationError(path,
-				errors.New("decoder path is required"))
-		}
-		switch d.JoinType {
-		case "ABP":
-			return d.validateABPAttributes(path)
-		case "OTAA", "":
-			return d.validateOTAAAttributes(path)
-		default:
-			return nil, resource.NewConfigValidationError(path,
-				errors.New("join type is OTAA or ABP - Default is OTAA"))
-		}
-
+	if conf.ResetPin == nil {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("reset pin is required"))
+	}
+	if conf.Bus != 0 && conf.Bus != 1 {
+		return nil, resource.NewConfigValidationError(path,
+			errors.New("spi bus can be 0 or 1 - default 0"))
 	}
 	return nil, nil
-}
-
-func (conf *DeviceConfig) validateOTAAAttributes(path string) ([]string, error) {
-	if conf.DevEUI == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("dev EUI is required for OTAA join type"))
-	}
-	if len(conf.DevEUI) != 16 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("dev EUI must be 8 bytes"))
-	}
-	if conf.AppKey == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app key is required for OTAA join type"))
-	}
-	if len(conf.AppKey) != 32 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app key must be 16 bytes"))
-	}
-	return nil, nil
-}
-
-func (conf *DeviceConfig) validateABPAttributes(path string) ([]string, error) {
-	if conf.AppSKey == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app session key is required for ABP join type"))
-	}
-	if len(conf.AppSKey) != 32 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("app session key must be 16 bytes"))
-	}
-	if conf.NwkSKey == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("network session key is required for ABP join type"))
-	}
-	if len(conf.NwkSKey) != 32 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("network session key must be 16 bytes"))
-	}
-	if conf.DevAddr == "" {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("device address is required for ABP join type"))
-	}
-	if len(conf.DevAddr) != 8 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("device address must be 4 bytes"))
-	}
-
-	return nil, nil
-
 }
 
 type Gateway struct {
@@ -147,78 +67,76 @@ type Gateway struct {
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
-	devices map[string]*Device // map of name to devices
+	devices map[string]*node.Node // map of node name to node struct
 
+	resetPin   int
+	powerEnPin int
+	bus        int
+
+	started bool
 }
 
 func newGateway(
 	ctx context.Context,
-	_ resource.Dependencies,
+	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	cfg, err := resource.NativeConfig[*Config](conf)
+	g := &Gateway{
+		Named:   conf.ResourceName().AsNamed(),
+		logger:  logger,
+		started: false,
+	}
+
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	g := &Gateway{
-		Named:        conf.ResourceName().AsNamed(),
-		logger:       logger,
-		lastReadings: map[string]interface{}{},
+	return g, nil
+}
+
+func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
 	}
 
-	// // Start and reset the radio
-	gpio.InitGPIO()
-	gpio.ResetGPIO()
+	// If the gateway hardware was already started, stop gateway and the background worker.
+	// Make sure to always call stopGateway() before making any changes to the c config or
+	// errors will occur.
+	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
+	// started, so only call stopGateway if this module already started the gateway.
+	if g.started {
+		err = g.Close(ctx)
+		if err != nil {
+			return err
+		}
+		g.started = false
+	}
 
-	errCode := C.setUpGateway(C.int(0))
+	// maintain devices and lastReadings through reconfigure.
+	if g.devices == nil {
+		g.devices = make(map[string]*node.Node)
+	}
+
+	if g.lastReadings == nil {
+		g.lastReadings = make(map[string]interface{})
+	}
+
+	// init the gateway
+	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+
+	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return nil, errors.New("failed to start the gateway")
+		return errors.New("failed to start the gateway")
 	}
 
-	g.devices = make(map[string]*Device)
-
-	for _, device := range cfg.Devices {
-		dev := &Device{
-			name:        device.Name,
-			decoderPath: device.DecoderPath,
-		}
-
-		switch device.JoinType {
-		case "OTAA", "":
-			appKey, err := hex.DecodeString(device.AppKey)
-			if err != nil {
-				return nil, err
-			}
-			dev.AppKey = types.AES128Key(appKey)
-
-			devEui, err := hex.DecodeString(device.DevEUI)
-			if err != nil {
-				return nil, err
-			}
-			dev.devEui = devEui
-		case "ABP":
-			devAddr, err := hex.DecodeString(device.DevAddr)
-			if err != nil {
-				return nil, err
-			}
-
-			dev.addr = devAddr
-
-			appSKey, err := hex.DecodeString(device.AppSKey)
-			if err != nil {
-				return nil, err
-			}
-
-			dev.appSKey = types.AES128Key(appSKey)
-		}
-		g.devices[device.Name] = dev
-	}
-
+	g.started = true
 	g.receivePackets()
 
-	return g, nil
+	return nil
 }
 
 func (g *Gateway) receivePackets() {
@@ -272,16 +190,19 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 				if errors.Is(errNoDevice, err) {
 					return
 				}
-				g.logger.Errorf("couldn't handle join request: %w", err)
+				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
 			g.logger.Infof("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
-				g.logger.Errorf("error parsing uplink message: %w", err)
+				g.logger.Errorf("error parsing uplink message: %s", err)
+			}
+			// don't update readings from unknown device
+			if errors.Is(errNoDevice, err) {
+				return
 			}
 			g.updateReadings(name, readings)
-
 		default:
 			g.logger.Warnf("received unsupported packet type")
 		}
@@ -307,9 +228,137 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 
 	g.lastReadings[name] = readings
 }
+
+func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	// Validate that the dependency is correct.
+	if _, ok := cmd["validate"]; ok {
+		return map[string]interface{}{"validate": 1}, nil
+	}
+
+	// Add the nodes to the list of devices.
+	if newNode, ok := cmd["register_device"]; ok {
+		if newN, ok := newNode.(map[string]interface{}); ok {
+			node, err := convertToNode(newN)
+			if err != nil {
+				return nil, err
+			}
+
+			oldNode, exists := g.devices[node.NodeName]
+			if !exists {
+				g.devices[node.NodeName] = node
+				return map[string]interface{}{}, nil
+			}
+			// node with that name already exists, merge them
+			mergedNode, err := mergeNodes(node, oldNode)
+			if err != nil {
+				return nil, err
+			}
+			g.devices[node.NodeName] = mergedNode
+		}
+	}
+
+	// Remove a node from the device map and readings map.
+	if name, ok := cmd["remove_device"]; ok {
+		if n, ok := name.(string); ok {
+			delete(g.devices, n)
+			g.readingsMu.Lock()
+			delete(g.lastReadings, n)
+			g.readingsMu.Unlock()
+		}
+
+	}
+
+	return map[string]interface{}{}, nil
+
+}
+
+// mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
+func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
+	mergedNode := &node.Node{}
+	mergedNode.DecoderPath = newNode.DecoderPath
+	mergedNode.NodeName = newNode.NodeName
+	mergedNode.JoinType = newNode.JoinType
+
+	switch mergedNode.JoinType {
+	case "OTAA":
+		// if join type is OTAA - keep the appSKey, dev addr from the old node.
+		// These fields were determined by the gateway if the join procedure was done.
+		mergedNode.Addr = oldNode.Addr
+		mergedNode.AppSKey = oldNode.AppSKey
+		// The appkey and deveui are obtained by the config in OTAA,
+		// if these were changed during reconfigure the join procedure needs to be redone
+		mergedNode.AppKey = newNode.AppKey
+		mergedNode.DevEui = newNode.DevEui
+	case "ABP":
+		// if join type is ABP get the new appSKey and addr from the new config.
+		// Don't need appkey and DevEui for ABP.
+		mergedNode.Addr = newNode.Addr
+		mergedNode.AppSKey = newNode.AppSKey
+	default:
+		return nil, errors.New("unexpected join type when adding node to gateway")
+	}
+
+	return mergedNode, nil
+
+}
+
+// convertToNode converts the map from the docommand into the node struct.
+func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
+	node := &node.Node{DecoderPath: mapNode["DecoderPath"].(string)}
+
+	var err error
+	node.AppKey, err = convertToBytes(mapNode["AppKey"])
+	if err != nil {
+		return nil, err
+	}
+	node.AppSKey, err = convertToBytes(mapNode["AppSKey"])
+	if err != nil {
+		return nil, err
+	}
+	node.DevEui, err = convertToBytes(mapNode["DevEui"])
+	if err != nil {
+		return nil, err
+	}
+	node.Addr, err = convertToBytes(mapNode["Addr"])
+	if err != nil {
+		return nil, err
+	}
+
+	node.NodeName = mapNode["NodeName"].(string)
+	node.JoinType = mapNode["JoinType"].(string)
+
+	return node, nil
+}
+
+// convertToBytes converts the interface{} field from the docommand map into a byte array.
+func convertToBytes(key interface{}) ([]byte, error) {
+	bytes, ok := key.([]interface{})
+	if !ok {
+		return nil, errors.New("expected node map val to be type []interface{}, but it wasn't")
+	}
+	res := make([]byte, 0)
+
+	if len(bytes) > 0 {
+		for _, b := range bytes {
+			val, ok := b.(float64)
+			if !ok {
+				return nil, errors.New("expected node byte array val to be floar64, but it wasn't")
+			}
+			res = append(res, byte(val))
+		}
+	}
+
+	return res, nil
+
+}
 func (g *Gateway) Close(ctx context.Context) error {
-	g.workers.Stop()
-	C.stopGateway()
+	if g.workers != nil {
+		g.workers.Stop()
+	}
+	errCode := C.stopGateway()
+	if errCode != 0 {
+		g.logger.Errorf("error stopping gateway")
+	}
 	return nil
 }
 

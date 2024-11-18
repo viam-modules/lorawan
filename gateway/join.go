@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gateway/node"
 	"math/rand"
 	"time"
 
@@ -34,12 +35,12 @@ type joinRequest struct {
 
 const (
 	joinRx2WindowSec = 6         // rx2 delay for sending join accept message.
-	rx2Frequenecy    = 923300000 // Frequuency for rx2 window
+	rx2Frequenecy    = 923300000 // Frequency to send downlinks on rx2 window
 	rx2SF            = 12        // spreading factor for rx2 window
 	rx2Bandwidth     = 0x06      // 500k bandwidth
 )
 
-var errNoDevice = errors.New("received join request from unknown device")
+var errNoDevice = errors.New("received packet from unknown device")
 
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
@@ -50,7 +51,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	joinAccept, err := device.generateJoinAccept(ctx, jr)
+	joinAccept, err := generateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
@@ -94,7 +95,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
-func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *Device, error) {
+func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
 	var joinRequest joinRequest
 
 	// everything in the join request payload is little endian
@@ -103,24 +104,24 @@ func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *Device, 
 	joinRequest.devNonce = payload[17:19]
 	joinRequest.mic = payload[19:23]
 
-	matched := &Device{}
+	matched := &node.Node{}
 
 	// device.devEUI is in big endian - reverse to compare and find device.
 	devEUIBE := reverseByteArray(joinRequest.devEUI)
 
 	// match the dev eui to gateway device
 	for _, device := range g.devices {
-		if bytes.Equal(device.devEui, devEUIBE) {
+		if bytes.Equal(device.DevEui, devEUIBE) {
 			matched = device
 		}
 	}
 
-	if matched.name == "" {
+	if matched.NodeName == "" {
 		g.logger.Debugf("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest, nil, errNoDevice
 	}
 
-	err := validateMIC(matched.AppKey, payload)
+	err := validateMIC(types.AES128Key(matched.AppKey), payload)
 	if err != nil {
 		return joinRequest, nil, err
 	}
@@ -133,17 +134,17 @@ func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *Device, 
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
-func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte, error) {
+func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn := generateJoinNonce()
 
 	// generate a random device address to identify uplinks.
-	d.addr = generateDevAddr()
+	d.Addr = generateDevAddr()
 
 	// the join accept payload needs everything to be LE, so reverse the BE fields.
 	netIDLE := reverseByteArray(netID)
 	jnLE := reverseByteArray(jn)
-	dAddrLE := reverseByteArray(d.addr)
+	dAddrLE := reverseByteArray(d.Addr)
 
 	payload := make([]byte, 0)
 	payload = append(payload, 0x20)
@@ -154,7 +155,7 @@ func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte
 	payload = append(payload, 0x01) // rx delay: 1 second
 
 	// generate MIC
-	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(d.AppKey, payload)
+	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +165,7 @@ func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte
 
 	payload = append(payload, resMIC[:]...)
 
-	enc, err := crypto.EncryptJoinAccept(d.AppKey, payload)
+	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +176,12 @@ func (d *Device) generateJoinAccept(ctx context.Context, jr joinRequest) ([]byte
 	ja = append(ja, enc...)
 
 	// generate the session keys
-	appsKey, err := d.generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID)
+	appsKey, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
 	if err != nil {
 		return nil, err
 	}
 
-	d.appSKey = appsKey
+	d.AppSKey = appsKey[:]
 
 	// return the encrypted join accept message
 	return ja, nil
@@ -214,15 +215,14 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 
 }
 
-// Generates the session keys from the join request fields and app key.
-func (d *Device) generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte) (types.AES128Key, error) {
+func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (types.AES128Key, error) {
 	cryptoDev := &ttnpb.EndDevice{
 		Ids: &ttnpb.EndDeviceIdentifiers{JoinEui: joinEUI, DevEui: devEUI},
 	}
 
 	// TTN expects big endian dev nonce
 	devNonceBE := reverseByteArray(devNonce)
-	applicationCryptoService := cryptoservices.NewMemory(nil, &d.AppKey)
+	applicationCryptoService := cryptoservices.NewMemory(nil, &appKey)
 
 	// generate the appSKey!
 	// all inputs here are big endian.

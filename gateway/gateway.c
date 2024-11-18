@@ -9,10 +9,6 @@
 
 #define RADIO_0_FREQ     902700000
 #define RADIO_1_FREQ     903700000
-#define RX2_FREQ  923300000
-#define RX2_SF  12
-#define RX2_BANDWIDTH 0x06
-
 
 // the IF chain frequencies allow the gateway to read on multiple frequency channels.
 // subtracting main frequenecy - intermediate frequency will give that channel's freq.

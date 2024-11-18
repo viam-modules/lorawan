@@ -3,12 +3,8 @@ package gpio
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"time"
-)
-
-const (
-	SX1302ResetPin   = "23" // SX1302 reset
-	SX1302PowerEnPin = "18" // SX1302 power enable
 )
 
 func waitGPIO() {
@@ -22,18 +18,30 @@ func pinctrlSet(pin string, state string) {
 	}
 }
 
-func InitGPIO() {
-	// Set GPIOs as output
-	pinctrlSet(SX1302ResetPin, "op")
-	waitGPIO()
-	pinctrlSet(SX1302PowerEnPin, "op")
-	waitGPIO()
+func InitGateway(resetPin, powerPin *int) {
+	rst := strconv.Itoa(*resetPin)
+	var pwr string
+	if powerPin != nil {
+		pwr = strconv.Itoa(*powerPin)
+	}
+	initGPIO(rst, pwr)
+	resetGPIO(rst)
 }
 
-func ResetGPIO() {
-	pinctrlSet(SX1302ResetPin, "dh")
+func initGPIO(resetPin, powerPin string) {
+	// Set GPIOs as output
+	pinctrlSet(resetPin, "op")
 	waitGPIO()
-	pinctrlSet(SX1302ResetPin, "dl")
+	if powerPin != "" {
+		pinctrlSet(powerPin, "op")
+		waitGPIO()
+	}
+}
+
+func resetGPIO(resetPin string) {
+	pinctrlSet(resetPin, "dh")
+	waitGPIO()
+	pinctrlSet(resetPin, "dl")
 	waitGPIO()
 
 }

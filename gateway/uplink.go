@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"gateway/node"
 	"os"
 	"time"
 
@@ -24,13 +25,11 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// need to reserve the bytes since payload is in LE.
 	devAddrBE := reverseByteArray(devAddr)
 
-	// match the device address with one of the gateways's devices.
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
 		g.logger.Infof("received packet from unknown device, ignoring")
-		return "", map[string]interface{}{}, nil
+		return "", map[string]interface{}{}, errNoDevice
 	}
-
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
@@ -53,23 +52,23 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	dAddr := types.MustDevAddr(devAddrBE)
 
 	// decrypt the frame payload
-	decryptedPayload, err := crypto.DecryptUplink(device.appSKey, *dAddr, (uint32)(frameCnt), framePayload)
+	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(frameCnt), framePayload)
 	if err != nil {
 		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
 	}
 
 	// decode using the codec.
-	readings, err := decodePayload(ctx, fPort, device.decoderPath, decryptedPayload)
+	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
 		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
 	}
 
-	return device.name, readings, nil
+	return device.NodeName, readings, nil
 }
 
-func matchDeviceAddr(devAddr []byte, devices map[string]*Device) (*Device, error) {
+func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node, error) {
 	for _, dev := range devices {
-		if bytes.Equal(devAddr, dev.addr) {
+		if bytes.Equal(devAddr, dev.Addr) {
 			return dev, nil
 		}
 	}
@@ -112,8 +111,6 @@ func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b
 
 	readings := v.(map[string]interface{})
 
-	fmt.Println(readings)
-
 	return readings, nil
 }
 
@@ -151,6 +148,9 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 
 	select {
 	case <-timeoutCtx.Done():
+		vm.Interrupt <- func() {
+			errors.New("ctx canceled")
+		}
 		return nil, ctx.Err()
 	case res := <-resultChan:
 		// the decoder completed
