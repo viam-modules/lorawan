@@ -17,14 +17,14 @@ import (
 var Model = resource.NewModel("viam", "lorawan", "node")
 
 type Config struct {
-	JoinType    string `json:"join_type,omitempty"`
-	DecoderPath string `json:"decoder_path"`
-	Interval    *int   `json:"uplink_interval_mins"`
-	DevEUI      string `json:"dev_eui,omitempty"`
-	AppKey      string `json:"app_key,omitempty"`
-	AppSKey     string `json:"app_s_key,omitempty"`
-	NwkSKey     string `json:"network_s_key,omitempty"`
-	DevAddr     string `json:"dev_addr,omitempty"`
+	JoinType    string   `json:"join_type,omitempty"`
+	DecoderPath string   `json:"decoder_path"`
+	Interval    *float64 `json:"uplink_interval_mins"`
+	DevEUI      string   `json:"dev_eui,omitempty"`
+	AppKey      string   `json:"app_key,omitempty"`
+	AppSKey     string   `json:"app_s_key,omitempty"`
+	NwkSKey     string   `json:"network_s_key,omitempty"`
+	DevAddr     string   `json:"dev_addr,omitempty"`
 }
 
 func init() {

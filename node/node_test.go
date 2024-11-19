@@ -33,7 +33,7 @@ const (
 	testGatewayName = "gateway"
 )
 
-var testInterval = 5
+var testInterval = 5.0
 
 var testNodeReadings = map[string]interface{}{"reading": 1}
 
@@ -90,7 +90,7 @@ func TestConfigValidate(t *testing.T) {
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "uplink_interval_mins is required")
 
-	zeroInterval := 0
+	zeroInterval := 0.0
 
 	// Test zero interval
 	conf = &Config{
