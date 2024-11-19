@@ -1,7 +1,7 @@
 # LoRaWAN Module
 
 Viam module for receiving data from LoRaWAN sensors.\
-`Sx1302-gateway`: sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.\
+`sx1302-gateway`: sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.\
 `node`: sensor model for the end nodes sending data to the gateway.
 
 Compatible with:
@@ -56,7 +56,7 @@ The node component supports two types of activation: OTAA (Over-the-Air Activati
 |------|------|----------|-------------|
 | decoder_path | string | yes | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can normally be found on the datasheet. The default can be changed using device specific software.
+| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software.
 
 #### OTAA Attributes
 
