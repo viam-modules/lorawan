@@ -1,12 +1,10 @@
-# LoRaWAN Gateway Module
+# LoRaWAN Module
 
 This module provides a complete implementation for handling LoRaWAN communication between the gateway and end nodes.
 Provides a sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.
 Provides a sensor model for the end nodes communicating with the gateway.
 
-## Overview
-
-This module implements a LoRaWAN system compatible with:
+Compatible with:
 - US915 frequency band
 - Class A Devices
 - LoraWAN MAC version 1.0.3
@@ -56,22 +54,22 @@ The node component supports two types of activation: OTAA (Over-the-Air Activati
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| decoder_path | string | yes | Path to the payload decoder script |
+| decoder_path | string | yes | Path to the payload decoder script. This can typically found in the device's datasheet. |
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | yes | expected interval between uplink messages sent by the node. The default can normally be found on the datasheet. The default can be changed using device specific software.
+| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can normally be found on the datasheet. The default can be changed using device specific software.
 
 #### OTAA Attributes
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Found on your physical device or the box.|
-| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. Default can normally be found on the node's datasheet. |
+| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
 
 #### ABP Attributes
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Default can normally be found on the node's datasheet or box. |
+| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
