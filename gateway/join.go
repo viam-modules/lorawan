@@ -154,9 +154,9 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 
 	// DLSettings byte:
 	// Bit 7: OptNeg (0)
-	// Bits 6-4: RX1DROffset - keeping default
-	// Bits 3-0: RX2DR - keeping default
-	payload = append(payload, 0x0C) // DLSettings: RX2DR = SF12
+	// Bits 6-4: RX1DROffset - setting default - offset 0
+	// Bits 3-0: RX2DR - setting default - equal to uplink DR
+	payload = append(payload, 0x00)
 	payload = append(payload, 0x01) // rx delay: 1 second
 
 	// CFList for US915 using Channel Mask
