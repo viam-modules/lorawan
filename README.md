@@ -10,7 +10,6 @@ This module implements a LoRaWAN system compatible with:
 - US915 frequency band
 - Class A Devices
 - LoraWAN MAC version 1.0.3
-- Supports device activation (OTAA and ABP)
 
 ## Hardware Requirements
 
@@ -50,6 +49,7 @@ Example gateway configuration:
 
 ### Node Configuration (viam:sensor:node)
 
+The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
 
 #### Common Attributes
@@ -58,7 +58,7 @@ The node component supports two types of activation: OTAA (Over-the-Air Activati
 |------|------|----------|-------------|
 | decoder_path | string | yes | Path to the payload decoder script |
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | flo
+| uplink_interval_mins | float64 | yes | expected interval between uplink messages sent by the node. The default can normally be found on the datasheet. The default can be changed using device specific software.
 
 #### OTAA Attributes
 
@@ -116,22 +116,5 @@ Example ABP node configuration:
 }
 ```
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-For questions and support:
-- Open an issue on GitHub
-- Contact the maintainers
-
-## Acknowledgments
-
-- Semtech for the SX1302 reference implementation
-- The Things Network for the LoRaWAN stack
-- VIAM Robotics for the RDK framework
+### Notes
+It may take several minutes after starting the module to start receiving data.
