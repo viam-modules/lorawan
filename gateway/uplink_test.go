@@ -43,4 +43,10 @@ func TestConvertTo32Bit(t *testing.T) {
 	otherVal, ok := result["other_val"].(string)
 	test.That(t, ok, test.ShouldBeTrue)
 	test.That(t, otherVal, test.ShouldEqual, "string")
+
+	// Verify empty input does nothing.
+	input = map[string]interface{}{}
+	result = convertTo32Bit(input)
+	test.That(t, result, test.ShouldEqual, input)
+
 }
