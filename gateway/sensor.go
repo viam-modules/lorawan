@@ -13,7 +13,6 @@ import "C"
 import (
 	"context"
 	"errors"
-	"fmt"
 	"gateway/gpio"
 	"gateway/node"
 	"sync"
@@ -170,7 +169,6 @@ func (g *Gateway) receivePackets() {
 					for i := 0; i < int(packet.size); i++ {
 						payload = append(payload, byte(packet.payload[i]))
 					}
-					fmt.Println(packet)
 					g.handlePacket(ctx, payload)
 				}
 			default:
