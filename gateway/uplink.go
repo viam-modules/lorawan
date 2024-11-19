@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"gateway/node"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/robertkrimen/otto"
@@ -63,7 +64,31 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
 	}
 
+	// Ensure all types in map are protobuf compatiable.
+	readings = convertTo32Bit(readings)
+
 	return device.NodeName, readings, nil
+}
+
+// 8 and 16 bit integers are not supported in protobuf.
+// If the decoder returns those types, convert to 32 bit integer.
+func convertTo32Bit(readings map[string]interface{}) map[string]interface{} {
+	// Iterate over the map and convert uint8 values to uint32
+	for key, value := range readings {
+		if reflect.TypeOf(value).Kind() == reflect.Uint8 {
+			readings[key] = uint32(value.(uint8))
+		}
+		if reflect.TypeOf(value).Kind() == reflect.Uint16 {
+			readings[key] = uint32(value.(uint16))
+		}
+		if reflect.TypeOf(value).Kind() == reflect.Int16 {
+			readings[key] = int32(value.(int16))
+		}
+		if reflect.TypeOf(value).Kind() == reflect.Int8 {
+			readings[key] = int32(value.(int8))
+		}
+	}
+	return readings
 }
 
 func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node, error) {
