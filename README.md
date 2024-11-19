@@ -1,8 +1,8 @@
 # LoRaWAN Module
 
-This module provides a complete implementation for handling LoRaWAN communication between the gateway and end nodes.
-Provides a sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.
-Provides a sensor model for the end nodes communicating with the gateway.
+Viam module for receiving data from LoRaWAN sensors.\
+`Sx1302-gateway`: sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.\
+`node`: sensor model for the end nodes sending data to the gateway.
 
 Compatible with:
 - US915 frequency band
