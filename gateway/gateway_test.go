@@ -3,6 +3,7 @@ package gateway
 import (
 	"testing"
 
+	"go.viam.com/rdk/resource"
 	"go.viam.com/test"
 )
 
@@ -28,8 +29,7 @@ func TestValidate(t *testing.T) {
 	// Test missing reset pin
 	conf = &Config{}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "reset pin is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errResetPinRequired))
 
 	// Test invalid bus value
 	conf = &Config{
@@ -37,6 +37,5 @@ func TestValidate(t *testing.T) {
 		Bus:      2,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "spi bus can be 0 or 1")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
 }

@@ -33,12 +33,12 @@ const (
 	testGatewayName = "gateway"
 )
 
-var testInterval = 5.0
-
-var testNodeReadings = map[string]interface{}{"reading": 1}
+var (
+	testInterval = 5.0
+	testNodeReadings = map[string]interface{}{"reading": 1}
+)
 
 func createMockGateway() *inject.Sensor {
-	// Create mock gateway dependency
 	mockGateway := &inject.Sensor{}
 	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 		if _, ok := cmd["validate"]; ok {
@@ -48,15 +48,11 @@ func createMockGateway() *inject.Sensor {
 	}
 	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 		readings := make(map[string]interface{})
-
 		readings["test-node"] = testNodeReadings
-
 		otherNodeReadings := make(map[string]interface{})
 		otherNodeReadings["reading"] = "fake"
 		readings["other-node"] = otherNodeReadings
-
 		return readings, nil
-
 	}
 	return mockGateway
 }
@@ -79,27 +75,23 @@ func TestConfigValidate(t *testing.T) {
 		Interval: &testInterval,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "decoder path is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDecoderPathRequired))
 
 	// Test missing interval
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "uplink_interval_mins is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errIntervalRequired))
 
 	zeroInterval := 0.0
-
 	// Test zero interval
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &zeroInterval,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "uplink_interval_mins cannot be zero")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errIntervalZero))
 
 	// Test invalid join type
 	conf = &Config{
@@ -108,8 +100,7 @@ func TestConfigValidate(t *testing.T) {
 		JoinType:    "INVALID",
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "join type is OTAA or ABP")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidJoinType))
 }
 
 func TestValidateOTAAAttributes(t *testing.T) {
@@ -121,8 +112,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		AppKey:      testAppKey,
 	}
 	_, err := conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "dev EUI is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevEUIRequired))
 
 	// Test invalid DevEUI length
 	conf = &Config{
@@ -133,8 +123,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		AppKey:      testAppKey,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "dev EUI must be 8 bytes")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevEUILength))
 
 	// Test missing AppKey
 	conf = &Config{
@@ -144,8 +133,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		DevEUI:      testDevEUI,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "app key is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppKeyRequired))
 
 	// Test invalid AppKey length
 	conf = &Config{
@@ -156,8 +144,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		AppKey:      "0123456", // Not 16 bytes
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "app key must be 16 bytes")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppKeyLength))
 
 	// Test valid OTAA config
 	conf = &Config{
@@ -181,8 +168,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		DevAddr:     testDevAddr,
 	}
 	_, err := conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "app session key is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppSKeyRequired))
 
 	// Test invalid AppSKey length
 	conf = &Config{
@@ -194,8 +180,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		DevAddr:     testDevAddr,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "app session key must be 16 bytes")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppSKeyLength))
 
 	// Test missing NwkSKey
 	conf = &Config{
@@ -206,8 +191,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		DevAddr:     testDevAddr,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "network session key is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errNwkSKeyRequired))
 
 	// Test invalid NwkSKey length
 	conf = &Config{
@@ -219,8 +203,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		DevAddr:     testDevAddr,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "network session key must be 16 bytes")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errNwkSKeyLength))
 
 	// Test missing DevAddr
 	conf = &Config{
@@ -231,8 +214,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		NwkSKey:     testNwkSKey,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "device address is required")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevAddrRequired))
 
 	// Test invalid DevAddr length
 	conf = &Config{
@@ -244,8 +226,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		DevAddr:     "0123", // Not 4 bytes
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "device address must be 4 bytes")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevAddrLength))
 
 	// Test valid ABP config
 	conf = &Config{
@@ -347,5 +328,4 @@ func TestReadings(t *testing.T) {
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldEqual, testNodeReadings)
-
 }

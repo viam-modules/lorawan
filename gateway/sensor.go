@@ -24,6 +24,22 @@ import (
 	"go.viam.com/utils"
 )
 
+// Error variables for validation and operations
+var (
+	// Config validation errors
+	errResetPinRequired = errors.New("reset pin is required")
+	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
+
+	// Gateway operation errors
+	errStartGateway       = errors.New("failed to start the gateway")
+	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
+	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
+	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
+	errNoDevice           = errors.New("received packet from unknown device")
+	errInvalidMIC         = errors.New("invalid MIC")
+	errSendJoinAccept     = errors.New("failed to send join accept packet")
+)
+
 // Model represents a lorawan gateway model.
 var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
@@ -46,12 +62,10 @@ func init() {
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("reset pin is required"))
+		return nil, resource.NewConfigValidationError(path, errResetPinRequired)
 	}
 	if conf.Bus != 0 && conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("spi bus can be 0 or 1 - default 0"))
+		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
 	return nil, nil
 }
@@ -93,17 +107,11 @@ func newGateway(
 }
 
 func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
 	}
 
-	// If the gateway hardware was already started, stop gateway and the background worker.
-	// Make sure to always call stopGateway() before making any changes to the c config or
-	// errors will occur.
-	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
-	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
 		err = g.Close(ctx)
 		if err != nil {
@@ -112,7 +120,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.started = false
 	}
 
-	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
 		g.devices = make(map[string]*node.Node)
 	}
@@ -121,12 +128,11 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// init the gateway
 	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return errors.New("failed to start the gateway")
+		return errStartGateway
 	}
 
 	g.started = true
@@ -136,7 +142,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 }
 
 func (g *Gateway) receivePackets() {
-	// receive the radio packets
 	packet := C.createRxPacketArray()
 	g.workers = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) {
 		for {
@@ -148,20 +153,17 @@ func (g *Gateway) receivePackets() {
 			numPackets := int(C.receive(packet))
 			switch numPackets {
 			case 0:
-				// no packet received, wait 10 ms to receive again.
 				select {
 				case <-ctx.Done():
 					return
 				case <-time.After(10 * time.Millisecond):
 				}
 			case 1:
-				// received a LORA packet
 				var payload []byte
 				for i := 0; i < numPackets; i++ {
 					if packet.size == 0 {
 						continue
 					}
-					// Convert packet to go byte array
 					for i := 0; i < int(packet.size); i++ {
 						payload = append(payload, byte(packet.payload[i]))
 					}
@@ -176,13 +178,11 @@ func (g *Gateway) receivePackets() {
 
 func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 	g.workers.Add(func(ctx context.Context) {
-		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
 			g.logger.Infof("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
-				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
 					return
 				}
@@ -192,7 +192,6 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			g.logger.Infof("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
-				// don't update readings or log if from unknown device
 				if errors.Is(errNoDevice, err) {
 					return
 				}
@@ -211,7 +210,6 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
 	if !ok {
-		// readings for this device does not exist yet
 		g.lastReadings[name] = newReadings
 		return
 	}
@@ -227,12 +225,10 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
 
-	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
 			node, err := convertToNode(newN)
@@ -245,7 +241,6 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 				g.devices[node.NodeName] = node
 				return map[string]interface{}{}, nil
 			}
-			// node with that name already exists, merge them
 			mergedNode, err := mergeNodes(node, oldNode)
 			if err != nil {
 				return nil, err
@@ -254,7 +249,6 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		}
 	}
 
-	// Remove a node from the device map and readings map.
 	if name, ok := cmd["remove_device"]; ok {
 		if n, ok := name.(string); ok {
 			delete(g.devices, n)
@@ -262,14 +256,11 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			delete(g.lastReadings, n)
 			g.readingsMu.Unlock()
 		}
-
 	}
 
 	return map[string]interface{}{}, nil
-
 }
 
-// mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
 func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode := &node.Node{}
 	mergedNode.DecoderPath = newNode.DecoderPath
@@ -278,28 +269,20 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 
 	switch mergedNode.JoinType {
 	case "OTAA":
-		// if join type is OTAA - keep the appSKey, dev addr from the old node.
-		// These fields were determined by the gateway if the join procedure was done.
 		mergedNode.Addr = oldNode.Addr
 		mergedNode.AppSKey = oldNode.AppSKey
-		// The appkey and deveui are obtained by the config in OTAA,
-		// if these were changed during reconfigure the join procedure needs to be redone
 		mergedNode.AppKey = newNode.AppKey
 		mergedNode.DevEui = newNode.DevEui
 	case "ABP":
-		// if join type is ABP get the new appSKey and addr from the new config.
-		// Don't need appkey and DevEui for ABP.
 		mergedNode.Addr = newNode.Addr
 		mergedNode.AppSKey = newNode.AppSKey
 	default:
-		return nil, errors.New("unexpected join type when adding node to gateway")
+		return nil, errUnexpectedJoinType
 	}
 
 	return mergedNode, nil
-
 }
 
-// convertToNode converts the map from the docommand into the node struct.
 func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 	node := &node.Node{DecoderPath: mapNode["DecoderPath"].(string)}
 
@@ -327,11 +310,10 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 	return node, nil
 }
 
-// convertToBytes converts the interface{} field from the docommand map into a byte array.
 func convertToBytes(key interface{}) ([]byte, error) {
 	bytes, ok := key.([]interface{})
 	if !ok {
-		return nil, errors.New("expected node map val to be type []interface{}, but it wasn't")
+		return nil, errInvalidNodeMapType
 	}
 	res := make([]byte, 0)
 
@@ -339,15 +321,15 @@ func convertToBytes(key interface{}) ([]byte, error) {
 		for _, b := range bytes {
 			val, ok := b.(float64)
 			if !ok {
-				return nil, errors.New("expected node byte array val to be floar64, but it wasn't")
+				return nil, errInvalidByteType
 			}
 			res = append(res, byte(val))
 		}
 	}
 
 	return res, nil
-
 }
+
 func (g *Gateway) Close(ctx context.Context) error {
 	if g.workers != nil {
 		g.workers.Stop()

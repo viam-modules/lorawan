@@ -13,7 +13,6 @@ import "C"
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"gateway/node"
 	"math/rand"
@@ -39,8 +38,6 @@ const (
 	rx2SF            = 12        // spreading factor for rx2 window
 	rx2Bandwidth     = 0x06      // 500k bandwidth
 )
-
-var errNoDevice = errors.New("received packet from unknown device")
 
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
@@ -85,7 +82,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 	defer g.mu.Unlock()
 	errCode := int(C.send(&txPkt))
 	if errCode != 0 {
-		return errors.New("failed to send join accept packet")
+		return errSendJoinAccept
 	}
 
 	return nil
@@ -127,7 +124,6 @@ func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	}
 
 	return joinRequest, matched, nil
-
 }
 
 // Format of Join Accept message:
@@ -213,7 +209,6 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 
 	// return the encrypted join accept message
 	return ja, nil
-
 }
 
 // Generates random 4 byte dev addr. This is used for the network to identify device's data uplinks.
@@ -237,10 +232,9 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 	}
 
 	if !bytes.Equal(payload[19:], mic[:]) {
-		return errors.New("invalid MIC")
+		return errInvalidMIC
 	}
 	return nil
-
 }
 
 func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (types.AES128Key, error) {
@@ -267,7 +261,6 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 	}
 
 	return appsKey, nil
-
 }
 
 // generates random 3 byte join nonce
