@@ -115,4 +115,3 @@ int receive(struct lgw_pkt_rx_s* packet)  {
 int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }
-
