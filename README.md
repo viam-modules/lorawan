@@ -1,15 +1,15 @@
 # LoRaWAN Module
 
 Viam module for receiving data from LoRaWAN sensors.\
-`Sx1302-gateway`: sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.\
+`sx1302-gateway`: sensor model for a sx1302 loRaWAN concentrator hat connected to a raspberry pi.\
 `node`: sensor model for the end nodes sending data to the gateway.
 
 Compatible with:
 - US915 frequency band
 - Class A Devices
-- LoraWAN MAC version 1.0.3
+- LoRaWAN MAC version 1.0.3
 
-## Hardware Requirements
+## Hardware Requiremensts
 
 - Raspberry Pi (any model with GPIO pins)
 - SX1302 Gateway HAT/concentrator board
@@ -17,9 +17,9 @@ Compatible with:
 
 ## Configuration
 
-### Gateway Configuration (viam:sensor:sx1302-gateway)
+### Gateway Configuration `viam:sensor:sx1302-gateway`
 
-configuration attributes:
+Configuration attributes:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
@@ -45,7 +45,7 @@ Example gateway configuration:
 }
 ```
 
-### Node Configuration (viam:sensor:node)
+### Node Configuration `viam:sensor:node`
 
 The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
@@ -54,24 +54,32 @@ The node component supports two types of activation: OTAA (Over-the-Air Activati
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| decoder_path | string | yes | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
+| decoder_path | string | yes | Path to the payload decoder script. This must be a .js file.
+                                If the device provides multiple decoder files, use the chirpstack version. |
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can normally be found on the datasheet. The default can be changed using device specific software.
+| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node.
+                                         The default can normally be found on the datasheet.
+                                         The default can be modified using device specific software.
 
 #### OTAA Attributes
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
+| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node.
+                           Can be found printed on your device or on the box.|
+| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network.
+                           The default can normally be found in the node's datasheet. |
 
 #### ABP Attributes
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages.
+                            Can normally be found on datasheet or box. |
+| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages.
+                             Default can normally be found on the node's datasheet or box. |
+| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages.
+                                 Default can normally be found on the node's datasheet or box. |
 
 Example OTAA node configuration:
 ```json
