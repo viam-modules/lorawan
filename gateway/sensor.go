@@ -195,6 +195,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			g.logger.Infof("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
+				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
 					return
 				}
@@ -276,6 +277,7 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
+// mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
 func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode := &node.Node{}
 	mergedNode.DecoderPath = newNode.DecoderPath
