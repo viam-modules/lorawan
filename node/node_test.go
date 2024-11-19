@@ -34,7 +34,7 @@ const (
 )
 
 var (
-	testInterval = 5.0
+	testInterval     = 5.0
 	testNodeReadings = map[string]interface{}{"reading": 1}
 )
 
