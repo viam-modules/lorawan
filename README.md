@@ -124,7 +124,7 @@ Example ABP node configuration:
 }
 ```
 
-### Troubleshooting Notes
+## Troubleshooting Notes
 It may take several minutes after starting the module to start receiving data, especially if your node transmits on more than 8 frequency channels.
 The gateway will log info logs when it has received a join request or data uplink.
 
@@ -132,7 +132,7 @@ The gateway communicates through SPI, ensure that SPI in enabled on the pi.
 
 To avoid capturing duplicate data, set the data capture frequency equal to or less than the expected uplink interval.
 
-### Hardware Tested
+## Hardware Tested
 The sx1302-gateway model has been tested with:\
 [Waveshare Gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
 
