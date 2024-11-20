@@ -3,7 +3,7 @@
 LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol, enabling efficient communication over large distances with minimal energy usage.
 
 This module combines the functionality of a LoRaWAN gateway and network server, enabling communication between LoRaWAN sensors and the viam app.
-It handles packet forwarding, device management, and message routing, allowing LoRaWAN sensor data to be managed directly in Viam.
+It handles packet forwarding, device management, and message routing to allow LoRaWAN sensor data to be viewed and managed directly in Viam.
 
 `sx1302-gateway`: sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.\
 `node`: sensor model for the end nodes sending data to the gateway.
