@@ -132,7 +132,7 @@ The gateway communicates through SPI, ensure that SPI in enabled on the pi.
 To avoid capturing duplicate data, set the data capture frequency equal to or less than the expected uplink interval.
 
 ### Hardware Tested
-The s1302-gateway model has been tested with:\
+The sx1302-gateway model has been tested with:\
 [Waveshare Gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
 
 The node model has been tested with:\
