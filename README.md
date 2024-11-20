@@ -20,6 +20,7 @@ Hardware Required:
 - SX1302 Gateway HAT/concentrator board
 - US915 LoRaWAN sensors
 
+See (Hardware Tested Section)(<https://github.com/oliviamiller/lorawan-gateway/tree/readme?tab=readme-ov-file#hardware-tested>) for tested with hardware.
 
 ## Configure the `viam:sensor:sx1302-gateway`
 
