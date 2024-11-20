@@ -21,7 +21,7 @@ Hardware Required:
 - US915 LoRaWAN sensors
 
 
-## Configure the `viam:sensor:sx1302-gateway` sensor
+## Configure the `viam:sensor:sx1302-gateway`
 
 Navigate to the [**CONFIGURE** tab](https://docs.viam.com/configure/) of your [machine](https://docs.viam.com/fleet/machines/) in the [Viam app](https://app.viam.com/).
 [Add <sx1302-gateway> to your machine](https://docs.viam.com/configure/#components).
@@ -54,7 +54,7 @@ Example gateway configuration:
 }
 ```
 
-## Configure the `viam:sensor:node` sensor
+## Configure the `viam:sensor:node`
 
 The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
@@ -132,10 +132,11 @@ The gateway communicates through SPI, ensure that SPI in enabled on the pi.
 To avoid capturing duplicate data, set the data capture frequency equal to or less than the expected uplink interval.
 
 ### Hardware Tested
-The s1302-gateway model has been tested with:
-[Waveshare Gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
+The s1302-gateway model has been tested with:\
+[Waveshare Gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)\
 
-The node model has been tested with:
-[Milesight CT101 Smart Current Transformer](https://www.milesight.com/iot/product/lorawan-sensor/ct10x)
-[Milesight EM310 Tilt Sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)
-[Dragino LHT65 Temperature & Humidity Sensor](https://www.dragino.com/products/temperature-humidity-sensor/item/151-lht65.html)
+The node model has been tested with:\
+[Milesight CT101 Smart Current Transformer](https://www.milesight.com/iot/product/lorawan-sensor/ct10x)\
+[Milesight EM310 Tilt Sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)\
+[Dragino LHT65 Temperature & Humidity Sensor](https://www.dragino.com/products/temperature-humidity-sensor/item/151-lht65.html)\
+
