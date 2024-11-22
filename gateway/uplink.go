@@ -47,12 +47,7 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
 	fPort := phyPayload[8+foptsLength]
 
-	// Ensure there is a frame payload in the packet.
-	if int(8+foptsLength+1) >= (len(phyPayload) - 4) {
-		return "", map[string]interface{}{}, errors.New("device sent packet with no data")
-	}
-
-	// framepayload is the device readings.
+	// device data in the message.
 	framePayload := phyPayload[8+foptsLength+1 : len(phyPayload)-4]
 
 	dAddr := types.MustDevAddr(devAddrBE)
