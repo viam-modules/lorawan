@@ -24,6 +24,22 @@ import (
 	"go.viam.com/utils"
 )
 
+// Error variables for validation and operations
+var (
+	// Config validation errors
+	errResetPinRequired = errors.New("reset pin is required")
+	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
+
+	// Gateway operation errors
+	errStartGateway       = errors.New("failed to start the gateway")
+	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
+	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
+	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
+	errNoDevice           = errors.New("received packet from unknown device")
+	errInvalidMIC         = errors.New("invalid MIC")
+	errSendJoinAccept     = errors.New("failed to send join accept packet")
+)
+
 // Model represents a lorawan gateway model.
 var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
@@ -46,12 +62,10 @@ func init() {
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("reset pin is required"))
+		return nil, resource.NewConfigValidationError(path, errResetPinRequired)
 	}
 	if conf.Bus != 0 && conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("spi bus can be 0 or 1 - default 0"))
+		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
 	return nil, nil
 }
@@ -68,10 +82,6 @@ type Gateway struct {
 	readingsMu   sync.Mutex
 
 	devices map[string]*node.Node // map of node name to node struct
-
-	resetPin   int
-	powerEnPin int
-	bus        int
 
 	started bool
 }
@@ -97,7 +107,6 @@ func newGateway(
 }
 
 func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -130,7 +139,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return errors.New("failed to start the gateway")
+		return errStartGateway
 	}
 
 	g.started = true
@@ -196,11 +205,11 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			g.logger.Infof("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
+				// don't log as error if it was a request from unknown device.
+				if errors.Is(errNoDevice, err) {
+					return
+				}
 				g.logger.Errorf("error parsing uplink message: %s", err)
-			}
-			// don't update readings from unknown device
-			if errors.Is(errNoDevice, err) {
-				return
 			}
 			g.updateReadings(name, readings)
 		default:
@@ -234,7 +243,6 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
-
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
@@ -256,7 +264,6 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.devices[node.NodeName] = mergedNode
 		}
 	}
-
 	// Remove a node from the device map and readings map.
 	if name, ok := cmd["remove_device"]; ok {
 		if n, ok := name.(string); ok {
@@ -265,11 +272,9 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			delete(g.lastReadings, n)
 			g.readingsMu.Unlock()
 		}
-
 	}
 
 	return map[string]interface{}{}, nil
-
 }
 
 // mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
@@ -295,11 +300,10 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 		mergedNode.Addr = newNode.Addr
 		mergedNode.AppSKey = newNode.AppSKey
 	default:
-		return nil, errors.New("unexpected join type when adding node to gateway")
+		return nil, errUnexpectedJoinType
 	}
 
 	return mergedNode, nil
-
 }
 
 // convertToNode converts the map from the docommand into the node struct.
@@ -334,7 +338,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 func convertToBytes(key interface{}) ([]byte, error) {
 	bytes, ok := key.([]interface{})
 	if !ok {
-		return nil, errors.New("expected node map val to be type []interface{}, but it wasn't")
+		return nil, errInvalidNodeMapType
 	}
 	res := make([]byte, 0)
 
@@ -342,15 +346,15 @@ func convertToBytes(key interface{}) ([]byte, error) {
 		for _, b := range bytes {
 			val, ok := b.(float64)
 			if !ok {
-				return nil, errors.New("expected node byte array val to be floar64, but it wasn't")
+				return nil, errInvalidByteType
 			}
 			res = append(res, byte(val))
 		}
 	}
 
 	return res, nil
-
 }
+
 func (g *Gateway) Close(ctx context.Context) error {
 	if g.workers != nil {
 		g.workers.Stop()
