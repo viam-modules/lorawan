@@ -31,6 +31,7 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		g.logger.Infof("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, errNoDevice
 	}
+
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
@@ -39,9 +40,31 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
-	// fopts not supported in this module yet.
+	// fopts (frame options) contain mac commands sent by the device
+	var fopts []byte
 	if foptsLength != 0 {
-		_ = phyPayload[8 : 8+foptsLength]
+		fopts = phyPayload[8 : 8+foptsLength]
+
+		for _, b := range fopts {
+			switch b {
+			//LinkCheckReq: used to validate connectivity
+			case 0x02:
+				//TODO: handlelinkcheckreq
+			//DeviceTimeReq: device requests date and time
+			case 0x0D:
+				fmt.Println("GOT DEVICE TIME REQ")
+				//resp, err := createDeviceTimeAns(devAddr, types.AES128Key(device.SNwkSIntKey), uint32(frameCnt))
+				if err != nil {
+					g.logger.Warnf("couldn't respond to mac command")
+					break
+				}
+				//g.sendDownLink(ctx, resp, false)
+				fmt.Println("HERE SENT DOWNLINK")
+			default:
+				//unsupported mac command
+			}
+
+		}
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
@@ -49,19 +72,28 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	// device data in the message.
 	framePayload := phyPayload[8+foptsLength+1 : len(phyPayload)-4]
-
 	dAddr := types.MustDevAddr(devAddrBE)
+
+	// validate mic
+	expectedMic, err := crypto.ComputeLegacyUplinkMIC(types.AES128Key(device.FNwkSIntKey), *dAddr, (uint32)(frameCnt), phyPayload[:len(phyPayload)-4])
+	if err != nil {
+		return "", map[string]interface{}{}, fmt.Errorf("error validating the mic: %s", err)
+	}
+
+	if !bytes.Equal(expectedMic[:], phyPayload[len(phyPayload)-4:]) {
+		return "", map[string]interface{}{}, errors.New("invalid mic")
+	}
 
 	// decrypt the frame payload
 	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(frameCnt), framePayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
+		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %s", err)
 	}
 
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
+		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %s", err)
 	}
 
 	// Ensure all types in map are protobuf compatiable.

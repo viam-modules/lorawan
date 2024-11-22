@@ -105,9 +105,13 @@ type Node struct {
 	resource.Named
 	logger logging.Logger
 
-	nwkSKey []byte
 	AppSKey []byte
 	AppKey  []byte
+
+	//network session keys
+	FNwkSIntKey []byte // verify MIC for downlink frames
+	SNwkSIntKey []byte // verify MIC for uplink frames
+	NwkSEncKey  []byte // encryption
 
 	Addr   []byte
 	DevEui []byte
