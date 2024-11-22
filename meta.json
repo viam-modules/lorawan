@@ -1,0 +1,18 @@
+{
+    "$schema": "https://dl.viam.dev/module.schema.json",
+    "module_id": "viam:lorawan",
+    "visibility": "private",
+    "url": "https://github.com/oliviamiller/lorawan",
+    "description": "A module to collect data from LoRaWAN sensors",
+    "models": [
+        {
+            "api": "rdk:component:sensor",
+            "model": "viam:lorawan:sx1302-gateway"
+         },
+         {
+            "api": "rdk:component:sensor",
+            "model": "viam:lorawan:node"
+         }
+    ],
+    "entrypoint": "mymod"
+    }
