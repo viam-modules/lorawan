@@ -125,6 +125,8 @@ Example ABP node configuration:
 ```
 
 ## Troubleshooting Notes
+When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.
+
 It may take several minutes after starting the module to start receiving data, especially if your node transmits on more than 8 frequency channels.
 The gateway will log info logs when it has received a join request or data uplink.
 
