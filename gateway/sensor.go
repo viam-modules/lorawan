@@ -210,6 +210,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 					return
 				}
 				g.logger.Errorf("error parsing uplink message: %s", err)
+				return
 			}
 			g.updateReadings(name, readings)
 		default:
