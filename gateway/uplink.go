@@ -49,7 +49,7 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	// Ensure there is a frame payload in the packet.
 	if int(8+foptsLength+1) >= (len(phyPayload) - 4) {
-		return "", map[string]interface{}{}, errors.New("device sent packet with no data")
+		return "", map[string]interface{}{}, fmt.Errorf("device %s sent packet with no data", device.NodeName)
 	}
 
 	// framepayload is the device readings.
