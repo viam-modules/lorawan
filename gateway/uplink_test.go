@@ -78,39 +78,40 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, current, test.ShouldEqual, 0)
 
 	// unparsable data
-	// invalidPayload := []byte{
-	// 	0x40, //mhdr: data uplink
-	// 	0x66, //addr
-	// 	0x65, // addr
-	// 	0x73, // addr
-	// 	0xe2, //addr
-	// 	0x81, //fctl
-	// 	0x29, //frame count
-	// 	0x00, // frame count
-	// 	0x0d, // fopt
-	// 	0x55, //fport
-	// 	0x00, // frame payload
-	// 	0x02,
-	// 	0x25,
-	// 	0x00,
-	// 	0x2b,
-	// 	0xc4,
-	// 	0xdf,
-	// 	0x00,
-	// 	0x9c,
-	// 	0x00,
-	// 	0xaa,
-	// 	0x00,
-	// 	0x00,
-	// 	0xbe,
-	// 	0x7d, // MIC
-	// 	0xfe,
-	// 	0x35,
-	// 	0xfd,
-	// }
+	invalidPayload := []byte{
+		0x40, //mhdr: data uplink
+		0x66, //addr
+		0x65, // addr
+		0x73, // addr
+		0xe2, //addr
+		0x81, //fctl
+		0x29, //frame count
+		0x00, // frame count
+		0x0d, // fopt
+		0x55, //fport
+		0x00, // frame payload
+		0x02,
+		0x25,
+		0x00,
+		0x2b,
+		0xc4,
+		0xdf,
+		0x00,
+		0x9c,
+		0x00,
+		0xaa,
+		0x00,
+		0x00,
+		0xbe,
+		0x7d, // MIC
+		0xfe,
+		0x35,
+		0xfd,
+	}
 
-	// // deviceName, readings, err = g.parseDataUplink(context.Background(), invalidPayload)
-	// test.That(t, err, test.ShouldNotBeNil)
+	deviceName, readings, err = g.parseDataUplink(context.Background(), invalidPayload)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "data received by node testNode was not parsable")
 
 	// data from unknown devicre
 	unknownPayload := []byte{

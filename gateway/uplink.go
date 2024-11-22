@@ -61,8 +61,6 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
 	}
 
-	fmt.Println(decryptedPayload)
-
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
