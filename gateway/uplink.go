@@ -66,11 +66,24 @@ func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("Error decoding payload: %w", err)
+		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload: %w", err)
+	}
+
+	// payload was empty or unparsable
+	if len(readings) == 0 {
+		return "", map[string]interface{}{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
 	}
 
 	// Ensure all types in map are protobuf compatiable.
 	readings = convertTo32Bit(readings)
+
+	// add time to the readings map
+	// Note that this won't precisely reflect when the uplink was sent, but since lorawan uplinks are sent infrequently
+	// (once per minute max),it will be accurate enough.
+	unix := int(time.Now().Unix())
+	t := time.Unix(int64(unix), 0)
+	timestamp := t.Format(time.RFC3339)
+	readings["time"] = timestamp
 
 	return device.NodeName, readings, nil
 }
