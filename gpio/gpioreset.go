@@ -11,37 +11,56 @@ func waitGPIO() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func pinctrlSet(pin string, state string) {
+func pinctrlSet(pin string, state string) error {
 	cmd := exec.Command("pinctrl", "set", pin, state)
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Error setting GPIO %s to %s: %v\n", pin, state, err)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
 	}
+	
+	return fmt.Errorf("Error setting GPIO %s to %s: %v output: %v", pin, state, err, string(output))
 }
 
-func InitGateway(resetPin, powerPin *int) {
+func InitGateway(resetPin, powerPin *int) error {
 	rst := strconv.Itoa(*resetPin)
 	var pwr string
 	if powerPin != nil {
 		pwr = strconv.Itoa(*powerPin)
 	}
-	initGPIO(rst, pwr)
-	resetGPIO(rst)
+	err := initGPIO(rst, pwr)
+	if err != nil {
+		return err
+	}
+	return resetGPIO(rst)
 }
 
-func initGPIO(resetPin, powerPin string) {
+func initGPIO(resetPin, powerPin string) error {
 	// Set GPIOs as output
-	pinctrlSet(resetPin, "op")
+	err := pinctrlSet(resetPin, "op")
+	if err != nil {
+		return err
+	}
 	waitGPIO()
 	if powerPin != "" {
-		pinctrlSet(powerPin, "op")
+		err := pinctrlSet(powerPin, "op")
+		if err != nil {
+			return err
+		}
 		waitGPIO()
 	}
+	return nil
 }
 
-func resetGPIO(resetPin string) {
-	pinctrlSet(resetPin, "dh")
+func resetGPIO(resetPin string) error {
+	err := pinctrlSet(resetPin, "dh")
+	if err != nil {
+		return err
+	}
 	waitGPIO()
-	pinctrlSet(resetPin, "dl")
+	err = pinctrlSet(resetPin, "dl")
+	if err != nil {
+		return err
+	}
 	waitGPIO()
-
+	return nil
 }

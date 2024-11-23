@@ -1,8 +1,8 @@
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
-#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
+#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
+#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
@@ -13,6 +13,7 @@ import "C"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gateway/gpio"
 	"gateway/node"
 	"sync"
@@ -31,7 +32,6 @@ var (
 	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
 
 	// Gateway operation errors
-	errStartGateway       = errors.New("failed to start the gateway")
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
 	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
 	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
@@ -92,13 +92,23 @@ func newGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewGateway(ctx, conf.ResourceName().AsNamed(), cfg, logger)
+}
+
+func NewGateway(ctx context.Context, name resource.Named, cfg *Config, logger logging.Logger) (*Gateway, error) {
+
 	g := &Gateway{
-		Named:   conf.ResourceName().AsNamed(),
+		Named:   name,
 		logger:  logger,
 		started: false,
 	}
 
-	err := g.Reconfigure(ctx, deps, conf)
+	err := g.reconfigure(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -112,13 +122,18 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return err
 	}
 
+	return g.reconfigure(ctx, cfg)
+}
+
+func (g *Gateway) reconfigure(ctx context.Context, cfg *Config) error {
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
 	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
-		err = g.Close(ctx)
+		err := g.Close(ctx)
 		if err != nil {
 			return err
 		}
@@ -135,11 +150,14 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// init the gateway
-	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	err := gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	if err != nil {
+		return err
+	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return errStartGateway
+		return fmt.Errorf("failed to start the gateway %d", errCode)
 	}
 
 	g.started = true
