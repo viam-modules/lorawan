@@ -23,18 +23,18 @@ func realMain() error {
 
 	pp := 18
 	rp := 23
-	
+
 	cfg := gateway.Config{
 		PowerPin: &pp,
 		ResetPin: &rp,
 	}
-	
+
 	g, err := gateway.NewGateway(ctx, sensor.Named("foo").AsNamed(), &cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer g.Close(ctx)
-	
+
 	for i := 0; i < 10; i++ {
 		time.Sleep(time.Second)
 		r, err := g.Readings(ctx, nil)

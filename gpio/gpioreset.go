@@ -17,7 +17,7 @@ func pinctrlSet(pin string, state string) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	return fmt.Errorf("Error setting GPIO %s to %s: %v output: %v", pin, state, err, string(output))
 }
 
