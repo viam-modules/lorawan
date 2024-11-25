@@ -15,7 +15,7 @@ module.tar.gz: build
 	tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $(BIN_OUTPUT_PATH)/lorawan
 
 .PHONY: test
-test:
+test: build
 	sudo apt install libnlopt-dev
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -v ./...
 
