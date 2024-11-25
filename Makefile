@@ -19,8 +19,14 @@ test: sx1302 submodule build
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -race -v ./...
 
 
-sx1302:
-	cd sx1302 && make
+sx1302: sx1302/libloragw
+	cd sx1302/libtools && make
+	cd sx1302/libloragw && make
+
+sx1302/libloragw:
+	git submodule init
+	git submodule update
+
 
 submodule:
 	git submodule init
