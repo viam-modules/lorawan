@@ -87,7 +87,9 @@ type Gateway struct {
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	started bool
+	started  bool
+	bookworm *bool
+	rstPin   string
 }
 
 func newGateway(
@@ -123,14 +125,15 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 	isBookworm := strings.Contains(string(osRelease), "bookworm")
 
+	g.bookworm = &isBookworm
+	g.rstPin = strconv.Itoa(*cfg.ResetPin)
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
 	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
-		rst := strconv.Itoa(*cfg.ResetPin)
-		gpio.ResetGPIO(rst, isBookworm)
 		err = g.Close(ctx)
 		if err != nil {
 			return err
@@ -372,6 +375,10 @@ func convertToBytes(key interface{}) ([]byte, error) {
 }
 
 func (g *Gateway) Close(ctx context.Context) error {
+	if g.rstPin != "" && g.bookworm != nil {
+		gpio.ResetGPIO(g.rstPin, *g.bookworm)
+	}
+
 	if g.workers != nil {
 		g.workers.Stop()
 	}

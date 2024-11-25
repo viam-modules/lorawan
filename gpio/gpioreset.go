@@ -73,6 +73,5 @@ func ResetGPIO(resetPin string, bookworm bool) error {
 		return err
 	}
 	waitGPIO()
-	fmt.Println("reset gpio....")
 	return nil
 }
