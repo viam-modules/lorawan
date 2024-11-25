@@ -1,3 +1,4 @@
+// Package gpio sets the gateway's gpio pins
 package gpio
 
 import (
@@ -11,37 +12,59 @@ func waitGPIO() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func pinctrlSet(pin string, state string) {
+func pinctrlSet(pin, state string) error {
 	cmd := exec.Command("pinctrl", "set", pin, state)
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("Error setting GPIO %s to %s: %v\n", pin, state, err)
+		return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
 	}
+	return nil
 }
 
-func InitGateway(resetPin, powerPin *int) {
+// InitGateway initializes the gateway hardware.
+func InitGateway(resetPin, powerPin *int) error {
 	rst := strconv.Itoa(*resetPin)
 	var pwr string
 	if powerPin != nil {
 		pwr = strconv.Itoa(*powerPin)
 	}
-	initGPIO(rst, pwr)
-	resetGPIO(rst)
+	err := initGPIO(rst, pwr)
+	if err != nil {
+		return err
+	}
+	err = resetGPIO(rst)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func initGPIO(resetPin, powerPin string) {
+func initGPIO(resetPin, powerPin string) error {
 	// Set GPIOs as output
-	pinctrlSet(resetPin, "op")
+	err := pinctrlSet(resetPin, "op")
+	if err != nil {
+		return err
+	}
 	waitGPIO()
 	if powerPin != "" {
-		pinctrlSet(powerPin, "op")
+		err := pinctrlSet(powerPin, "op")
+		if err != nil {
+			return err
+		}
 		waitGPIO()
 	}
+	return nil
 }
 
-func resetGPIO(resetPin string) {
-	pinctrlSet(resetPin, "dh")
+func resetGPIO(resetPin string) error {
+	err := pinctrlSet(resetPin, "dh")
+	if err != nil {
+		return err
+	}
 	waitGPIO()
-	pinctrlSet(resetPin, "dl")
+	err = pinctrlSet(resetPin, "dl")
+	if err != nil {
+		return err
+	}
 	waitGPIO()
-
+	return nil
 }

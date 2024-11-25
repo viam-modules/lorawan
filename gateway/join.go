@@ -10,6 +10,7 @@ package gateway
 
 */
 import "C"
+
 import (
 	"bytes"
 	"context"
@@ -167,7 +168,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 		0x00, // Disable channels 48-55
 		0x00, // Disable channels 56-63
 		0x00, // Disable channels 64-71
-		0x00, // Disbale channels 72-79
+		0x00, // Disable channels 72-79
 		0x00, // RFU (reserved for future use)
 		0x00, // RFU
 		0x00, // RFU
@@ -195,7 +196,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 	}
 
 	ja := make([]byte, 0)
-	//add back mhdr
+	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
 

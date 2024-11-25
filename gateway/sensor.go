@@ -1,3 +1,4 @@
+// Package gateway implements the sx1302 gateway module.
 package gateway
 
 /*
@@ -10,6 +11,7 @@ package gateway
 
 */
 import "C"
+
 import (
 	"context"
 	"errors"
@@ -17,7 +19,6 @@ import (
 	"gateway/node"
 	"sync"
 	"time"
-
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -70,6 +71,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return nil, nil
 }
 
+// Gateway defines a lorawan gateway.
 type Gateway struct {
 	resource.Named
 	resource.AlwaysRebuild
@@ -106,6 +108,7 @@ func newGateway(
 	return g, nil
 }
 
+// Reconfigure reconfigures the gateway.
 func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
@@ -135,7 +138,10 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// init the gateway
-	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	if err != nil {
+		return err
+	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
@@ -170,16 +176,15 @@ func (g *Gateway) receivePackets() {
 			case 1:
 				// received a LORA packet
 				var payload []byte
-				for i := 0; i < numPackets; i++ {
-					if packet.size == 0 {
-						continue
-					}
-					// Convert packet to go byte array
-					for i := 0; i < int(packet.size); i++ {
-						payload = append(payload, byte(packet.payload[i]))
-					}
-					g.handlePacket(ctx, payload)
+				if packet.size == 0 {
+					continue
 				}
+				// Convert packet to go byte array
+				//nolint:intrange
+				for i := 0; i < int(packet.size); i++ {
+					payload = append(payload, byte(packet.payload[i]))
+				}
+				g.handlePacket(ctx, payload)
 			default:
 				g.logger.Errorf("error receiving lora packet")
 			}
@@ -210,7 +215,6 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 					return
 				}
 				g.logger.Errorf("error parsing uplink message: %s", err)
-				return
 			}
 			g.updateReadings(name, readings)
 		default:
@@ -239,6 +243,7 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 	g.lastReadings[name] = readings
 }
 
+// DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
 func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
@@ -356,6 +361,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 	return res, nil
 }
 
+// Close closes the gateway.
 func (g *Gateway) Close(ctx context.Context) error {
 	if g.workers != nil {
 		g.workers.Stop()
@@ -367,6 +373,7 @@ func (g *Gateway) Close(ctx context.Context) error {
 	return nil
 }
 
+// Readings returns all the node's readings.
 func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
