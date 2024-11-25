@@ -13,8 +13,11 @@ import "C"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gateway/gpio"
 	"gateway/node"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -134,8 +137,16 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// init the gateway
-	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	// get bookworm or bullseye
+	osRelease, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return fmt.Errorf("cannot determine os release: %s", err)
+	}
+	isBookworm := strings.Contains(string(osRelease), "bookworm")
+	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
+	if err != nil {
+		return fmt.Errorf("error initializing the gateway: %s", err)
+	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
