@@ -19,7 +19,7 @@ test: sx1302 submodule build
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -race -v ./...
 
 
-sx1302: sx1302/libloragw sx1302/libloragw/library.cfg
+sx1302:
 	cd sx1302 && make
 
 submodule:
