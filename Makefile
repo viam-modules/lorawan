@@ -16,6 +16,7 @@ module.tar.gz: build
 
 .PHONY: test
 test:
+	sudo apt install libnlopt-dev
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -v ./...
 
 
