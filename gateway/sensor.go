@@ -17,6 +17,7 @@ import (
 	"gateway/gpio"
 	"gateway/node"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -115,12 +116,21 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return err
 	}
 
+	// Determine if the pi is on bookworm or bullseye
+	osRelease, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return fmt.Errorf("cannot determine os release: %s", err)
+	}
+	isBookworm := strings.Contains(string(osRelease), "bookworm")
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
 	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
+		rst := strconv.Itoa(*cfg.ResetPin)
+		gpio.ResetGPIO(rst, isBookworm)
 		err = g.Close(ctx)
 		if err != nil {
 			return err
@@ -137,12 +147,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// get bookworm or bullseye
-	osRelease, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return fmt.Errorf("cannot determine os release: %s", err)
-	}
-	isBookworm := strings.Contains(string(osRelease), "bookworm")
 	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
 	if err != nil {
 		return fmt.Errorf("error initializing the gateway: %s", err)
