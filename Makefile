@@ -14,19 +14,14 @@ module.tar.gz: build
 	rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
 	tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $(BIN_OUTPUT_PATH)/lorawan
 
-test: sx1302 submodule build
+test: sx1302 build
 	sudo apt install libnlopt-dev
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -race -v ./...
 
 
-sx1302: sx1302/libloragw
+sx1302: submodule
 	cd sx1302/libtools && make
 	cd sx1302/libloragw && make
-
-sx1302/libloragw:
-	git submodule init
-	git submodule update
-
 
 submodule:
 	git submodule init
