@@ -10,18 +10,20 @@ package gateway
 
 */
 import "C"
+
 import (
 	"context"
 	"errors"
 	"fmt"
-	"gateway/gpio"
-	"gateway/node"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"gateway/gpio"
+	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -179,26 +181,26 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	return nil
 }
 
-// Helper function to enable communication protocols such as spi and 2c.
+// Helper function to enable communication protocols such as spi and i2c.
 func (g *Gateway) enableProtocol(protocol string) error {
 	// check status
 	getCmd := fmt.Sprintf("get_%s", protocol)
 	cmd := exec.Command("sudo", "raspi-config", "nonint", getCmd)
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to get %s status: %s", protocol, err)
+		return fmt.Errorf("failed to get %s status: %s. Ensure that %s in enabled.", protocol, protocol, err)
 	}
 
 	// status of 1 means disabled, 0 is enabled
 	status := string(output)
 	if status == "1\n" {
-		// interface is currently disabled, enable it
+		// protocol is currently disabled, enable it
 		g.logger.Infof("enabling %s on raspberry pi...", protocol)
 		doCmd := fmt.Sprintf("do_%s", protocol)
-		enableCmd := exec.Command("sudo", "raspi-config", "nonint", doCmd, "0")
+		enableCmd := exec.Command("sudo", "raspi-confi", "nonint", doCmd, "0")
 		err = enableCmd.Run()
 		if err != nil {
-			return fmt.Errorf("failed to enable %s: %s", protocol, err)
+			return fmt.Errorf("failed to enable %s: %s. Manually enable %s using raspi-config.", protocol, err, protocol)
 		}
 		g.logger.Infof("%s has been successfully enabled", protocol)
 	}
