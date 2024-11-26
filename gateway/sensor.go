@@ -19,6 +19,7 @@ import (
 	"gateway/node"
 	"sync"
 	"time"
+
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -185,6 +186,7 @@ func (g *Gateway) receivePackets() {
 					payload = append(payload, byte(packet.payload[i]))
 				}
 				g.handlePacket(ctx, payload)
+				return
 			default:
 				g.logger.Errorf("error receiving lora packet")
 			}
