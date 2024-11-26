@@ -107,7 +107,19 @@ func newGateway(
 		started: false,
 	}
 
-	err := g.Reconfigure(ctx, deps, conf)
+	// gateway uses spi to send data to the board, ensure spi is enabled on the pi.
+	err := g.enableProtocol("spi")
+	if err != nil {
+		return nil, err
+	}
+
+	// gateway uses a builtin i2c temperature sensor, ensure i2c is enabled on the pi.
+	err = g.enableProtocol("i2c")
+	if err != nil {
+		return nil, err
+	}
+
+	err = g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -130,18 +142,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	g.bookworm = &isBookworm
 	g.rstPin = strconv.Itoa(*cfg.ResetPin)
-
-	// gateway uses spi to send data to the board, ensure spi is enabled on the pi.
-	err = g.enableProtocol("spi")
-	if err != nil {
-		return err
-	}
-
-	// gateway uses a builtin i2c temperature sensor, ensure i2c is enabled on the pi.
-	err = g.enableProtocol("i2c")
-	if err != nil {
-		return err
-	}
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
@@ -197,7 +197,7 @@ func (g *Gateway) enableProtocol(protocol string) error {
 		// protocol is currently disabled, enable it
 		g.logger.Infof("enabling %s on raspberry pi...", protocol)
 		doCmd := fmt.Sprintf("do_%s", protocol)
-		enableCmd := exec.Command("sudo", "raspi-confi", "nonint", doCmd, "0")
+		enableCmd := exec.Command("sudo", "raspi-config", "nonint", doCmd, "0")
 		err = enableCmd.Run()
 		if err != nil {
 			return fmt.Errorf("failed to enable %s: %s. Manually enable %s using raspi-config.", protocol, err, protocol)
