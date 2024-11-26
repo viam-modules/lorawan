@@ -15,8 +15,12 @@ import "C"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gateway/gpio"
 	"gateway/node"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,7 +90,9 @@ type Gateway struct {
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	started bool
+	started  bool
+	bookworm *bool
+	rstPin   string
 }
 
 func newGateway(
@@ -116,6 +122,16 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return err
 	}
 
+	// Determine if the pi is on bookworm or bullseye
+	osRelease, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return fmt.Errorf("cannot determine os release: %s", err)
+	}
+	isBookworm := strings.Contains(string(osRelease), "bookworm")
+
+	g.bookworm = &isBookworm
+	g.rstPin = strconv.Itoa(*cfg.ResetPin)
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
@@ -138,10 +154,9 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// init the gateway
-	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
 	if err != nil {
-		return err
+		return fmt.Errorf("error initializing the gateway: %s", err)
 	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
@@ -365,6 +380,10 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *Gateway) Close(ctx context.Context) error {
+	if g.rstPin != "" && g.bookworm != nil {
+		gpio.ResetGPIO(g.rstPin, *g.bookworm)
+	}
+
 	if g.workers != nil {
 		g.workers.Stop()
 	}

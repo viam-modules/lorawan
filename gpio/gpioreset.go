@@ -12,41 +12,48 @@ func waitGPIO() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func pinctrlSet(pin, state string) error {
-	cmd := exec.Command("pinctrl", "set", pin, state)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
+func pinctrlSet(pin, state string, bookworm bool) error {
+	if bookworm {
+		cmd := exec.Command("pinctrl", "set", pin, state)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("error setting GPIO %s to %s: %v", pin, state, err)
+		}
+	} else {
+		cmd := exec.Command("raspi-gpio", "set", pin, state)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("error setting GPIO %s to %s: %v", pin, state, err)
+		}
 	}
 	return nil
 }
 
 // InitGateway initializes the gateway hardware.
-func InitGateway(resetPin, powerPin *int) error {
+func InitGateway(resetPin, powerPin *int, bookworm bool) error {
 	rst := strconv.Itoa(*resetPin)
 	var pwr string
 	if powerPin != nil {
 		pwr = strconv.Itoa(*powerPin)
 	}
-	err := initGPIO(rst, pwr)
+	err := initGPIO(rst, pwr, bookworm)
 	if err != nil {
 		return err
 	}
-	err = resetGPIO(rst)
+	err = ResetGPIO(rst, bookworm)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func initGPIO(resetPin, powerPin string) error {
+func initGPIO(resetPin, powerPin string, bookworm bool) error {
 	// Set GPIOs as output
-	err := pinctrlSet(resetPin, "op")
+	err := pinctrlSet(resetPin, "op", bookworm)
 	if err != nil {
 		return err
 	}
 	waitGPIO()
 	if powerPin != "" {
-		err := pinctrlSet(powerPin, "op")
+		err := pinctrlSet(powerPin, "op", bookworm)
 		if err != nil {
 			return err
 		}
@@ -55,13 +62,13 @@ func initGPIO(resetPin, powerPin string) error {
 	return nil
 }
 
-func resetGPIO(resetPin string) error {
-	err := pinctrlSet(resetPin, "dh")
+func ResetGPIO(resetPin string, bookworm bool) error {
+	err := pinctrlSet(resetPin, "dh", bookworm)
 	if err != nil {
 		return err
 	}
 	waitGPIO()
-	err = pinctrlSet(resetPin, "dl")
+	err = pinctrlSet(resetPin, "dl", bookworm)
 	if err != nil {
 		return err
 	}
