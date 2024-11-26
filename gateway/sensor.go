@@ -16,13 +16,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gateway/gpio"
-	"gateway/node"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"gateway/gpio"
+	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -125,7 +126,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// Determine if the pi is on bookworm or bullseye
 	osRelease, err := os.ReadFile("/etc/os-release")
 	if err != nil {
-		return fmt.Errorf("cannot determine os release: %s", err)
+		return fmt.Errorf("cannot determine os release: %w", err)
 	}
 	isBookworm := strings.Contains(string(osRelease), "bookworm")
 
@@ -156,7 +157,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
 	if err != nil {
-		return fmt.Errorf("error initializing the gateway: %s", err)
+		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
@@ -381,7 +382,10 @@ func convertToBytes(key interface{}) ([]byte, error) {
 // Close closes the gateway.
 func (g *Gateway) Close(ctx context.Context) error {
 	if g.rstPin != "" && g.bookworm != nil {
-		gpio.ResetGPIO(g.rstPin, *g.bookworm)
+		err := gpio.ResetGPIO(g.rstPin, *g.bookworm)
+		if err != nil {
+			g.logger.Error("error reseting gateway")
+		}
 	}
 
 	if g.workers != nil {
@@ -389,7 +393,7 @@ func (g *Gateway) Close(ctx context.Context) error {
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
-		g.logger.Errorf("error stopping gateway")
+		g.logger.Error("error stopping gateway")
 	}
 	return nil
 }

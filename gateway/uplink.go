@@ -6,11 +6,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"os"
 	"reflect"
 	"time"
 
+	"gateway/node"
 	"github.com/robertkrimen/otto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -18,7 +18,7 @@ import (
 
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
-// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
+// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
 func (g *Gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 

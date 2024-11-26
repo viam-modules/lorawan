@@ -16,12 +16,12 @@ func pinctrlSet(pin, state string, bookworm bool) error {
 	if bookworm {
 		cmd := exec.Command("pinctrl", "set", pin, state)
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("error setting GPIO %s to %s: %v", pin, state, err)
+			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
 		}
 	} else {
 		cmd := exec.Command("raspi-gpio", "set", pin, state)
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("error setting GPIO %s to %s: %v", pin, state, err)
+			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
 		}
 	}
 	return nil
@@ -62,6 +62,7 @@ func initGPIO(resetPin, powerPin string, bookworm bool) error {
 	return nil
 }
 
+// ResetGPIO resets the gateway.
 func ResetGPIO(resetPin string, bookworm bool) error {
 	err := pinctrlSet(resetPin, "dh", bookworm)
 	if err != nil {
