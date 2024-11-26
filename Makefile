@@ -13,7 +13,7 @@ module.tar.gz: lorawan first_run.sh meta.json
 	rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
 	tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $^
 
-test: sx1302 build
+test: sx1302 lorawan
 	sudo apt install libnlopt-dev
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -race -v ./...
 
