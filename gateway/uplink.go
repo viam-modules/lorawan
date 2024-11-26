@@ -119,6 +119,7 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node,
 }
 
 func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
+	//nolint: gosec
 	decoder, err := os.ReadFile(path)
 	if err != nil {
 		return map[string]interface{}{}, err

@@ -46,7 +46,6 @@ linters:
     - varnamelen
     - wrapcheck
     - wsl
-    - gosec
 linters-settings:
   errcheck:
     check-blank: true
