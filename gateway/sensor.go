@@ -18,15 +18,16 @@ import (
 	"fmt"
 	"gateway/gpio"
 	"gateway/node"
-	"go.viam.com/rdk/components/sensor"
-	"go.viam.com/rdk/logging"
-	"go.viam.com/rdk/resource"
-	"go.viam.com/utils"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
 // Error variables for validation and operations
@@ -195,8 +196,7 @@ func (g *Gateway) receivePackets() {
 					continue
 				}
 				// Convert packet to go byte array
-				//nolint:intrange
-				for i := 0; i < int(packet.size); i++ {
+				for i := range int(packet.size) {
 					payload = append(payload, byte(packet.payload[i]))
 				}
 				g.handlePacket(ctx, payload)

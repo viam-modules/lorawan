@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gateway/node"
+
 	"github.com/robertkrimen/otto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -118,7 +119,6 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node,
 }
 
 func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
-	//nolint:gosec
 	decoder, err := os.ReadFile(path)
 	if err != nil {
 		return map[string]interface{}{}, err
@@ -184,6 +184,7 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 
 	resultChan := make(chan result)
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancel()
 
 	go func() {
 		var res result
@@ -192,14 +193,13 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 	}()
 
 	select {
+	// after 10 ms, interrupt the decoder.
 	case <-timeoutCtx.Done():
 		vm.Interrupt <- func() {
 		}
-		cancel()
 		return nil, ctx.Err()
 	case res := <-resultChan:
 		// the decoder completed
-		cancel()
 		if res.err != nil {
 			return nil, res.err
 		}
