@@ -17,6 +17,7 @@ import (
 	"gateway/gpio"
 	"gateway/node"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -128,6 +129,12 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.bookworm = &isBookworm
 	g.rstPin = strconv.Itoa(*cfg.ResetPin)
 
+	// gateway uses a builtin i2c temperature sensor, ensure i2c is enabled on the pi.s
+	err = g.enableI2C()
+	if err != nil {
+		return err
+	}
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
@@ -162,6 +169,30 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	g.started = true
 	g.receivePackets()
+
+	return nil
+}
+
+func (g *Gateway) enableI2C() error {
+	// check i2c status
+	cmd := exec.Command("sudo", "raspi-config", "nonint", "get_i2c")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get i2c status: %s", err)
+	}
+
+	// status of 1 means disabled, 0 is enabled
+	i2cStatus := string(output)
+	if i2cStatus == "1\n" {
+		// i2c is currently disabled, enable it
+		g.logger.Info("enabling i2c on raspberry pi...")
+		enableCmd := exec.Command("sudo", "raspi-config", "nonint", "do_i2c", "0")
+		err = enableCmd.Run()
+		if err != nil {
+			return fmt.Errorf("failed to enable i2c: %s", err)
+		}
+		g.logger.Infof("i2c has been successfully enabled")
+	}
 
 	return nil
 }
