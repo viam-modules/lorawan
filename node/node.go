@@ -1,3 +1,4 @@
+// Package node implements the node model
 package node
 
 import (
@@ -16,7 +17,7 @@ import (
 // Model represents a lorawan node model.
 var Model = resource.NewModel("viam", "lorawan", "node")
 
-// Error variables for validation
+// Error variables for validation.
 var (
 	errDecoderPathRequired = errors.New("decoder path is required")
 	errIntervalRequired    = errors.New("uplink_interval_mins is required")
@@ -34,6 +35,13 @@ var (
 	errDevAddrLength       = errors.New("device address must be 4 bytes")
 )
 
+const (
+	// Join types.
+	joinTypeOTAA = "OTAA"
+	joinTypeABP  = "ABP"
+)
+
+// Config defines the node's config.
 type Config struct {
 	JoinType    string   `json:"join_type,omitempty"`
 	DecoderPath string   `json:"decoder_path"`
@@ -69,9 +77,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	}
 
 	switch conf.JoinType {
-	case "ABP":
+	case joinTypeABP:
 		return conf.validateABPAttributes(path)
-	case "OTAA", "":
+	case joinTypeOTAA, "":
 		return conf.validateOTAAAttributes(path)
 	default:
 		return nil, resource.NewConfigValidationError(path, errInvalidJoinType)
@@ -117,22 +125,21 @@ func (conf *Config) validateABPAttributes(path string) ([]string, error) {
 	return nil, nil
 }
 
+// Node defines a lorawan node device.
 type Node struct {
 	resource.Named
 	logger logging.Logger
 
-	nwkSKey []byte
 	AppSKey []byte
 	AppKey  []byte
 
 	Addr   []byte
 	DevEui []byte
 
-	DecoderPath      string
-	NodeName         string
-	gateway          sensor.Sensor
-	JoinType         string
-	expectedInterval int
+	DecoderPath string
+	NodeName    string
+	gateway     sensor.Sensor
+	JoinType    string
 }
 
 func newNode(
@@ -157,6 +164,7 @@ func newNode(
 	return n, nil
 }
 
+// Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
@@ -219,14 +227,16 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	// Warn if user's configured capture frequency is more than the expected uplink interval.
 	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	intervalSeconds := (time.Duration(*cfg.Interval) * time.Minute).Seconds()
 	expectedFreq := 1 / intervalSeconds
 
 	if captureFreq > expectedFreq {
-		n.logger.Warnf("configured capture frequency (%v) is greater than the frequency (%v) of expected uplink interval for node %v: lower capture frequency to avoid duplicate data",
+		n.logger.Warnf(
+			`"configured capture frequency (%v) is greater than the frequency (%v)
+			of expected uplink interval for node %v: lower capture frequency to avoid duplicate data"`,
 			captureFreq,
 			expectedFreq,
 			n.NodeName)
@@ -271,6 +281,7 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 	return gateway, nil
 }
 
+// Close removes the device from the gateway.
 func (n *Node) Close(ctx context.Context) error {
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
@@ -278,6 +289,7 @@ func (n *Node) Close(ctx context.Context) error {
 	return err
 }
 
+// Readings returns the node's readings.
 func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	if n.gateway != nil {
 		allReadings, err := n.gateway.Readings(ctx, nil)
@@ -295,7 +307,7 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 	return map[string]interface{}{}, errors.New("node does not have gateway")
 }
 
-// getCaptureFrequencyHzFromConfig extract the capture_frequency_hz from the device config
+// getCaptureFrequencyHzFromConfig extract the capture_frequency_hz from the device config.
 func getCaptureFrequencyHzFromConfig(c resource.Config) (float64, error) {
 	var captureFreqHz float64
 	var captureMethodFound bool
