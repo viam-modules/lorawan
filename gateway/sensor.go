@@ -129,8 +129,14 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.bookworm = &isBookworm
 	g.rstPin = strconv.Itoa(*cfg.ResetPin)
 
-	// gateway uses a builtin i2c temperature sensor, ensure i2c is enabled on the pi.s
-	err = g.enableI2C()
+	// gateway uses spi to send data to the board, ensure spi is enabled on the pi.
+	err = g.enableProtocol("spi")
+	if err != nil {
+		return err
+	}
+
+	// gateway uses a builtin i2c temperature sensor, ensure i2c is enabled on the pi.
+	err = g.enableProtocol("i2c")
 	if err != nil {
 		return err
 	}
@@ -173,25 +179,28 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	return nil
 }
 
-func (g *Gateway) enableI2C() error {
-	// check i2c status
-	cmd := exec.Command("sudo", "raspi-config", "nonint", "get_i2c")
+// Helper function to enable communication protocols such as spi and 2c.
+func (g *Gateway) enableProtocol(protocol string) error {
+	// check status
+	getCmd := fmt.Sprintf("get_%s", protocol)
+	cmd := exec.Command("sudo", "raspi-config", "nonint", getCmd)
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to get i2c status: %s", err)
+		return fmt.Errorf("failed to get %s status: %s", protocol, err)
 	}
 
 	// status of 1 means disabled, 0 is enabled
-	i2cStatus := string(output)
-	if i2cStatus == "1\n" {
-		// i2c is currently disabled, enable it
-		g.logger.Info("enabling i2c on raspberry pi...")
-		enableCmd := exec.Command("sudo", "raspi-config", "nonint", "do_i2c", "0")
+	status := string(output)
+	if status == "1\n" {
+		// interface is currently disabled, enable it
+		g.logger.Infof("enabling %s on raspberry pi...", protocol)
+		doCmd := fmt.Sprintf("do_%s", protocol)
+		enableCmd := exec.Command("sudo", "raspi-config", "nonint", doCmd, "0")
 		err = enableCmd.Run()
 		if err != nil {
-			return fmt.Errorf("failed to enable i2c: %s", err)
+			return fmt.Errorf("failed to enable %s: %s", protocol, err)
 		}
-		g.logger.Infof("i2c has been successfully enabled")
+		g.logger.Infof("%s has been successfully enabled", protocol)
 	}
 
 	return nil
