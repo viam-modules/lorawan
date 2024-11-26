@@ -16,19 +16,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gateway/gpio"
+	"gateway/node"
+	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"gateway/gpio"
-	"gateway/node"
-
-	"go.viam.com/rdk/components/sensor"
-	"go.viam.com/rdk/logging"
-	"go.viam.com/rdk/resource"
-	"go.viam.com/utils"
 )
 
 // Error variables for validation and operations
@@ -202,7 +200,6 @@ func (g *Gateway) receivePackets() {
 					payload = append(payload, byte(packet.payload[i]))
 				}
 				g.handlePacket(ctx, payload)
-				return
 			default:
 				g.logger.Errorf("error receiving lora packet")
 			}
@@ -233,6 +230,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 					return
 				}
 				g.logger.Errorf("error parsing uplink message: %s", err)
+				return
 			}
 			g.updateReadings(name, readings)
 		default:
