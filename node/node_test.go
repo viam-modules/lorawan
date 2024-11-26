@@ -13,23 +13,20 @@ import (
 )
 
 const (
-	// Join types
-	testJoinTypeOTAA = "OTAA"
-	testJoinTypeABP  = "ABP"
 
-	// Common test values
+	// Common test values.
 	testDecoderPath = "/path/to/decoder"
 
-	// OTAA test values
+	// OTAA test values.
 	testDevEUI = "0123456789ABCDEF"
 	testAppKey = "0123456789ABCDEF0123456789ABAAAA"
 
-	// ABP test values
+	// ABP test values.
 	testDevAddr = "01234567"
 	testAppSKey = "0123456789ABCDEF0123456789ABCDEE"
 	testNwkSKey = "0123456789ABCDEF0123456789ABCDEF"
 
-	// Gateway dependency
+	// Gateway dependency.
 	testGatewayName = "gateway"
 )
 
@@ -62,7 +59,7 @@ func TestConfigValidate(t *testing.T) {
 	conf := &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeOTAA,
+		JoinType:    joinTypeOTAA,
 		DevEUI:      testDevEUI,
 		AppKey:      testAppKey,
 	}
@@ -108,7 +105,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 	conf := &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeOTAA,
+		JoinType:    joinTypeOTAA,
 		AppKey:      testAppKey,
 	}
 	_, err := conf.Validate("")
@@ -118,7 +115,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeOTAA,
+		JoinType:    joinTypeOTAA,
 		DevEUI:      "0123456", // Not 8 bytes
 		AppKey:      testAppKey,
 	}
@@ -129,7 +126,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeOTAA,
+		JoinType:    joinTypeOTAA,
 		DevEUI:      testDevEUI,
 	}
 	_, err = conf.Validate("")
@@ -139,7 +136,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeOTAA,
+		JoinType:    joinTypeOTAA,
 		DevEUI:      testDevEUI,
 		AppKey:      "0123456", // Not 16 bytes
 	}
@@ -150,7 +147,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeOTAA,
+		JoinType:    joinTypeOTAA,
 		DevEUI:      testDevEUI,
 		AppKey:      testAppKey,
 	}
@@ -163,7 +160,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf := &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		NwkSKey:     testNwkSKey,
 		DevAddr:     testDevAddr,
 	}
@@ -174,7 +171,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		AppSKey:     "0123456", // Not 16 bytes
 		NwkSKey:     testNwkSKey,
 		DevAddr:     testDevAddr,
@@ -186,7 +183,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		AppSKey:     testAppSKey,
 		DevAddr:     testDevAddr,
 	}
@@ -197,7 +194,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     "0123456", // Not 16 bytes
 		DevAddr:     testDevAddr,
@@ -209,7 +206,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
 	}
@@ -220,7 +217,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
 		DevAddr:     "0123", // Not 4 bytes
@@ -232,7 +229,7 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    testJoinTypeABP,
+		JoinType:    joinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
 		DevAddr:     testDevAddr,
@@ -255,7 +252,7 @@ func TestNewNode(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    testJoinTypeOTAA,
+			JoinType:    joinTypeOTAA,
 			DevEUI:      testDevEUI,
 			AppKey:      testAppKey,
 		},
@@ -267,7 +264,7 @@ func TestNewNode(t *testing.T) {
 
 	node := n.(*Node)
 	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
-	test.That(t, node.JoinType, test.ShouldEqual, testJoinTypeOTAA)
+	test.That(t, node.JoinType, test.ShouldEqual, joinTypeOTAA)
 	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Test with valid ABP config
@@ -276,7 +273,7 @@ func TestNewNode(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    testJoinTypeABP,
+			JoinType:    joinTypeABP,
 			AppSKey:     testAppSKey,
 			NwkSKey:     testNwkSKey,
 			DevAddr:     testDevAddr,
@@ -289,7 +286,7 @@ func TestNewNode(t *testing.T) {
 
 	node = n.(*Node)
 	test.That(t, node.NodeName, test.ShouldEqual, "test-node-abp")
-	test.That(t, node.JoinType, test.ShouldEqual, testJoinTypeABP)
+	test.That(t, node.JoinType, test.ShouldEqual, joinTypeABP)
 	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Verify ABP byte arrays
@@ -315,7 +312,7 @@ func TestReadings(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    testJoinTypeOTAA,
+			JoinType:    joinTypeOTAA,
 			DevEUI:      testDevEUI,
 			AppKey:      testAppKey,
 		},
