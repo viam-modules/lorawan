@@ -14,5 +14,10 @@
             "model": "viam:lorawan:node"
          }
     ],
-    "entrypoint": "mymod"
+    "build": {
+        "path": "bin/module.tar.gz",
+        "build": "make module.tar.gz",
+        "arch": ["linux/arm64"]
+      },
+    "entrypoint": "bin/lorawan"
     }
