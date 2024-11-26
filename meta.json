@@ -19,5 +19,5 @@
         "build": "make module.tar.gz",
         "arch": ["linux/arm64"]
       },
-    "entrypoint": "bin/lorawan"
+    "entrypoint": "lorawan"
     }

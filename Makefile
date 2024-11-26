@@ -5,13 +5,12 @@ BIN_OUTPUT_PATH = bin
 TOOL_BIN = bin/gotools/$(shell uname -s)-$(shell uname -m)
 UNAME_S ?= $(shell uname -s)
 
-.PHONY: build
-build:
-	rm -f $(BIN_OUTPUT_PATH)/lorawan
-	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o  $(BIN_OUTPUT_PATH)/lorawan main.go
+lorawan:
+	rm -f lorawan
+	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ main.go
 
-module.tar.gz: build first_run.sh meta.json
-	rm -f $(BIN_OUTPUT_PATH)/module.tar.gz $^
+module.tar.gz: lorawan first_run.sh meta.json
+	rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
 	tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $^
 
 test: sx1302 build
