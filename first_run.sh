@@ -1,5 +1,18 @@
 #!/bin/bash
 
+# Function to check if the board is a Raspberry Pi
+is_raspberry_pi() {
+    local cpuinfo_content
+    cpuinfo_content=$(cat /proc/cpuinfo)
+
+    if [[ "$cpuinfo_content" == *"Raspberry Pi"* ]]; then
+        return 0
+    else
+        echo "Module must be run on a raspberry pi"
+        exit 1
+    fi
+}
+
 # function to enable communication protocols such as SPI and I2C.
 enable_protocol() {
     local protocol=$1
@@ -26,6 +39,9 @@ enable_protocol() {
         echo "${protocol} is already enabled."
     fi
 }
+
+#check that the module is being run on a pi.
+is_raspberry_pi
 
 # Enable I2C and SPI
 enable_protocol "i2c"
