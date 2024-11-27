@@ -38,11 +38,7 @@ func InitGateway(resetPin, powerPin *int, bookworm bool) error {
 	if err != nil {
 		return err
 	}
-	err = ResetGPIO(rst, bookworm)
-	if err != nil {
-		return err
-	}
-	return nil
+	return ResetGPIO(rst, bookworm)
 }
 
 func initGPIO(resetPin, powerPin string, bookworm bool) error {
