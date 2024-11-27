@@ -94,6 +94,7 @@ type Gateway struct {
 	rstPin   string
 }
 
+// NewGateway creates a new gateway
 func NewGateway(
 	ctx context.Context,
 	deps resource.Dependencies,

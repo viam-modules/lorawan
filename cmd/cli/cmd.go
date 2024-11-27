@@ -1,3 +1,4 @@
+// Package main contains a testing script for the gateway.
 package main
 
 import (
@@ -36,15 +37,19 @@ func realMain() error {
 	if err != nil {
 		return err
 	}
-	defer g.Close(ctx)
 
-	for i := 0; i < 10; i++ {
+	for _ = range 10 {
 		time.Sleep(time.Second)
 		r, err := g.Readings(ctx, nil)
 		if err != nil {
 			return err
 		}
 		logger.Info(r)
+	}
+
+	err = g.Close(ctx)
+	if err != nil {
+		logger.Error(err)
 	}
 
 	return nil
