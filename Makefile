@@ -1,7 +1,6 @@
 
 BUILD_DIR = ./sx1302
 CGO_BUILD_LDFLAGS := -L$(shell pwd)/$(BUILD_DIR)/libloragw -L$(shell pwd)/$(BUILD_DIR)libloragw/lib -L$(shell pwd)/$(BUILD_DIR)/libtools
-BIN_OUTPUT_PATH = bin
 TOOL_BIN = bin/gotools/$(shell uname -s)-$(shell uname -m)
 UNAME_S ?= $(shell uname -s)
 
@@ -35,4 +34,3 @@ gofmt:
 lint: gofmt tool-install
 	go mod tidy
 	$(TOOL_BIN)/golangci-lint run -v --fix --timeout=10m --config=./etc/.golangci.yaml
-
