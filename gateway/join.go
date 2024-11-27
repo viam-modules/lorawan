@@ -1,8 +1,8 @@
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
-#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
+#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
+#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
@@ -10,13 +10,15 @@ package gateway
 
 */
 import "C"
+
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"gateway/node"
 	"math/rand"
 	"time"
+
+	"gateway/node"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
@@ -167,7 +169,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 		0x00, // Disable channels 48-55
 		0x00, // Disable channels 56-63
 		0x00, // Disable channels 64-71
-		0x00, // Disbale channels 72-79
+		0x00, // Disable channels 72-79
 		0x00, // RFU (reserved for future use)
 		0x00, // RFU
 		0x00, // RFU
@@ -195,7 +197,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 	}
 
 	ja := make([]byte, 0)
-	//add back mhdr
+	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
 

@@ -193,5 +193,4 @@ func TestConvertTo32Bit(t *testing.T) {
 	input = map[string]interface{}{}
 	result = convertTo32Bit(input)
 	test.That(t, result, test.ShouldEqual, input)
-
 }

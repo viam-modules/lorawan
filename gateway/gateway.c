@@ -50,7 +50,7 @@ int setUpGateway(int bus) {
     strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
-        return EXIT_FAILURE;
+        return 1;
     }
 
     // The rfConf configures the two RF chains the gateway HAT has.
@@ -67,12 +67,12 @@ int setUpGateway(int bus) {
     rfconf.tx_enable = true;
 
     if (lgw_rxrf_setconf(0, &rfconf) != LGW_HAL_SUCCESS) {
-        return EXIT_FAILURE;
+        return 2;
     }
 
     rfconf.freq_hz = RADIO_1_FREQ;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
-        return EXIT_FAILURE;
+        return 3;
 
     }
 
@@ -89,14 +89,16 @@ int setUpGateway(int bus) {
         ifconf.rf_chain = rfChains[i];
         ifconf.freq_hz = ifFrequencies[i];
         if (lgw_rxif_setconf(i, &ifconf) != LGW_HAL_SUCCESS) {
-            return EXIT_FAILURE;
+            return 4;
         }
     }
-
+    
     // start the gateway.
-    if (lgw_start() != LGW_HAL_SUCCESS) {
-            return EXIT_FAILURE;
-        }
+    int res = lgw_start();
+    if (res != LGW_HAL_SUCCESS) {
+        fprintf(stderr, "lgw_start failed with code: %d\n", res);
+        return 5;
+    }
     return 0;
  }
 
