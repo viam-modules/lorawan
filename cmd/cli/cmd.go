@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
 
 	"gateway/gateway"
 )
@@ -24,12 +24,15 @@ func realMain() error {
 	pp := 18
 	rp := 23
 
-	cfg := gateway.Config{
-		PowerPin: &pp,
-		ResetPin: &rp,
+	cfg := resource.Config{
+		Name: "foo",
+		ConvertedAttributes: &gateway.Config{
+			PowerPin: &pp,
+			ResetPin: &rp,
+		},
 	}
 
-	g, err := gateway.NewGateway(ctx, sensor.Named("foo").AsNamed(), &cfg, logger)
+	g, err := gateway.NewGateway(ctx, nil, cfg, logger)
 	if err != nil {
 		return err
 	}

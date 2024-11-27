@@ -60,7 +60,7 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: newGateway,
+			Constructor: NewGateway,
 		})
 }
 
@@ -94,29 +94,19 @@ type Gateway struct {
 	rstPin   string
 }
 
-func newGateway(
+func NewGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	cfg, err := resource.NativeConfig[*Config](conf)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewGateway(ctx, conf.ResourceName().AsNamed(), cfg, logger)
-}
-
-func NewGateway(ctx context.Context, name resource.Named, cfg *Config, logger logging.Logger) (*Gateway, error) {
-
 	g := &Gateway{
-		Named:   name,
+		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
 	}
 
-	err := g.reconfigure(ctx, cfg)
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}

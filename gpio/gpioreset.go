@@ -15,14 +15,12 @@ func waitGPIO() {
 func pinctrlSet(pin, state string, bookworm bool) error {
 	if bookworm {
 		cmd := exec.Command("pinctrl", "set", pin, state)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
+		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
 		}
 	} else {
 		cmd := exec.Command("raspi-gpio", "set", pin, state)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
+		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
 		}
 	}
