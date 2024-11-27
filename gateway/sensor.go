@@ -1,3 +1,4 @@
+// Package gateway implements the sx1302 gateway module.
 package gateway
 
 /*
@@ -10,12 +11,16 @@ package gateway
 
 */
 import "C"
+
 import (
 	"context"
 	"errors"
 	"fmt"
 	"gateway/gpio"
 	"gateway/node"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +75,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return nil, nil
 }
 
+// Gateway defines a lorawan gateway.
 type Gateway struct {
 	resource.Named
 	resource.AlwaysRebuild
@@ -83,7 +89,9 @@ type Gateway struct {
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	started bool
+	started  bool
+	bookworm *bool
+	rstPin   string
 }
 
 func newGateway(
@@ -116,16 +124,22 @@ func NewGateway(ctx context.Context, name resource.Named, cfg *Config, logger lo
 	return g, nil
 }
 
+// Reconfigure reconfigures the gateway.
 func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
 	}
 
-	return g.reconfigure(ctx, cfg)
-}
+	// Determine if the pi is on bookworm or bullseye
+	osRelease, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return fmt.Errorf("cannot determine os release: %w", err)
+	}
+	isBookworm := strings.Contains(string(osRelease), "bookworm")
 
-func (g *Gateway) reconfigure(ctx context.Context, cfg *Config) error {
+	g.bookworm = &isBookworm
+	g.rstPin = strconv.Itoa(*cfg.ResetPin)
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
@@ -149,10 +163,9 @@ func (g *Gateway) reconfigure(ctx context.Context, cfg *Config) error {
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// init the gateway
-	err := gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
 	if err != nil {
-		return err
+		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
@@ -188,16 +201,14 @@ func (g *Gateway) receivePackets() {
 			case 1:
 				// received a LORA packet
 				var payload []byte
-				for i := 0; i < numPackets; i++ {
-					if packet.size == 0 {
-						continue
-					}
-					// Convert packet to go byte array
-					for i := 0; i < int(packet.size); i++ {
-						payload = append(payload, byte(packet.payload[i]))
-					}
-					g.handlePacket(ctx, payload)
+				if packet.size == 0 {
+					continue
 				}
+				// Convert packet to go byte array
+				for i := range int(packet.size) {
+					payload = append(payload, byte(packet.payload[i]))
+				}
+				g.handlePacket(ctx, payload)
 			default:
 				g.logger.Errorf("error receiving lora packet")
 			}
@@ -257,6 +268,7 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 	g.lastReadings[name] = readings
 }
 
+// DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
 func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
@@ -374,17 +386,26 @@ func convertToBytes(key interface{}) ([]byte, error) {
 	return res, nil
 }
 
+// Close closes the gateway.
 func (g *Gateway) Close(ctx context.Context) error {
+	if g.rstPin != "" && g.bookworm != nil {
+		err := gpio.ResetGPIO(g.rstPin, *g.bookworm)
+		if err != nil {
+			g.logger.Error("error reseting gateway")
+		}
+	}
+
 	if g.workers != nil {
 		g.workers.Stop()
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
-		g.logger.Errorf("error stopping gateway")
+		g.logger.Error("error stopping gateway")
 	}
 	return nil
 }
 
+// Readings returns all the node's readings.
 func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()

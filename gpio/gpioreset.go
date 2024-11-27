@@ -1,3 +1,4 @@
+// Package gpio sets the gateway's gpio pins
 package gpio
 
 import (
@@ -11,38 +12,46 @@ func waitGPIO() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func pinctrlSet(pin string, state string) error {
-	cmd := exec.Command("pinctrl", "set", pin, state)
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		return nil
+func pinctrlSet(pin, state string, bookworm bool) error {
+	if bookworm {
+		cmd := exec.Command("pinctrl", "set", pin, state)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
+		}
+	} else {
+		cmd := exec.Command("raspi-gpio", "set", pin, state)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
+		}
 	}
-
-	return fmt.Errorf("Error setting GPIO %s to %s: %v output: %v", pin, state, err, string(output))
+	return nil
 }
 
-func InitGateway(resetPin, powerPin *int) error {
+// InitGateway initializes the gateway hardware.
+func InitGateway(resetPin, powerPin *int, bookworm bool) error {
 	rst := strconv.Itoa(*resetPin)
 	var pwr string
 	if powerPin != nil {
 		pwr = strconv.Itoa(*powerPin)
 	}
-	err := initGPIO(rst, pwr)
+	err := initGPIO(rst, pwr, bookworm)
 	if err != nil {
 		return err
 	}
-	return resetGPIO(rst)
+	return ResetGPIO(rst, bookworm)
 }
 
-func initGPIO(resetPin, powerPin string) error {
+func initGPIO(resetPin, powerPin string, bookworm bool) error {
 	// Set GPIOs as output
-	err := pinctrlSet(resetPin, "op")
+	err := pinctrlSet(resetPin, "op", bookworm)
 	if err != nil {
 		return err
 	}
 	waitGPIO()
 	if powerPin != "" {
-		err := pinctrlSet(powerPin, "op")
+		err := pinctrlSet(powerPin, "op", bookworm)
 		if err != nil {
 			return err
 		}
@@ -51,13 +60,14 @@ func initGPIO(resetPin, powerPin string) error {
 	return nil
 }
 
-func resetGPIO(resetPin string) error {
-	err := pinctrlSet(resetPin, "dh")
+// ResetGPIO resets the gateway.
+func ResetGPIO(resetPin string, bookworm bool) error {
+	err := pinctrlSet(resetPin, "dh", bookworm)
 	if err != nil {
 		return err
 	}
 	waitGPIO()
-	err = pinctrlSet(resetPin, "dl")
+	err = pinctrlSet(resetPin, "dl", bookworm)
 	if err != nil {
 		return err
 	}
