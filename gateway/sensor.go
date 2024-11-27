@@ -2,8 +2,8 @@
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
-#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
+#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
+#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
@@ -38,7 +38,6 @@ var (
 	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
 
 	// Gateway operation errors
-	errStartGateway       = errors.New("failed to start the gateway")
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
 	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
 	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
@@ -62,7 +61,7 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: newGateway,
+			Constructor: NewGateway,
 		})
 }
 
@@ -96,7 +95,8 @@ type Gateway struct {
 	rstPin   string
 }
 
-func newGateway(
+// NewGateway creates a new gateway
+func NewGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
@@ -139,7 +139,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
-		err = g.Close(ctx)
+		err := g.Close(ctx)
 		if err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return errStartGateway
+		return fmt.Errorf("failed to start the gateway %d", errCode)
 	}
 
 	g.started = true
