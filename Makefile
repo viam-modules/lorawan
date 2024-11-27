@@ -9,7 +9,7 @@ lorawan:
 	rm -f lorawan
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ main.go
 
-module.tar.gz: lorawan first_run.sh meta.json
+module.tar.gz: sx1302 lorawan first_run.sh meta.json
 	rm -f $(BIN_OUTPUT_PATH)/module.tar.gz
 	tar czf $(BIN_OUTPUT_PATH)/module.tar.gz $^
 
