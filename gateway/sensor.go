@@ -16,13 +16,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gateway/gpio"
-	"gateway/node"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"gateway/gpio"
+	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
