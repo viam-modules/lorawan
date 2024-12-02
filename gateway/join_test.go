@@ -2,9 +2,8 @@ package gateway
 
 import (
 	"context"
-	"testing"
-
 	"gateway/node"
+	"testing"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -13,17 +12,17 @@ import (
 )
 
 var (
-	// Test device identifiers
+	// Test device identifiers.
 	testDevEUI = []byte{0x10, 0x0F, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09} // Big endian
 	testAppKey = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	testName   = "test-device"
 
-	// Join request fields
+	// Join request fields.
 	testJoinEUI  = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 	testDevEUILE = []byte{0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10} // Little endian
 	testDevNonce = []byte{0x11, 0x12}
 
-	// Unknown device for testing error cases
+	// Unknown device for testing error cases.
 	unknownDevEUI = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 )
 
@@ -84,14 +83,16 @@ func TestValidateMIC(t *testing.T) {
 	mic, err := crypto.ComputeJoinRequestMIC(appKey, payload)
 	test.That(t, err, test.ShouldBeNil)
 
-	validPayload := append(payload, mic[:]...)
-	err = validateMIC(appKey, validPayload)
+	payload = append(payload, mic[:]...)
+	err = validateMIC(appKey, payload)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test invalid MIC
 	invalidMIC := []byte{0x00, 0x00, 0x00, 0x00}
-	invalidPayload := append(payload, invalidMIC...)
-	err = validateMIC(appKey, invalidPayload)
+
+	payload = payload[:len(payload)-4]
+	payload = append(payload, invalidMIC...)
+	err = validateMIC(appKey, payload)
 	test.That(t, err, test.ShouldBeError, errInvalidMIC)
 }
 
@@ -154,11 +155,11 @@ func TestGenerateJoinAccept(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4) = 33 bytes
 	test.That(t, len(joinAccept), test.ShouldEqual, 33)
-	// Join-accept MHDR byte.
+	// Join-accept message type
 	test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20))
 	// Device address should be generated and added to device.
 	test.That(t, len(device.Addr), test.ShouldEqual, 4)
-	// AppSKey should be generated and added to device.
+	// AppSKey should be generated and added to device
 	test.That(t, len(device.AppSKey), test.ShouldEqual, 16)
 }
 
