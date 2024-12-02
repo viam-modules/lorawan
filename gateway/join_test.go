@@ -154,11 +154,11 @@ func TestGenerateJoinAccept(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4) = 33 bytes
 	test.That(t, len(joinAccept), test.ShouldEqual, 33)
-	// Join-accept message type
+	// Join-accept MHDR byte.
 	test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20))
 	// Device address should be generated and added to device.
 	test.That(t, len(device.Addr), test.ShouldEqual, 4)
-	// AppSKey should be generated and added to device
+	// AppSKey should be generated and added to device.
 	test.That(t, len(device.AppSKey), test.ShouldEqual, 16)
 }
 
