@@ -24,6 +24,11 @@ import (
 
 	"gateway/gpio"
 	"gateway/node"
+
+	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
 // Error variables for validation and operations
