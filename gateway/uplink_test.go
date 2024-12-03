@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"gateway/node"
-
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -124,14 +123,14 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, current, test.ShouldEqual, expectedCurrent)
 
 	// Test unparsable data
-	_, readings, err = g.parseDataUplink(context.Background(), createInvalidPayload())
+	_, _, err = g.parseDataUplink(context.Background(), createInvalidPayload())
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "data received by node testNode was not parsable")
 
 	// Test unknown device
-	_, readings, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload())
+	_, _, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload())
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldEqual, errNoDevice)
+	test.That(t, err, test.ShouldBeError, errNoDevice)
 }
 
 func TestConvertTo32Bit(t *testing.T) {
