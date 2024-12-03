@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gateway/node"
+
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -134,7 +135,7 @@ func TestParseDataUplink(t *testing.T) {
 }
 
 func TestConvertTo32Bit(t *testing.T) {
-	// Test data
+	// Create test input with various integer types
 	input := map[string]interface{}{
 		"uint8_val":  uint8(255),
 		"uint16_val": uint16(65535),
@@ -143,18 +144,13 @@ func TestConvertTo32Bit(t *testing.T) {
 		"other_val":  "string", // Should remain unchanged
 	}
 
-	// Expected values
-	expectedUint32 := uint32(255)
-	expectedInt32 := int32(-128)
-	expectedString := "string"
-
 	// Convert the values
 	result := convertTo32Bit(input)
 
-	//	// Verify uint8 was converted to uint32
+	// Verify uint8 was converted to uint32
 	uint8Conv, ok := result["uint8_val"].(uint32)
 	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, uint8Conv, test.ShouldEqual, expectedUint32)
+	test.That(t, uint8Conv, test.ShouldEqual, uint32(255))
 
 	// Verify uint16 was converted to uint32
 	uint16Conv, ok := result["uint16_val"].(uint32)
@@ -164,7 +160,7 @@ func TestConvertTo32Bit(t *testing.T) {
 	// Verify int8 was converted to int32
 	int8Conv, ok := result["int8_val"].(int32)
 	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, int8Conv, test.ShouldEqual, expectedInt32)
+	test.That(t, int8Conv, test.ShouldEqual, int32(-128))
 
 	// Verify int16 was converted to int32
 	int16Conv, ok := result["int16_val"].(int32)
@@ -174,7 +170,7 @@ func TestConvertTo32Bit(t *testing.T) {
 	// Verify non-integer values remain unchanged
 	otherVal, ok := result["other_val"].(string)
 	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, otherVal, test.ShouldEqual, expectedString)
+	test.That(t, otherVal, test.ShouldEqual, "string")
 
 	// Verify empty input does nothing.
 	input = map[string]interface{}{}
