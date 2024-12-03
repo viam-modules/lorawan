@@ -9,13 +9,22 @@ package gateway
 #include "gateway.h"
 #include <stdlib.h>
 
+#include <unistd.h>
+#include <fcntl.h>
+
+// Redirect stdout (fd 1) to the new fd
+int redirectToFd(int newFd) {
+    return dup2(newFd, STDOUT_FILENO);
+}
 */
 import "C"
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -106,6 +115,7 @@ func NewGateway(
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
+		workers: utils.NewBackgroundStoppableWorkers(),
 	}
 
 	err := g.Reconfigure(ctx, deps, conf)
@@ -155,6 +165,10 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
+	err = g.captureOutput()
+	if err != nil {
+		return err
+	}
 	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
 	if err != nil {
 		return fmt.Errorf("error initializing the gateway: %w", err)
@@ -171,10 +185,36 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	return nil
 }
 
+func (g *Gateway) captureOutput() error {
+
+	fmt.Println("capturing output....")
+
+	stdoutR, stdoutW, err := os.Pipe()
+	fmt.Println("here made pipe")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(stdoutW)
+
+	// Redirect stdout and stderr using C's dup2
+	C.redirectToFd(C.int(stdoutW.Fd()))
+
+	fmt.Println("here....")
+
+	g.workers.Add(func(ctx context.Context) {
+		buf := new(bytes.Buffer)
+		io.Copy(buf, stdoutR)
+		g.logger.Info(buf.String())
+	})
+
+	return nil
+}
+
 func (g *Gateway) receivePackets() {
 	// receive the radio packets
 	packet := C.createRxPacketArray()
-	g.workers = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) {
+	g.workers.Add(func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
