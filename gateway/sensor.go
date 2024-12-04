@@ -8,23 +8,18 @@ package gateway
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
 #include <stdlib.h>
-
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdio.h>
 
-// Redirect stdout (fd 1) to the new fd
-int redirectToFd(int newFd) {
-    return dup2(newFd, STDOUT_FILENO);
-}
 */
 import "C"
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -118,7 +113,16 @@ func NewGateway(
 		workers: utils.NewBackgroundStoppableWorkers(),
 	}
 
-	err := g.Reconfigure(ctx, deps, conf)
+	// Need to disable buffering on stdout so C logs can be displayed in real time.
+	C.disableBuffering()
+
+	// capture c log output
+	err := g.captureOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	err = g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +136,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if err != nil {
 		return err
 	}
-
 	// Determine if the pi is on bookworm or bullseye
 	osRelease, err := os.ReadFile("/etc/os-release")
 	if err != nil {
@@ -165,10 +168,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	err = g.captureOutput()
-	if err != nil {
-		return err
-	}
 	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
 	if err != nil {
 		return fmt.Errorf("error initializing the gateway: %w", err)
@@ -176,7 +175,8 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return fmt.Errorf("failed to start the gateway %d", errCode)
+		strErr := parseErrorCode(int(errCode))
+		return fmt.Errorf("failed to set up the gateway: %s", strErr)
 	}
 
 	g.started = true
@@ -185,29 +185,70 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	return nil
 }
 
+func parseErrorCode(errCode int) string {
+	switch errCode {
+	case 1:
+		return "error setting the board config"
+	case 2:
+		return "error setting the radio frequency config for radio 0"
+	case 3:
+		return "error setting the radio frrquency config for radio 1"
+	case 4:
+		return "error setting the intermediate frequency chain config"
+	case 5:
+		return "error starting the gateway"
+	default:
+		return "unknown error"
+	}
+}
+
+// captureOutput creates a goroutine to capture C's stdout and log to the module's logger.
+// This is necessary because the sx1302 library only uses printf to report errors.
 func (g *Gateway) captureOutput() error {
-
-	fmt.Println("capturing output....")
-
 	stdoutR, stdoutW, err := os.Pipe()
-	fmt.Println("here made pipe")
 	if err != nil {
 		return err
 	}
-
-	fmt.Println(stdoutW)
-
-	// Redirect stdout and stderr using C's dup2
-	C.redirectToFd(C.int(stdoutW.Fd()))
-
-	fmt.Println("here....")
+	// Redirect C's stdout to the write end of the pipe
+	C.redirectToPipe(C.int(stdoutW.Fd()))
 
 	g.workers.Add(func(ctx context.Context) {
-		buf := new(bytes.Buffer)
-		io.Copy(buf, stdoutR)
-		g.logger.Info(buf.String())
-	})
+		lineChan := make(chan string)
+		scanner := bufio.NewScanner(stdoutR)
 
+		// Goroutine to read lines from C stdout and send them to lineChan
+		go func() {
+			defer close(lineChan)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if scanner.Scan() {
+						lineChan <- scanner.Text()
+					} else {
+						return
+					}
+				}
+			}
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case line, ok := <-lineChan:
+				if !ok { // channel closed
+					return
+				}
+				if strings.Contains(line, "ERROR") {
+					g.logger.Error(line)
+				} else {
+					g.logger.Debug(line)
+				}
+			}
+		}
+	})
 	return nil
 }
 
