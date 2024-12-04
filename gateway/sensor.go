@@ -213,38 +213,21 @@ func (g *Gateway) captureOutput() error {
 	C.redirectToPipe(C.int(stdoutW.Fd()))
 
 	g.workers.Add(func(ctx context.Context) {
-		lineChan := make(chan string)
 		scanner := bufio.NewScanner(stdoutR)
 
-		// Goroutine to read lines from C stdout and send them to lineChan
-		go func() {
-			defer close(lineChan)
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					if scanner.Scan() {
-						lineChan <- scanner.Text()
-					} else {
-						return
-					}
-				}
-			}
-		}()
-
+		//loop to read lines from C stdout and send them to lineChan
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case line, ok := <-lineChan:
-				if !ok { // channel closed
-					return
-				}
-				if strings.Contains(line, "ERROR") {
-					g.logger.Error(line)
-				} else {
-					g.logger.Debug(line)
+			default:
+				if scanner.Scan() {
+					line := scanner.Text()
+					if strings.Contains(line, "ERROR") {
+						g.logger.Error(line)
+					} else {
+						g.logger.Debug(line)
+					}
 				}
 			}
 		}
