@@ -188,7 +188,7 @@ func parseErrorCode(errCode int) string {
 	case 2:
 		return "error setting the radio frequency config for radio 0"
 	case 3:
-		return "error setting the radio frrquency config for radio 1"
+		return "error setting the radio frequency config for radio 1"
 	case 4:
 		return "error setting the intermediate frequency chain config"
 	case 5:
