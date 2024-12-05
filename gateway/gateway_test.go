@@ -4,6 +4,7 @@ import (
 	"context"
 	"gateway/node"
 	"testing"
+
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/test"
@@ -44,7 +45,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestDoCommand(t *testing.T) {
-	g := &Gateway{
+	g := &gateway{
 		devices: make(map[string]*node.Node),
 	}
 
@@ -194,34 +195,35 @@ func TestMergeNodes(t *testing.T) {
 }
 
 func TestUpdateReadings(t *testing.T) {
-	g := &Gateway{
+	g := &gateway{
 		lastReadings: make(map[string]interface{}),
 	}
 
 	// Test adding new readings
-	newReadings := map[string]interface{}{
+	expectedReadings := map[string]interface{}{
 		"temp": 25.5,
 		"hum":  60,
 	}
-	g.updateReadings("device1", newReadings)
-	test.That(t, g.lastReadings["device1"], test.ShouldResemble, newReadings)
+	g.updateReadings("device1", expectedReadings)
+	test.That(t, g.lastReadings["device1"], test.ShouldResemble, expectedReadings)
 
-	// Test updating existing readings
-	updatedReadings := map[string]interface{}{
+	// Test updating readings of a device that contains readings already.
+	newReading := map[string]interface{}{
 		"temp": 26.5,
 		"pres": 1013,
 	}
-	g.updateReadings("device1", updatedReadings)
-	expected := map[string]interface{}{
+
+	g.updateReadings("device1", newReading)
+	expectedReadings = map[string]interface{}{
 		"temp": 26.5,
 		"hum":  60,
 		"pres": 1013,
 	}
-	test.That(t, g.lastReadings["device1"], test.ShouldResemble, expected)
+	test.That(t, g.lastReadings["device1"], test.ShouldResemble, expectedReadings)
 }
 
 func TestReadings(t *testing.T) {
-	g := &Gateway{
+	g := &gateway{
 		lastReadings: map[string]interface{}{
 			"device1": map[string]interface{}{
 				"temp": 25.5,

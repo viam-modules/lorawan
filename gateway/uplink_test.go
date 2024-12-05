@@ -46,7 +46,7 @@ var (
 )
 
 // setupTestGateway creates a test gateway with a configured test device.
-func setupTestGateway(t *testing.T) *Gateway {
+func setupTestGateway(t *testing.T) *gateway {
 	testDevices := make(map[string]*node.Node)
 	testNode := &node.Node{
 		Addr:        testDeviceAddr,
@@ -57,7 +57,7 @@ func setupTestGateway(t *testing.T) *Gateway {
 	}
 	testDevices[testNodeName] = testNode
 
-	return &Gateway{
+	return &gateway{
 		logger:  logging.NewTestLogger(t),
 		devices: testDevices,
 	}

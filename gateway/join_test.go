@@ -105,7 +105,7 @@ func TestParseJoinRequestPacket(t *testing.T) {
 	}
 	devices[testName] = testDevice
 
-	g := &Gateway{
+	g := &gateway{
 		logger:  logging.NewTestLogger(t),
 		devices: devices,
 	}
@@ -172,7 +172,7 @@ func TestHandleJoin(t *testing.T) {
 	}
 	devices[testName] = testDevice
 
-	g := &Gateway{
+	g := &gateway{
 		logger:  logging.NewTestLogger(t),
 		devices: devices,
 	}
