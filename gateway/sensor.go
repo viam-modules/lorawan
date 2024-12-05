@@ -8,10 +8,6 @@ package gateway
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-
 */
 import "C"
 
@@ -214,8 +210,7 @@ func (g *Gateway) captureOutput() error {
 
 	g.workers.Add(func(ctx context.Context) {
 		scanner := bufio.NewScanner(stdoutR)
-
-		//loop to read lines from C stdout and send them to lineChan
+		// loop to read lines from the scanner and log them
 		for {
 			select {
 			case <-ctx.Done():
