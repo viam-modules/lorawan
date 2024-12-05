@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"gateway/node"
 	"testing"
 
@@ -200,42 +201,37 @@ func TestUpdateReadings(t *testing.T) {
 	}
 
 	// Test adding new readings
-	expectedReadings := map[string]interface{}{
-		"temp": 25.5,
+	newReading := map[string]interface{}{
+		"temp": 20.5,
 		"hum":  60,
 	}
-	g.updateReadings("device1", expectedReadings)
-	test.That(t, g.lastReadings["device1"], test.ShouldResemble, expectedReadings)
 
-	// Test updating readings of a device that contains readings already.
-	newReading := map[string]interface{}{
-		"temp": 26.5,
-		"pres": 1013,
+	expectedReadings := map[string]interface{}{
+		"device1": newReading,
 	}
 
 	g.updateReadings("device1", newReading)
-	expectedReadings = map[string]interface{}{
-		"temp": 26.5,
-		"hum":  60,
-		"pres": 1013,
-	}
-	test.That(t, g.lastReadings["device1"], test.ShouldResemble, expectedReadings)
-}
-
-func TestReadings(t *testing.T) {
-	g := &gateway{
-		lastReadings: map[string]interface{}{
-			"device1": map[string]interface{}{
-				"temp": 25.5,
-				"hum":  60,
-			},
-			"device2": map[string]interface{}{
-				"pres": 1013,
-			},
-		},
-	}
-
 	readings, err := g.Readings(context.Background(), nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, g.lastReadings)
+	fmt.Println(expectedReadings)
+	fmt.Println(readings)
+	test.That(t, readings, test.ShouldResemble, expectedReadings)
+
+	// Test updating readings of a device that contains readings already.
+	newReading = map[string]interface{}{
+		"temp": 26.5,
+		"pres": 1013,
+	}
+
+	expectedReadings = map[string]interface{}{
+		"device1": map[string]interface{}{
+			"temp": 26.5,
+			"hum":  60,
+			"pres": 1013,
+		}}
+	g.updateReadings("device1", newReading)
+	readings, err = g.Readings(context.Background(), nil)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, expectedReadings)
+
 }
