@@ -25,6 +25,7 @@ import (
 	"gateway/gpio"
 	"gateway/node"
 
+	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -92,7 +93,8 @@ type Gateway struct {
 
 	started  bool
 	bookworm *bool
-	rstPin   string
+	rstPin   board.GPIOPin
+	board    board.Board
 }
 
 // NewGateway creates a new gateway
@@ -125,15 +127,38 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if err != nil {
 		return err
 	}
-	// Determine if the pi is on bookworm or bullseye
-	osRelease, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return fmt.Errorf("cannot determine os release: %w", err)
-	}
-	isBookworm := strings.Contains(string(osRelease), "bookworm")
 
-	g.bookworm = &isBookworm
-	g.rstPin = strconv.Itoa(*cfg.ResetPin)
+	if len(deps) == 0 {
+		return errors.New("must add raspberry pi board as dependency")
+	}
+	var dep resource.Resource
+
+	// Assuming there's only one dep.
+	for _, val := range deps {
+		dep = val
+	}
+
+	board, ok := dep.(board.Board)
+	if !ok {
+		return errors.New("dependency must be the board")
+	}
+
+	g.board = board
+
+	// // Determine if the pi is on bookworm or bullseye
+	// osRelease, err := os.ReadFile("/etc/os-release")
+	// if err != nil {
+	// 	return fmt.Errorf("cannot determine os release: %w", err)
+	// }
+	// isBookworm := strings.Contains(string(osRelease), "bookworm")
+
+	// g.bookworm = &isBookworm
+	rstPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.ResetPin))
+	if err != nil {
+		return err
+	}
+
+	g.rstPin = rstPin
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
@@ -157,7 +182,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
+	err = gpio.InitGateway(board, cfg.ResetPin, cfg.PowerPin, true)
 	if err != nil {
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
@@ -430,8 +455,8 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *Gateway) Close(ctx context.Context) error {
-	if g.rstPin != "" && g.bookworm != nil {
-		err := gpio.ResetGPIO(g.rstPin, *g.bookworm)
+	if g.rstPin != nil && g.bookworm != nil {
+		err := gpio.ResetGPIO(g.board, g.rstPin)
 		if err != nil {
 			g.logger.Error("error reseting gateway")
 		}
