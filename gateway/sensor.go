@@ -106,19 +106,12 @@ func NewGateway(
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
-		workers: utils.NewBackgroundStoppableWorkers(),
 	}
-
-	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	C.disableBuffering()
 
 	// capture c log output
-	err := g.captureOutput()
-	if err != nil {
-		return nil, err
-	}
+	g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
 
-	err = g.Reconfigure(ctx, deps, conf)
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +169,7 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	g.started = true
-	g.receivePackets()
+	g.workers.Add(g.receivePackets)
 
 	return nil
 }
@@ -198,73 +191,71 @@ func parseErrorCode(errCode int) string {
 	}
 }
 
-// captureOutput creates a goroutine to capture C's stdout and log to the module's logger.
+// captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *Gateway) captureOutput() error {
+func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
+	// Need to disable buffering on stdout so C logs can be displayed in real time.
+	C.disableBuffering()
+
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
-		return err
+		g.logger.Errorf("unable to create pipe for C logs")
+		return
 	}
 	// Redirect C's stdout to the write end of the pipe
 	C.redirectToPipe(C.int(stdoutW.Fd()))
-
-	g.workers.Add(func(ctx context.Context) {
-		scanner := bufio.NewScanner(stdoutR)
-		// loop to read lines from the scanner and log them
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				if scanner.Scan() {
-					line := scanner.Text()
-					if strings.Contains(line, "ERROR") {
-						g.logger.Error(line)
-					} else {
-						g.logger.Debug(line)
-					}
+	scanner := bufio.NewScanner(stdoutR)
+	// loop to read lines from the scanner and log them
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if scanner.Scan() {
+				line := scanner.Text()
+				if strings.Contains(line, "ERROR") {
+					g.logger.Error(line)
+				} else {
+					g.logger.Debug(line)
 				}
 			}
 		}
-	})
-	return nil
+	}
 }
 
-func (g *Gateway) receivePackets() {
+func (g *Gateway) receivePackets(ctx context.Context) {
 	// receive the radio packets
 	packet := C.createRxPacketArray()
-	g.workers.Add(func(ctx context.Context) {
-		for {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		numPackets := int(C.receive(packet))
+		switch numPackets {
+		case 0:
+			// no packet received, wait 10 ms to receive again.
 			select {
 			case <-ctx.Done():
 				return
-			default:
+			case <-time.After(10 * time.Millisecond):
 			}
-			numPackets := int(C.receive(packet))
-			switch numPackets {
-			case 0:
-				// no packet received, wait 10 ms to receive again.
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(10 * time.Millisecond):
-				}
-			case 1:
-				// received a LORA packet
-				var payload []byte
-				if packet.size == 0 {
-					continue
-				}
-				// Convert packet to go byte array
-				for i := range int(packet.size) {
-					payload = append(payload, byte(packet.payload[i]))
-				}
-				g.handlePacket(ctx, payload)
-			default:
-				g.logger.Errorf("error receiving lora packet")
+		case 1:
+			// received a LORA packet
+			var payload []byte
+			if packet.size == 0 {
+				continue
 			}
+			// Convert packet to go byte array
+			for i := range int(packet.size) {
+				payload = append(payload, byte(packet.payload[i]))
+			}
+			g.handlePacket(ctx, payload)
+		default:
+			g.logger.Errorf("error receiving lora packet")
 		}
-	})
+	}
 }
 
 func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
