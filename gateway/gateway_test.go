@@ -2,9 +2,9 @@ package gateway
 
 import (
 	"context"
-	"fmt"
-	"gateway/node"
 	"testing"
+
+	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/resource"
@@ -213,8 +213,6 @@ func TestUpdateReadings(t *testing.T) {
 	g.updateReadings("device1", newReading)
 	readings, err := g.Readings(context.Background(), nil)
 	test.That(t, err, test.ShouldBeNil)
-	fmt.Println(expectedReadings)
-	fmt.Println(readings)
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
 
 	// Test updating readings of a device that contains readings already.
@@ -228,10 +226,10 @@ func TestUpdateReadings(t *testing.T) {
 			"temp": 26.5,
 			"hum":  60,
 			"pres": 1013,
-		}}
+		},
+	}
 	g.updateReadings("device1", newReading)
 	readings, err = g.Readings(context.Background(), nil)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
-
 }
