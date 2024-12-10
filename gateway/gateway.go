@@ -77,7 +77,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 }
 
 // Gateway defines a lorawan gateway.
-type Gateway struct {
+type gateway struct {
 	resource.Named
 	logger logging.Logger
 
@@ -106,7 +106,7 @@ func NewGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	g := &Gateway{
+	g := &gateway{
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
@@ -121,7 +121,7 @@ func NewGateway(
 }
 
 // Reconfigure reconfigures the gateway.
-func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func parseErrorCode(errCode int) string {
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
+func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
 
@@ -233,7 +233,7 @@ func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
 	}
 }
 
-func (g *Gateway) receivePackets(ctx context.Context) {
+func (g *gateway) receivePackets(ctx context.Context) {
 	// receive the radio packets
 	packet := C.createRxPacketArray()
 	for {
@@ -268,7 +268,7 @@ func (g *Gateway) receivePackets(ctx context.Context) {
 	}
 }
 
-func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 	g.workers.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
@@ -300,7 +300,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 	})
 }
 
-func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}) {
+func (g *gateway) updateReadings(name string, newReadings map[string]interface{}) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
@@ -321,7 +321,7 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
-func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
@@ -439,7 +439,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 }
 
 // Close closes the gateway.
-func (g *Gateway) Close(ctx context.Context) error {
+func (g *gateway) Close(ctx context.Context) error {
 	if g.rstPin != "" && g.bookworm != nil {
 		err := gpio.ResetGPIO(g.rstPin, *g.bookworm)
 		if err != nil {
@@ -458,7 +458,7 @@ func (g *Gateway) Close(ctx context.Context) error {
 }
 
 // Readings returns all the node's readings.
-func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 	return g.lastReadings, nil
