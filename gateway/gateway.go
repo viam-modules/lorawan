@@ -16,14 +16,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gateway/gpio"
+	"gateway/node"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"gateway/gpio"
-	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -94,10 +93,10 @@ type gateway struct {
 	rstPin   string
 }
 
-// global variable to track if the captureOutputToLogs goroutine has started
-// If the build errors and needs to build again, we only want to start the logging goroutine
-// once.
-var logsStarted bool = false
+// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
+// started for each gateway. If the gateway build errors and needs to build again, we only want to start
+// the logging routine once.
+var LoggingRoutineStarted = make(map[string]bool)
 
 // NewGateway creates a new gateway
 func NewGateway(
@@ -149,11 +148,13 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.started = false
 	}
 
-	// capture c log output
-	if !logsStarted {
+	// capture C log output
+	loggingStarted, ok := LoggingRoutineStarted[g.Name().Name]
+	if !ok || !loggingStarted {
 		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
-		logsStarted = true
+		LoggingRoutineStarted[g.Name().Name] = true
 	}
+
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
 		g.devices = make(map[string]*node.Node)
@@ -212,7 +213,9 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 	C.redirectToPipe(C.int(stdoutW.Fd()))
 	scanner := bufio.NewScanner(stdoutR)
 
+	//nolint:errcheck
 	defer stdoutR.Close()
+	//nolint:errcheck
 	defer stdoutW.Close()
 
 	// loop to read lines from the scanner and log them
@@ -448,7 +451,7 @@ func (g *gateway) Close(ctx context.Context) error {
 	}
 	if g.workers != nil {
 		g.workers.Stop()
-		logsStarted = false
+		LoggingRoutineStarted[g.Name().Name] = false
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
