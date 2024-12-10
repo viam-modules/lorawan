@@ -79,7 +79,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 // Gateway defines a lorawan gateway.
 type Gateway struct {
 	resource.Named
-	resource.AlwaysRebuild
 	logger logging.Logger
 
 	workers *utils.StoppableWorkers
@@ -95,6 +94,11 @@ type Gateway struct {
 	rstPin   string
 }
 
+// global variable to track if the captureOutputToLogs goroutine has started
+// If the build errors and needs to build again, we only want to start the logging goroutine
+// once.
+var logsStarted bool = false
+
 // NewGateway creates a new gateway
 func NewGateway(
 	ctx context.Context,
@@ -107,9 +111,6 @@ func NewGateway(
 		logger:  logger,
 		started: false,
 	}
-
-	// capture c log output
-	g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
 
 	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
@@ -148,6 +149,11 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.started = false
 	}
 
+	// capture c log output
+	if !logsStarted {
+		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		logsStarted = true
+	}
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
 		g.devices = make(map[string]*node.Node)
@@ -205,6 +211,10 @@ func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
 	// Redirect C's stdout to the write end of the pipe
 	C.redirectToPipe(C.int(stdoutW.Fd()))
 	scanner := bufio.NewScanner(stdoutR)
+
+	defer stdoutR.Close()
+	defer stdoutW.Close()
+
 	// loop to read lines from the scanner and log them
 	for {
 		select {
@@ -436,9 +446,9 @@ func (g *Gateway) Close(ctx context.Context) error {
 			g.logger.Error("error reseting gateway")
 		}
 	}
-
 	if g.workers != nil {
 		g.workers.Stop()
+		logsStarted = false
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
