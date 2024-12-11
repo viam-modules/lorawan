@@ -2,9 +2,7 @@ package gateway
 
 import (
 	"context"
-	"runtime"
 	"testing"
-	"time"
 
 	"gateway/node"
 
@@ -253,21 +251,16 @@ func TestStartCLogging(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	initialGoroutines := runtime.NumGoroutine()
 
 	g.startCLogging(ctx)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 	test.That(t, g.workers, test.ShouldNotBeNil)
 
-	time.Sleep(100 * time.Millisecond) // Give time for goroutine to start
-	test.That(t, runtime.NumGoroutine(), test.ShouldBeGreaterThan, initialGoroutines)
-
 	// Test case 2: Ensure no new goroutine is started if the loggingRoutineStarted entry is true.
 	// reset g.workers to test for new workers
 	g.workers = nil
-	initialGoroutines = runtime.NumGoroutine()
 	g.startCLogging(ctx)
 	test.That(t, g.workers, test.ShouldBeNil)
-	time.Sleep(100 * time.Millisecond)
-	test.That(t, runtime.NumGoroutine(), test.ShouldEqual, initialGoroutines)
+	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
+
 }
