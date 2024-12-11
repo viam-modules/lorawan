@@ -16,13 +16,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gateway/gpio"
-	"gateway/node"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"gateway/gpio"
+	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -47,6 +48,11 @@ var (
 
 // Model represents a lorawan gateway model.
 var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
+
+// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
+// started for each gateway. If the gateway build errors and needs to build again, we only want to start
+// the logging routine once.
+var loggingRoutineStarted = make(map[string]bool)
 
 // Config describes the configuration of the gateway
 type Config struct {
@@ -92,11 +98,6 @@ type gateway struct {
 	bookworm *bool
 	rstPin   string
 }
-
-// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
-// started for each gateway. If the gateway build errors and needs to build again, we only want to start
-// the logging routine once.
-var LoggingRoutineStarted = make(map[string]bool)
 
 // NewGateway creates a new gateway
 func NewGateway(
@@ -149,11 +150,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// capture C log output
-	loggingStarted, ok := LoggingRoutineStarted[g.Name().Name]
-	if !ok || !loggingStarted {
-		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
-		LoggingRoutineStarted[g.Name().Name] = true
-	}
+	g.startCLogging(ctx)
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -195,6 +192,17 @@ func parseErrorCode(errCode int) string {
 		return "error starting the gateway"
 	default:
 		return "unknown error"
+	}
+}
+
+// startCLogging starts the goroutine to capture C logs into the logger.
+// If loggingRoutineStarted indicates routine has already started, it does nothing.
+func (g *gateway) startCLogging(ctx context.Context) {
+	loggingState, ok := loggingRoutineStarted[g.Name().Name]
+	if !ok || !loggingState {
+		g.logger.Debug("Starting c logger background routine")
+		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		loggingRoutineStarted[g.Name().Name] = true
 	}
 }
 
@@ -451,7 +459,7 @@ func (g *gateway) Close(ctx context.Context) error {
 	}
 	if g.workers != nil {
 		g.workers.Stop()
-		LoggingRoutineStarted[g.Name().Name] = false
+		delete(loggingRoutineStarted, g.Name().Name)
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
