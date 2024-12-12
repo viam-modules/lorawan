@@ -160,6 +160,14 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	g.rstPin = rstPin
 
+	if cfg.PowerPin != nil {
+		pwrPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.ResetPin))
+		if err != nil {
+			return err
+		}
+		
+	}
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.

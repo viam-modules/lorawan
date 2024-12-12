@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"strconv"
 	"time"
 
 	"go.viam.com/rdk/components/board"
@@ -31,37 +30,21 @@ func pinctrlSet(pin, state string, bookworm bool) error {
 }
 
 // InitGateway initializes the gateway hardware.
-func InitGateway(b board.Board, resetPin, powerPin *int, bookworm bool) error {
-	rst := strconv.Itoa(*resetPin)
-	var pwr string
-	var pwrPin board.GPIOPin
-	var err error
-	if powerPin != nil {
-		pwr = strconv.Itoa(*powerPin)
-		pwrPin, err = b.GPIOPinByName(pwr)
-		if err != nil {
-			return err
-		}
-	}
-
-	rstPin, err := b.GPIOPinByName(rst)
+func InitGatewaycontext(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
+	err := initGPIO(ctx, resetPin, powerPin)
 	if err != nil {
 		return err
 	}
-	err = initGPIO(b, rstPin, pwrPin, bookworm)
-	if err != nil {
-		return err
-	}
-	return ResetGPIO(b, rstPin)
+	return ResetGPIO(resetPin)
 }
 
-func initGPIO(b board.Board, resetPin, powerPin board.GPIOPin, bookworm bool) error {
+func initGPIO(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
 	err := resetPin.Set(context.Background(), true, nil)
 	if err != nil {
 		return err
 	}
 
-	powerPin.Set(context.Background(), true, nil)
+	powerPin.Set(ctx, true, nil)
 	if err != nil {
 		return err
 	}
@@ -70,7 +53,7 @@ func initGPIO(b board.Board, resetPin, powerPin board.GPIOPin, bookworm bool) er
 }
 
 // ResetGPIO resets the gateway.
-func ResetGPIO(b board.Board, rst board.GPIOPin) error {
+func ResetGPIO(rst board.GPIOPin) error {
 	err := rst.Set(context.Background(), true, nil)
 	if err != nil {
 		return err
