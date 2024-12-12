@@ -165,7 +165,12 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		if err != nil {
 			return err
 		}
-		
+
+		err = gpio.InitGateway(ctx, rstPin, pwrPin)
+		if err != nil {
+			return fmt.Errorf("error initializing the gateway: %w", err)
+		}
+
 	}
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
@@ -190,10 +195,10 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	err = gpio.InitGateway(board, cfg.ResetPin, cfg.PowerPin, true)
-	if err != nil {
-		return fmt.Errorf("error initializing the gateway: %w", err)
-	}
+	// err = gpio.InitGateway(board, cfg.ResetPin, cfg.PowerPin)
+	// if err != nil {
+	// 	return fmt.Errorf("error initializing the gateway: %w", err)
+	// }
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
@@ -464,7 +469,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 // Close closes the gateway.
 func (g *Gateway) Close(ctx context.Context) error {
 	if g.rstPin != nil && g.bookworm != nil {
-		err := gpio.ResetGPIO(g.board, g.rstPin)
+		err := gpio.ResetGPIO(ctx, g.rstPin)
 		if err != nil {
 			g.logger.Error("error reseting gateway")
 		}
