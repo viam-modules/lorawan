@@ -253,8 +253,9 @@ func TestStartCLogging(t *testing.T) {
 
 	// Ensure logging is started if there is no entry in the loggingRoutineStarted map.
 	g.startCLogging(ctx)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 	test.That(t, g.workers, test.ShouldNotBeNil)
+	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
+	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 
 	// Test that closing the gateway removes the gateway from the loggingRoutineStarted map.
 	err := g.Close(ctx)
@@ -267,5 +268,6 @@ func TestStartCLogging(t *testing.T) {
 	loggingRoutineStarted["test-gateway"] = true
 	g.startCLogging(ctx)
 	test.That(t, g.workers, test.ShouldBeNil)
+	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 }
