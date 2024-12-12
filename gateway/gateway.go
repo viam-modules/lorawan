@@ -234,9 +234,10 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 		default:
 			if scanner.Scan() {
 				line := scanner.Text()
-				if strings.Contains(line, "ERROR") {
+				switch {
+				case strings.Contains(line, "ERROR"):
 					g.logger.Error(line)
-				} else {
+				default:
 					g.logger.Debug(line)
 				}
 			}

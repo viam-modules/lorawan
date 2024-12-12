@@ -241,7 +241,6 @@ func TestStartCLogging(t *testing.T) {
 		Name: "test-gateway",
 	}
 
-	// Test case 1: Ensure logging is started if there is no entry in the loggingRoutineStarted map.
 	loggingRoutineStarted = make(map[string]bool)
 
 	g := &gateway{
@@ -252,15 +251,21 @@ func TestStartCLogging(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Ensure logging is started if there is no entry in the loggingRoutineStarted map.
 	g.startCLogging(ctx)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 	test.That(t, g.workers, test.ShouldNotBeNil)
 
-	// Test case 2: Ensure no new goroutine is started if the loggingRoutineStarted entry is true.
-	// reset g.workers to test for new workers
+	// Test that closing the gateway removes the gateway from the loggingRoutineStarted map.
+	err := g.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
+
+	// Ensure no new goroutine is started if the loggingRoutineStarted entry is true.
+	// reset fields for new test case
 	g.workers = nil
+	loggingRoutineStarted["test-gateway"] = true
 	g.startCLogging(ctx)
 	test.That(t, g.workers, test.ShouldBeNil)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-
 }
