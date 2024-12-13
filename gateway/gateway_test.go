@@ -7,6 +7,7 @@ import (
 	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/test"
 	"go.viam.com/utils/protoutils"
@@ -232,4 +233,41 @@ func TestUpdateReadings(t *testing.T) {
 	readings, err = g.Readings(context.Background(), nil)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
+}
+
+func TestStartCLogging(t *testing.T) {
+	// Create a gateway instance for testing
+	cfg := resource.Config{
+		Name: "test-gateway",
+	}
+
+	loggingRoutineStarted = make(map[string]bool)
+
+	g := &gateway{
+		Named:  cfg.ResourceName().AsNamed(),
+		logger: logging.NewTestLogger(t),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Ensure logging is started if there is no entry in the loggingRoutineStarted map.
+	g.startCLogging(ctx)
+	test.That(t, g.workers, test.ShouldNotBeNil)
+	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
+	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
+
+	// Test that closing the gateway removes the gateway from the loggingRoutineStarted map.
+	err := g.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
+
+	// Ensure no new goroutine is started if the loggingRoutineStarted entry is true.
+	// reset fields for new test case
+	g.workers = nil
+	loggingRoutineStarted["test-gateway"] = true
+	g.startCLogging(ctx)
+	test.That(t, g.workers, test.ShouldBeNil)
+	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
+	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 }
