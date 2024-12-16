@@ -120,8 +120,16 @@ void disableBuffering() {
     setbuf(stdout, NULL);
 }
 
+
+#ifdef TESTING
+void redirectToPipe(int fd) {
+    // Mock implementation for testing - does nothing
+}
+
+#else
 void redirectToPipe(int fd) {
     fflush(stdout);          // Flush anything in the current stdout buffer
     dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
 }
+#endif
 

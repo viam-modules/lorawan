@@ -4,8 +4,16 @@ CGO_BUILD_LDFLAGS := -L$(shell pwd)/$(BUILD_DIR)/libloragw -L$(shell pwd)/$(BUIL
 TOOL_BIN = bin/gotools/$(shell uname -s)-$(shell uname -m)
 UNAME_S ?= $(shell uname -s)
 
-lorawan: sx1302
+# flag for testing
+CGO_CFLAGS := -DTESTING
+
+default: clean lorawan
+
+clean:
 	rm -f lorawan
+	rm -f module.tar.gz
+
+lorawan: sx1302
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ main.go
 
 module.tar.gz: lorawan first_run.sh meta.json
@@ -14,8 +22,7 @@ module.tar.gz: lorawan first_run.sh meta.json
 
 test: lorawan
 	sudo apt install libnlopt-dev
-	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go test -race -v ./...
-
+	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" CGO_CFLAGS="$(CGO_CFLAGS)" go test -race -v ./...
 
 sx1302: submodule
 	cd sx1302/libtools && make

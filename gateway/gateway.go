@@ -25,8 +25,8 @@ import (
 	"gateway/gpio"
 	"gateway/node"
 
-	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
@@ -49,6 +49,11 @@ var (
 
 // Model represents a lorawan gateway model.
 var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
+
+// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
+// started for each gateway. If the gateway build errors and needs to build again, we only want to start
+// the logging routine once.
+var loggingRoutineStarted = make(map[string]bool)
 
 // Config describes the configuration of the gateway
 type Config struct {
@@ -78,9 +83,8 @@ func (conf *Config) Validate(path string) ([]string, error) {
 }
 
 // Gateway defines a lorawan gateway.
-type Gateway struct {
+type gateway struct {
 	resource.Named
-	resource.AlwaysRebuild
 	logger logging.Logger
 
 	workers *utils.StoppableWorkers
@@ -93,8 +97,7 @@ type Gateway struct {
 
 	started  bool
 	bookworm *bool
-	rstPin   board.GPIOPin
-	board    board.Board
+	rstPin   string
 }
 
 // NewGateway creates a new gateway
@@ -104,14 +107,11 @@ func NewGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	g := &Gateway{
+	g := &gateway{
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
 	}
-
-	// capture c log output
-	g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
 
 	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
@@ -122,56 +122,20 @@ func NewGateway(
 }
 
 // Reconfigure reconfigures the gateway.
-func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
 	}
-
-	if len(deps) == 0 {
-		return errors.New("must add raspberry pi board as dependency")
-	}
-	var dep resource.Resource
-
-	// Assuming there's only one dep.
-	for _, val := range deps {
-		dep = val
-	}
-
-	board, ok := dep.(board.Board)
-	if !ok {
-		return errors.New("dependency must be the board")
-	}
-
-	g.board = board
-
-	// // Determine if the pi is on bookworm or bullseye
-	// osRelease, err := os.ReadFile("/etc/os-release")
-	// if err != nil {
-	// 	return fmt.Errorf("cannot determine os release: %w", err)
-	// }
-	// isBookworm := strings.Contains(string(osRelease), "bookworm")
-
-	// g.bookworm = &isBookworm
-	rstPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.ResetPin))
+	// Determine if the pi is on bookworm or bullseye
+	osRelease, err := os.ReadFile("/etc/os-release")
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot determine os release: %w", err)
 	}
+	isBookworm := strings.Contains(string(osRelease), "bookworm")
 
-	g.rstPin = rstPin
-
-	if cfg.PowerPin != nil {
-		pwrPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.ResetPin))
-		if err != nil {
-			return err
-		}
-
-		err = gpio.InitGateway(ctx, rstPin, pwrPin)
-		if err != nil {
-			return fmt.Errorf("error initializing the gateway: %w", err)
-		}
-
-	}
+	g.bookworm = &isBookworm
+	g.rstPin = strconv.Itoa(*cfg.ResetPin)
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
@@ -186,6 +150,9 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.started = false
 	}
 
+	// capture C log output
+	g.startCLogging(ctx)
+
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
 		g.devices = make(map[string]*node.Node)
@@ -195,10 +162,10 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// err = gpio.InitGateway(board, cfg.ResetPin, cfg.PowerPin)
-	// if err != nil {
-	// 	return fmt.Errorf("error initializing the gateway: %w", err)
-	// }
+	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
+	if err != nil {
+		return fmt.Errorf("error initializing the gateway: %w", err)
+	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
@@ -229,9 +196,20 @@ func parseErrorCode(errCode int) string {
 	}
 }
 
+// startCLogging starts the goroutine to capture C logs into the logger.
+// If loggingRoutineStarted indicates routine has already started, it does nothing.
+func (g *gateway) startCLogging(ctx context.Context) {
+	loggingState, ok := loggingRoutineStarted[g.Name().Name]
+	if !ok || !loggingState {
+		g.logger.Debug("Starting c logger background routine")
+		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		loggingRoutineStarted[g.Name().Name] = true
+	}
+}
+
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
+func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
 
@@ -243,6 +221,12 @@ func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
 	// Redirect C's stdout to the write end of the pipe
 	C.redirectToPipe(C.int(stdoutW.Fd()))
 	scanner := bufio.NewScanner(stdoutR)
+
+	//nolint:errcheck
+	defer stdoutR.Close()
+	//nolint:errcheck
+	defer stdoutW.Close()
+
 	// loop to read lines from the scanner and log them
 	for {
 		select {
@@ -251,9 +235,10 @@ func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
 		default:
 			if scanner.Scan() {
 				line := scanner.Text()
-				if strings.Contains(line, "ERROR") {
+				switch {
+				case strings.Contains(line, "ERROR"):
 					g.logger.Error(line)
-				} else {
+				default:
 					g.logger.Debug(line)
 				}
 			}
@@ -261,7 +246,7 @@ func (g *Gateway) captureCOutputToLogs(ctx context.Context) {
 	}
 }
 
-func (g *Gateway) receivePackets(ctx context.Context) {
+func (g *gateway) receivePackets(ctx context.Context) {
 	// receive the radio packets
 	packet := C.createRxPacketArray()
 	for {
@@ -296,7 +281,7 @@ func (g *Gateway) receivePackets(ctx context.Context) {
 	}
 }
 
-func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 	g.workers.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
@@ -328,7 +313,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 	})
 }
 
-func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}) {
+func (g *gateway) updateReadings(name string, newReadings map[string]interface{}) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
@@ -349,7 +334,7 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
-func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
@@ -467,16 +452,16 @@ func convertToBytes(key interface{}) ([]byte, error) {
 }
 
 // Close closes the gateway.
-func (g *Gateway) Close(ctx context.Context) error {
-	if g.rstPin != nil && g.bookworm != nil {
-		err := gpio.ResetGPIO(ctx, g.rstPin)
+func (g *gateway) Close(ctx context.Context) error {
+	if g.rstPin != "" && g.bookworm != nil {
+		err := gpio.ResetGPIO(g.rstPin, *g.bookworm)
 		if err != nil {
 			g.logger.Error("error reseting gateway")
 		}
 	}
-
 	if g.workers != nil {
 		g.workers.Stop()
+		delete(loggingRoutineStarted, g.Name().Name)
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
@@ -486,8 +471,17 @@ func (g *Gateway) Close(ctx context.Context) error {
 }
 
 // Readings returns all the node's readings.
-func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
+
+	// no readings available yet
+	if len(g.lastReadings) == 0 {
+		// Tell the collector not to capture the empty data.
+		if extra[data.FromDMString] == true {
+			return map[string]interface{}{}, data.ErrNoCaptureToStore
+		}
+	}
+
 	return g.lastReadings, nil
 }

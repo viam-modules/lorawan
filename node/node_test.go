@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"go.viam.com/rdk/components/encoder"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/testutils/inject"
@@ -46,9 +47,6 @@ func createMockGateway() *inject.Sensor {
 	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 		readings := make(map[string]interface{})
 		readings["test-node"] = testNodeReadings
-		otherNodeReadings := make(map[string]interface{})
-		otherNodeReadings["reading"] = "fake"
-		readings["other-node"] = otherNodeReadings
 		return readings, nil
 	}
 	return mockGateway
@@ -325,4 +323,34 @@ func TestReadings(t *testing.T) {
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+
+	// node for empty readings.
+	validConf = resource.Config{
+		Name: "other-node",
+		ConvertedAttributes: &Config{
+			DecoderPath: testDecoderPath,
+			Interval:    &testInterval,
+			JoinType:    joinTypeOTAA,
+			DevEUI:      testDevEUI,
+			AppKey:      testAppKey,
+		},
+	}
+
+	n, err = newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+
+	// If lastReadings is empty and the call is not from data manager, return no error.
+	readings, err = n.Readings(ctx, nil)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
+
+	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
+	_, err = n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
+	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
+
+	// If data.FromDmString is false, return no error
+	_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
 }
