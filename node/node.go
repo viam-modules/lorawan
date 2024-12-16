@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.viam.com/rdk/components/sensor"
@@ -298,9 +297,13 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		}
 
 		reading, ok := allReadings[n.NodeName]
+		// no readings available yet
 		if !ok {
-			// no readings available yet
-			return map[string]interface{}{}, fmt.Errorf("no readings available yet: %w", data.ErrNoCaptureToStore)
+			// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
+			if extra[data.FromDMString] == true {
+				return map[string]interface{}{}, data.ErrNoCaptureToStore
+			}
+			return map[string]interface{}{}, nil
 		}
 		return reading.(map[string]interface{}), nil
 	}

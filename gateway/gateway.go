@@ -26,6 +26,7 @@ import (
 	"gateway/node"
 
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
@@ -473,5 +474,14 @@ func (g *gateway) Close(ctx context.Context) error {
 func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
+
+	// no readings available yet
+	if len(g.lastReadings) == 0 {
+		// Tell the collector not to capture the empty data.
+		if extra[data.FromDMString] == true {
+			return map[string]interface{}{}, data.ErrNoCaptureToStore
+		}
+	}
+
 	return g.lastReadings, nil
 }
