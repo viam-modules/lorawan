@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"go.viam.com/rdk/components/encoder"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/testutils/inject"
@@ -325,4 +326,14 @@ func TestReadings(t *testing.T) {
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+
+	// If lastReadings is empty and the call is not from data manager, return no error.
+	readings, err = n.Readings(ctx, nil)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
+
+	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
+	readings, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
+	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
+
 }
