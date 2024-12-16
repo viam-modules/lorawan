@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"gateway/node"
-	"testing"
 
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"

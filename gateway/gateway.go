@@ -24,11 +24,6 @@ import (
 
 	"gateway/gpio"
 	"gateway/node"
-	"os"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"

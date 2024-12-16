@@ -11,9 +11,6 @@ import (
 	"time"
 
 	"gateway/node"
-	"os"
-	"reflect"
-	"time"
 
 	"github.com/robertkrimen/otto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"

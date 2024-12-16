@@ -250,6 +250,11 @@ func TestReadings(t *testing.T) {
 	_, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
 	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
 
+	// If data.FromDmString is false, return no error
+	_, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
+
 	// successful readings call test case.
 	expectedReadings := map[string]interface{}{
 		"device1": map[string]interface{}{
