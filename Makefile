@@ -7,8 +7,13 @@ UNAME_S ?= $(shell uname -s)
 # flag for testing
 CGO_CFLAGS := -DTESTING
 
-lorawan: sx1302
+default: clean lorawan
+
+clean:
 	rm -f lorawan
+	rm -f module.tar.gz
+
+lorawan: sx1302
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ main.go
 
 module.tar.gz: lorawan first_run.sh meta.json
