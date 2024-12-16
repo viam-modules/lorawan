@@ -2,11 +2,10 @@ package gateway
 
 import (
 	"context"
-	"testing"
-
 	"gateway/node"
-
+	"testing"
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/test"
@@ -230,6 +229,35 @@ func TestUpdateReadings(t *testing.T) {
 		},
 	}
 	g.updateReadings("device1", newReading)
+	readings, err = g.Readings(context.Background(), nil)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, expectedReadings)
+}
+
+func TestReadings(t *testing.T) {
+	g := &gateway{
+		lastReadings: make(map[string]interface{}),
+	}
+
+	// If lastReadings is empty and the call is not from data manager, return no error.
+	readings, err := g.Readings(context.Background(), nil)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
+
+	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
+	readings, err = g.Readings(context.Background(), nil)
+	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
+
+	// successful readings call test case.
+	expectedReadings := map[string]interface{}{
+		"device1": map[string]interface{}{
+			"temp": 26.5,
+			"hum":  60,
+			"pres": 1013,
+		},
+	}
+
+	g.lastReadings = expectedReadings
 	readings, err = g.Readings(context.Background(), nil)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
