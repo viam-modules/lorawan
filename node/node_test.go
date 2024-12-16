@@ -333,7 +333,6 @@ func TestReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
-	readings, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
+	_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
 	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
-
 }
