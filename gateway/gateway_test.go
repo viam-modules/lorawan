@@ -4,6 +4,7 @@ import (
 	"context"
 	"gateway/node"
 	"testing"
+
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
@@ -245,7 +246,7 @@ func TestReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
-	readings, err = g.Readings(context.Background(), nil)
+	readings, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
 	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
 
 	// successful readings call test case.
