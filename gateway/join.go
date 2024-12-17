@@ -1,8 +1,8 @@
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
-#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
+#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
+#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
@@ -10,14 +10,15 @@ package gateway
 
 */
 import "C"
+
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"gateway/node"
 	"math/rand"
 	"time"
+
+	"gateway/node"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
@@ -32,12 +33,17 @@ type joinRequest struct {
 	mic      []byte
 }
 
-var errNoDevice = errors.New("received packet from unknown device")
+const (
+	joinRx2WindowSec = 6         // rx2 delay for sending join accept message.
+	rx2Frequenecy    = 923300000 // Frequency to send downlinks on rx2 window
+	rx2SF            = 12        // spreading factor for rx2 window
+	rx2Bandwidth     = 0x06      // 500k bandwidth
+)
 
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -57,7 +63,7 @@ func (g *Gateway) handleJoin(ctx context.Context, payload []byte) error {
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
-func (g *Gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
+func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
 	var joinRequest joinRequest
 
 	// everything in the join request payload is little endian
@@ -132,7 +138,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 		0x00, // Disable channels 48-55
 		0x00, // Disable channels 56-63
 		0x00, // Disable channels 64-71
-		0x00, // Disbale channels 72-79
+		0x00, // Disable channels 72-79
 		0x00, // RFU (reserved for future use)
 		0x00, // RFU
 		0x00, // RFU
@@ -160,7 +166,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 	}
 
 	ja := make([]byte, 0)
-	//add back mhdr
+	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
 
@@ -200,7 +206,7 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 	}
 
 	if !bytes.Equal(payload[19:], mic[:]) {
-		return errors.New("invalid MIC")
+		return errInvalidMIC
 	}
 	return nil
 }

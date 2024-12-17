@@ -1,0 +1,7 @@
+lorawan:
+    image_arm64: ghcr.io/viamrobotics/antique2:arm64-cache
+    minimum_date: 2023-10-26T20:00:00.0Z
+    update_interval: 168h0m0s
+    user: testbot
+    group: testbot
+    persistent: true

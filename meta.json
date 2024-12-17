@@ -1,7 +1,7 @@
 {
     "$schema": "https://dl.viam.dev/module.schema.json",
     "module_id": "viam:lorawan",
-    "visibility": "private",
+    "visibility": "public",
     "url": "https://github.com/oliviamiller/lorawan",
     "description": "A module to collect data from LoRaWAN sensors",
     "models": [
@@ -15,10 +15,10 @@
          }
     ],
     "build": {
+        "path": "module.tar.gz",
         "build": "make module.tar.gz",
-         "arch" : ["linux/arm64"],
-         "path" : "bin/module.tar.gz"
-       },
-            "entrypoint": "mymod"
+        "arch": ["linux/arm64"]
+      },
+    "entrypoint": "lorawan",
+    "first_run": "first_run.sh"
     }
-

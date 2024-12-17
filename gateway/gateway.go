@@ -1,31 +1,59 @@
+// Package gateway implements the sx1302 gateway module.
 package gateway
 
 /*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
-#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
+#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
+#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
 #include <stdlib.h>
-
 */
 import "C"
+
 import (
+	"bufio"
 	"context"
 	"errors"
-	"gateway/gpio"
-	"gateway/node"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"gateway/gpio"
+	"gateway/node"
+
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
 )
 
+// Error variables for validation and operations
+var (
+	// Config validation errors
+	errResetPinRequired = errors.New("reset pin is required")
+	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
+
+	// Gateway operation errors
+	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
+	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
+	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
+	errNoDevice           = errors.New("received packet from unknown device")
+	errInvalidMIC         = errors.New("invalid MIC")
+	errSendJoinAccept     = errors.New("failed to send join accept packet")
+)
+
 // Model represents a lorawan gateway model.
 var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
+
+// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
+// started for each gateway. If the gateway build errors and needs to build again, we only want to start
+// the logging routine once.
+var loggingRoutineStarted = make(map[string]bool)
 
 // Config describes the configuration of the gateway
 type Config struct {
@@ -39,26 +67,24 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: newGateway,
+			Constructor: NewGateway,
 		})
 }
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("reset pin is required"))
+		return nil, resource.NewConfigValidationError(path, errResetPinRequired)
 	}
 	if conf.Bus != 0 && conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path,
-			errors.New("spi bus can be 0 or 1 - default 0"))
+		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
 	return nil, nil
 }
 
-type Gateway struct {
+// Gateway defines a lorawan gateway.
+type gateway struct {
 	resource.Named
-	resource.AlwaysRebuild
 	logger logging.Logger
 
 	workers *utils.StoppableWorkers
@@ -69,20 +95,19 @@ type Gateway struct {
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	resetPin   int
-	powerEnPin int
-	bus        int
-
-	started bool
+	started  bool
+	bookworm *bool
+	rstPin   string
 }
 
-func newGateway(
+// NewGateway creates a new gateway
+func NewGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	g := &Gateway{
+	g := &gateway{
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
@@ -96,12 +121,21 @@ func newGateway(
 	return g, nil
 }
 
-func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-
+// Reconfigure reconfigures the gateway.
+func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
 	}
+	// Determine if the pi is on bookworm or bullseye
+	osRelease, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return fmt.Errorf("cannot determine os release: %w", err)
+	}
+	isBookworm := strings.Contains(string(osRelease), "bookworm")
+
+	g.bookworm = &isBookworm
+	g.rstPin = strconv.Itoa(*cfg.ResetPin)
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
@@ -109,12 +143,15 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
-		err = g.Close(ctx)
+		err := g.Close(ctx)
 		if err != nil {
 			return err
 		}
 		g.started = false
 	}
+
+	// capture C log output
+	g.startCLogging(ctx)
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -125,60 +162,126 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// init the gateway
-	gpio.InitGateway(cfg.ResetPin, cfg.PowerPin)
+	err = gpio.InitGateway(cfg.ResetPin, cfg.PowerPin, isBookworm)
+	if err != nil {
+		return fmt.Errorf("error initializing the gateway: %w", err)
+	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
 	if errCode != 0 {
-		return errors.New("failed to start the gateway")
+		strErr := parseErrorCode(int(errCode))
+		return fmt.Errorf("failed to set up the gateway: %s", strErr)
 	}
 
 	g.started = true
-	g.receivePackets()
+	g.workers.Add(g.receivePackets)
 
 	return nil
 }
 
-func (g *Gateway) receivePackets() {
+func parseErrorCode(errCode int) string {
+	switch errCode {
+	case 1:
+		return "error setting the board config"
+	case 2:
+		return "error setting the radio frequency config for radio 0"
+	case 3:
+		return "error setting the radio frequency config for radio 1"
+	case 4:
+		return "error setting the intermediate frequency chain config"
+	case 5:
+		return "error starting the gateway"
+	default:
+		return "unknown error"
+	}
+}
+
+// startCLogging starts the goroutine to capture C logs into the logger.
+// If loggingRoutineStarted indicates routine has already started, it does nothing.
+func (g *gateway) startCLogging(ctx context.Context) {
+	loggingState, ok := loggingRoutineStarted[g.Name().Name]
+	if !ok || !loggingState {
+		g.logger.Debug("Starting c logger background routine")
+		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		loggingRoutineStarted[g.Name().Name] = true
+	}
+}
+
+// captureOutput is a background routine to capture C's stdout and log to the module's logger.
+// This is necessary because the sx1302 library only uses printf to report errors.
+func (g *gateway) captureCOutputToLogs(ctx context.Context) {
+	// Need to disable buffering on stdout so C logs can be displayed in real time.
+	C.disableBuffering()
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		g.logger.Errorf("unable to create pipe for C logs")
+		return
+	}
+	// Redirect C's stdout to the write end of the pipe
+	C.redirectToPipe(C.int(stdoutW.Fd()))
+	scanner := bufio.NewScanner(stdoutR)
+
+	//nolint:errcheck
+	defer stdoutR.Close()
+	//nolint:errcheck
+	defer stdoutW.Close()
+
+	// loop to read lines from the scanner and log them
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if scanner.Scan() {
+				line := scanner.Text()
+				switch {
+				case strings.Contains(line, "ERROR"):
+					g.logger.Error(line)
+				default:
+					g.logger.Debug(line)
+				}
+			}
+		}
+	}
+}
+
+func (g *gateway) receivePackets(ctx context.Context) {
 	// receive the radio packets
 	packet := C.createRxPacketArray()
-	g.workers = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) {
-		for {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		numPackets := int(C.receive(packet))
+		switch numPackets {
+		case 0:
+			// no packet received, wait 10 ms to receive again.
 			select {
 			case <-ctx.Done():
 				return
-			default:
+			case <-time.After(10 * time.Millisecond):
 			}
-			numPackets := int(C.receive(packet))
-			switch numPackets {
-			case 0:
-				// no packet received, wait 10 ms to receive again.
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(10 * time.Millisecond):
-				}
-			case 1:
-				// received a LORA packet
-				var payload []byte
-				for i := 0; i < numPackets; i++ {
-					if packet.size == 0 {
-						continue
-					}
-					// Convert packet to go byte array
-					for i := 0; i < int(packet.size); i++ {
-						payload = append(payload, byte(packet.payload[i]))
-					}
-					g.handlePacket(ctx, payload)
-				}
-			default:
-				g.logger.Errorf("error receiving lora packet")
+		case 1:
+			// received a LORA packet
+			var payload []byte
+			if packet.size == 0 {
+				continue
 			}
+			// Convert packet to go byte array
+			for i := range int(packet.size) {
+				payload = append(payload, byte(packet.payload[i]))
+			}
+			g.handlePacket(ctx, payload)
+		default:
+			g.logger.Errorf("error receiving lora packet")
 		}
-	})
+	}
 }
 
-func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 	g.workers.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
@@ -196,10 +299,11 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 			g.logger.Infof("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
+				// don't log as error if it was a request from unknown device.
+				if errors.Is(errNoDevice, err) {
+					return
+				}
 				g.logger.Errorf("error parsing uplink message: %s", err)
-			}
-			// don't update readings from unknown device
-			if errors.Is(errNoDevice, err) {
 				return
 			}
 			g.updateReadings(name, readings)
@@ -209,7 +313,7 @@ func (g *Gateway) handlePacket(ctx context.Context, payload []byte) {
 	})
 }
 
-func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}) {
+func (g *gateway) updateReadings(name string, newReadings map[string]interface{}) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
@@ -229,12 +333,12 @@ func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}
 	g.lastReadings[name] = readings
 }
 
-func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+// DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
+func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
-
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
@@ -256,7 +360,6 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.devices[node.NodeName] = mergedNode
 		}
 	}
-
 	// Remove a node from the device map and readings map.
 	if name, ok := cmd["remove_device"]; ok {
 		if n, ok := name.(string); ok {
@@ -265,11 +368,9 @@ func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			delete(g.lastReadings, n)
 			g.readingsMu.Unlock()
 		}
-
 	}
 
 	return map[string]interface{}{}, nil
-
 }
 
 // mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
@@ -295,11 +396,10 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 		mergedNode.Addr = newNode.Addr
 		mergedNode.AppSKey = newNode.AppSKey
 	default:
-		return nil, errors.New("unexpected join type when adding node to gateway")
+		return nil, errUnexpectedJoinType
 	}
 
 	return mergedNode, nil
-
 }
 
 // convertToNode converts the map from the docommand into the node struct.
@@ -334,7 +434,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 func convertToBytes(key interface{}) ([]byte, error) {
 	bytes, ok := key.([]interface{})
 	if !ok {
-		return nil, errors.New("expected node map val to be type []interface{}, but it wasn't")
+		return nil, errInvalidNodeMapType
 	}
 	res := make([]byte, 0)
 
@@ -342,28 +442,46 @@ func convertToBytes(key interface{}) ([]byte, error) {
 		for _, b := range bytes {
 			val, ok := b.(float64)
 			if !ok {
-				return nil, errors.New("expected node byte array val to be floar64, but it wasn't")
+				return nil, errInvalidByteType
 			}
 			res = append(res, byte(val))
 		}
 	}
 
 	return res, nil
-
 }
-func (g *Gateway) Close(ctx context.Context) error {
+
+// Close closes the gateway.
+func (g *gateway) Close(ctx context.Context) error {
+	if g.rstPin != "" && g.bookworm != nil {
+		err := gpio.ResetGPIO(g.rstPin, *g.bookworm)
+		if err != nil {
+			g.logger.Error("error reseting gateway")
+		}
+	}
 	if g.workers != nil {
 		g.workers.Stop()
+		delete(loggingRoutineStarted, g.Name().Name)
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
-		g.logger.Errorf("error stopping gateway")
+		g.logger.Error("error stopping gateway")
 	}
 	return nil
 }
 
-func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+// Readings returns all the node's readings.
+func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
+
+	// no readings available yet
+	if len(g.lastReadings) == 0 {
+		// Tell the collector not to capture the empty data.
+		if extra[data.FromDMString] == true {
+			return map[string]interface{}{}, data.ErrNoCaptureToStore
+		}
+	}
+
 	return g.lastReadings, nil
 }

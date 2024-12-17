@@ -28,7 +28,6 @@ const int32_t rfChains [9] = {0, 0, 0, 0, 1, 1, 1};
 
 
 int setUpGateway(int bus) {
-
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -50,7 +49,7 @@ int setUpGateway(int bus) {
     strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
-        return EXIT_FAILURE;
+        return 1;
     }
 
     // The rfConf configures the two RF chains the gateway HAT has.
@@ -67,12 +66,12 @@ int setUpGateway(int bus) {
     rfconf.tx_enable = true;
 
     if (lgw_rxrf_setconf(0, &rfconf) != LGW_HAL_SUCCESS) {
-        return EXIT_FAILURE;
+        return 2;
     }
 
     rfconf.freq_hz = RADIO_1_FREQ;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
-        return EXIT_FAILURE;
+        return 3;
 
     }
 
@@ -89,14 +88,15 @@ int setUpGateway(int bus) {
         ifconf.rf_chain = rfChains[i];
         ifconf.freq_hz = ifFrequencies[i];
         if (lgw_rxif_setconf(i, &ifconf) != LGW_HAL_SUCCESS) {
-            return EXIT_FAILURE;
+            return 4;
         }
     }
 
     // start the gateway.
-    if (lgw_start() != LGW_HAL_SUCCESS) {
-            return EXIT_FAILURE;
-        }
+    int res = lgw_start();
+    if (res != LGW_HAL_SUCCESS) {
+        return 5;
+    }
     return 0;
  }
 
@@ -115,4 +115,21 @@ int receive(struct lgw_pkt_rx_s* packet)  {
 int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }
+
+void disableBuffering() {
+    setbuf(stdout, NULL);
+}
+
+
+#ifdef TESTING
+void redirectToPipe(int fd) {
+    // Mock implementation for testing - does nothing
+}
+
+#else
+void redirectToPipe(int fd) {
+    fflush(stdout);          // Flush anything in the current stdout buffer
+    dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
+}
+#endif
 
