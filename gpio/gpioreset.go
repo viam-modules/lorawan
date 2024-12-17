@@ -39,7 +39,13 @@ func InitGateway(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
 }
 
 func initGPIO(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
-	err := powerPin.Set(ctx, true, nil)
+
+	err := resetPin.Set(ctx, false, nil)
+	if err != nil {
+		return err
+	}
+
+	err = powerPin.Set(ctx, true, nil)
 	if err != nil {
 		return err
 	}
