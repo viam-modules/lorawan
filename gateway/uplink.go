@@ -84,7 +84,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	dAddr := types.MustDevAddr(devAddrBE)
 
 	// validate mic
-	expectedMic, err := crypto.ComputeLegacyUplinkMIC(types.AES128Key(device.FNwkSIntKey), *dAddr, (uint32)(frameCnt), phyPayload[:len(phyPayload)-4])
+	expectedMic, err := crypto.ComputeLegacyUplinkMIC(types.AES128Key(device.NwkSKey), *dAddr, (uint32)(frameCnt), phyPayload[:len(phyPayload)-4])
 	if err != nil {
 		return "", map[string]interface{}{}, fmt.Errorf("error validating the mic: %s", err)
 	}
