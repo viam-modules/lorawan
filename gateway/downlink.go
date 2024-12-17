@@ -24,7 +24,7 @@ import (
 	"go.viam.com/utils"
 )
 
-func (g *Gateway) sendDownLink(ctx context.Context, payload []byte, join bool) error {
+func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) error {
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:    C.uint32_t(Rx2Frequency),
 		tx_mode:    C.uint8_t(0), // immediate mode
@@ -46,28 +46,29 @@ func (g *Gateway) sendDownLink(ctx context.Context, payload []byte, join bool) e
 
 	// join request and other downlinks have different windows for class A devices.
 	var waitTime int
-	if join {
+	switch join {
+	case true:
 		waitTime = JoinRx2WindowSec
-	} else {
+	default:
 		waitTime = Rx2WindowSec
 	}
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
-		return nil
+		return errors.New("context canceled")
 	}
 
-	// lock the mutex so there is not two sends at the same time.
+	// lock the mutex to prevent two sends at the same time.
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	errCode := int(C.send(&txPkt))
 	if errCode != 0 {
-		return errors.New("failed to send downlink")
+		return errors.New("failed to send downlink packet")
 	}
 
 	return nil
 }
 
-func createDeviceTimeAns(devAddr []byte, encNwkKey types.AES128Key, downlinkNwkSKey types.AES128Key, fCnt uint32) ([]byte, error) {
+func createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, fCnt uint32) ([]byte, error) {
 	// Create buffer for the complete PHYPayload
 	phyPayload := new(bytes.Buffer)
 
@@ -121,7 +122,7 @@ func createDeviceTimeAns(devAddr []byte, encNwkKey types.AES128Key, downlinkNwkS
 	}
 
 	// Encrypt FRMPayload
-	encryptedPayload, err := crypto.EncryptDownlink(encNwkKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
+	encryptedPayload, err := crypto.EncryptDownlink(nwkSKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt payload: %w", err)
 	}
@@ -131,17 +132,11 @@ func createDeviceTimeAns(devAddr []byte, encNwkKey types.AES128Key, downlinkNwkS
 		return nil, fmt.Errorf("failed to write encrypted payload: %w", err)
 	}
 
-	// 7. Calculate and add MIC
-	// For downlink messages, we need both FCntDown and AFCntDown
-	// AFCntDown is used for MIC calculation in LoRaWAN 1.0.x
-	// We'll use 0 for AFCntDown as this is a simple DeviceTimeAns
-	afCntDown := uint32(0)
-	mic, err := crypto.ComputeDownlinkMIC(downlinkNwkSKey, types.DevAddr(devAddr), fCnt, afCntDown, phyPayload.Bytes())
+	mic, err := crypto.ComputeLegacyDownlinkMIC(nwkSKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute MIC: %w", err)
 	}
 
-	// Add MIC to PHYPayload
 	if _, err := phyPayload.Write(mic[:]); err != nil {
 		return nil, fmt.Errorf("failed to write MIC: %w", err)
 	}

@@ -49,12 +49,12 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	joinAccept, err := generateJoinAccept(ctx, jr, device)
+	joinAcceptPayload, err := generateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
 
-	g.sendDownLink(ctx, joinAccept, true)
+	g.sendDownLink(ctx, joinAcceptPayload, true)
 
 	return nil
 }
@@ -177,9 +177,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 	}
 
 	d.AppSKey = keys.appSKey
-	d.FNwkSIntKey = keys.FNwkSIntKey
-	d.SNwkSIntKey = keys.SNwkSIntKey
-	d.NwkSEncKey = keys.NwkSEncKey
+	d.NwkSKey = keys.nwkSKey
 
 	// return the encrypted join accept message
 	return ja, nil
@@ -212,10 +210,8 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 }
 
 type sessionKeys struct {
-	appSKey     []byte
-	FNwkSIntKey []byte
-	SNwkSIntKey []byte
-	NwkSEncKey  []byte
+	appSKey []byte
+	nwkSKey []byte
 }
 
 func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (sessionKeys, error) {
@@ -245,21 +241,13 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 
 	keys.appSKey = appsKey[:]
 
-	nwkKeys, err := applicationCryptoService.DeriveNwkSKeys(
-		ctx,
-		cryptoDev,
-		ttnpb.MACVersion_MAC_V1_0_3,
+	nwkSKey := crypto.DeriveLegacyNwkSKey(
+		appKey,
 		types.JoinNonce(jn),
-		types.DevNonce(devNonceBE),
-		types.NetID(networkID))
+		types.NetID(networkID),
+		types.DevNonce(devNonceBE))
 
-	if err != nil {
-		return sessionKeys{}, fmt.Errorf("failed to generate NwkSKeys: %s", err)
-	}
-
-	keys.FNwkSIntKey = nwkKeys.FNwkSIntKey[:]
-	keys.NwkSEncKey = nwkKeys.NwkSEncKey[:]
-	keys.SNwkSIntKey = nwkKeys.SNwkSIntKey[:]
+	keys.nwkSKey = nwkSKey[:]
 
 	return keys, nil
 }

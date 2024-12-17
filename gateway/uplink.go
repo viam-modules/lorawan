@@ -32,7 +32,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
@@ -53,13 +52,17 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 				//TODO: handlelinkcheckreq
 			//DeviceTimeReq: device requests date and time
 			case 0x0D:
-				fmt.Println("GOT DEVICE TIME REQ")
-				//resp, err := createDeviceTimeAns(devAddr, types.AES128Key(device.SNwkSIntKey), uint32(frameCnt))
+				g.logger.Warnf("GOT DEVICE TIME REQ")
+				payload, err := createDeviceTimeAns(devAddr, types.AES128Key(device.NwkSKey), uint32(frameCnt))
 				if err != nil {
-					g.logger.Warnf("couldn't respond to mac command")
-					break
+					g.logger.Errorf("couldn't respond to mac command %w", err)
+					continue
 				}
-				//g.sendDownLink(ctx, resp, false)
+				err = g.sendDownLink(ctx, payload, false)
+				if err != nil {
+					g.logger.Errorf("couldn't send downlink message %w", err)
+					continue
+				}
 				fmt.Println("HERE SENT DOWNLINK")
 			default:
 				//unsupported mac command
