@@ -14,6 +14,7 @@ const (
 	// Rx2Frequency is the frequency in Hz to send downlinks on rx2 window
 	Rx2Frequency = 923300000
 	// Rx2SF is the spreading factor for rx2 window
+	// SF12 and bandwidth 500k corresponds with data rate 8.
 	Rx2SF = 12
 	// Rx2Bandwidth is the bandwidth setting (500kHz)
 	Rx2Bandwidth = 0x06

@@ -53,7 +53,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 			//DeviceTimeReq: device requests date and time
 			case 0x0D:
 				g.logger.Warnf("GOT DEVICE TIME REQ")
-				payload, err := createDeviceTimeAns(devAddr, types.AES128Key(device.NwkSKey), uint32(frameCnt))
+				payload, err := createDeviceTimeAns(devAddrBE, types.AES128Key(device.NwkSKey), uint32(frameCnt))
 				if err != nil {
 					g.logger.Errorf("couldn't respond to mac command %w", err)
 					continue

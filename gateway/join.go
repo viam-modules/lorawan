@@ -85,7 +85,7 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	}
 
 	if matched.NodeName == "" {
-		g.logger.Debugf("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
+		g.logger.Infof("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest, nil, errNoDevice
 	}
 
