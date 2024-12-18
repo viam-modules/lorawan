@@ -31,11 +31,7 @@ func pinctrlSet(pin, state string, bookworm bool) error {
 
 // InitGateway initializes the gateway hardware.
 func InitGateway(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
-	err := initGPIO(ctx, resetPin, powerPin)
-	if err != nil {
-		return err
-	}
-	return ResetGPIO(ctx, resetPin)
+	return ResetGPIO(ctx, resetPin, powerPin)
 }
 
 func initGPIO(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
@@ -54,13 +50,24 @@ func initGPIO(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
 }
 
 // ResetGPIO resets the gateway.
-func ResetGPIO(ctx context.Context, rst board.GPIOPin) error {
-	err := rst.Set(ctx, true, nil)
+func ResetGPIO(ctx context.Context, rst, pwr board.GPIOPin) error {
+	err := pwr.Set(ctx, true, nil)
 	if err != nil {
 		return err
 	}
 
 	waitGPIO()
+
+	fmt.Println("SETTING RESET PIN TO HIGH")
+
+	err = rst.Set(ctx, true, nil)
+	if err != nil {
+		return err
+	}
+
+	waitGPIO()
+
+	fmt.Println("SETTING RESET PIN TO LOW")
 
 	err = rst.Set(ctx, false, nil)
 	if err != nil {

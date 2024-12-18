@@ -99,6 +99,7 @@ type gateway struct {
 	started  bool
 	bookworm *bool
 	rstPin   board.GPIOPin
+	pwrPin   board.GPIOPin
 	board    board.Board
 }
 
@@ -168,8 +169,8 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.started = false
 	}
 
-	// capture C log output
-	g.startCLogging(ctx)
+	// // capture C log output
+	// g.startCLogging(ctx)
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -188,10 +189,12 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.rstPin = rstPin
 
 	if cfg.PowerPin != nil {
-		pwrPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.ResetPin))
+		fmt.Println("HERE")
+		pwrPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.PowerPin))
 		if err != nil {
 			return err
 		}
+		g.pwrPin = pwrPin
 
 		err = gpio.InitGateway(ctx, rstPin, pwrPin)
 		if err != nil {
@@ -485,8 +488,10 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *gateway) Close(ctx context.Context) error {
+	g.logger.Warnf("HERE CLOSING")
 	if g.rstPin != nil && g.bookworm != nil {
-		err := gpio.ResetGPIO(ctx, g.rstPin)
+		g.logger.Warnf("HERE RESETING THE GPIO")
+		err := gpio.ResetGPIO(ctx, g.rstPin, g.pwrPin)
 		if err != nil {
 			g.logger.Error("error reseting gateway")
 		}
