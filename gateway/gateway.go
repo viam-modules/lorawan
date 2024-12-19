@@ -258,12 +258,13 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 			if scanner.Scan() {
 				line := scanner.Text()
 				switch {
+				case strings.Contains(line, "STANDBY_RC mode"):
+					// The error setting standby_rc mode indicates a hardware initiaization failure
+					// add extra log to instruct user what to do.
+					g.logger.Error(line)
+					g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
 				case strings.Contains(line, "ERROR"):
 					g.logger.Error(line)
-					// The error setting standby_rc mode indicates a hardware initiaization failure
-					if strings.Contains(line, "STANDBY_RC mode") {
-						g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
-					}
 				default:
 					g.logger.Debug(line)
 				}
