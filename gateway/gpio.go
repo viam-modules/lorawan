@@ -9,7 +9,7 @@ import (
 	"go.viam.com/utils"
 )
 
-// it is necessary to sleep betweeen setting the gpio pins - the gateway will not initislize correctly without it.
+// it is necessary to sleep betweeen setting the gpio pins - the gateway will not initialize correctly without it.
 func waitGPIO(ctx context.Context) error {
 	if !utils.SelectContextOrWait(ctx, 100*time.Millisecond) {
 		return errors.New("context cancelled")

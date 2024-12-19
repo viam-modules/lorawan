@@ -132,7 +132,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if g.started {
 		err := g.reset(ctx)
 		if err != nil {
-			g.logger.Error(err.Error())
+			return err
 		}
 	}
 
@@ -491,7 +491,7 @@ func (g *gateway) Close(ctx context.Context) error {
 }
 
 func (g *gateway) reset(ctx context.Context) error {
-	// close the routine that receives lora packets - otherwise this will error if the gateway has stopped.
+	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if g.receivingWorker != nil {
 		g.receivingWorker.Stop()
 	}
