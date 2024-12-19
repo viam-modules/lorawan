@@ -16,14 +16,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gateway/node"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"gateway/gpio"
-	"gateway/node"
 
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
@@ -187,7 +185,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.pwrPin = pwrPin
 	}
 
-	err = gpio.ResetGateway(ctx, g.rstPin, g.pwrPin)
+	err = resetGateway(ctx, g.rstPin, g.pwrPin)
 	if err != nil {
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
@@ -502,7 +500,7 @@ func (g *gateway) reset(ctx context.Context) error {
 		g.logger.Error("error stopping gateway")
 	}
 	if g.rstPin != nil {
-		err := gpio.ResetGateway(ctx, g.rstPin, g.pwrPin)
+		err := resetGateway(ctx, g.rstPin, g.pwrPin)
 		if err != nil {
 			g.logger.Error("error resetting the gateway")
 		}
