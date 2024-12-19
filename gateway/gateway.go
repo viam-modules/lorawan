@@ -88,19 +88,18 @@ type gateway struct {
 	resource.Named
 	logger logging.Logger
 
-	workers *utils.StoppableWorkers
-	mu      sync.Mutex
+	loggingWorker   *utils.StoppableWorkers
+	receivingWorker *utils.StoppableWorkers
+	mu              sync.Mutex
 
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	started  bool
-	bookworm *bool
-	rstPin   board.GPIOPin
-	pwrPin   board.GPIOPin
-	board    board.Board
+	started bool
+	rstPin  board.GPIOPin
+	pwrPin  board.GPIOPin
 }
 
 // NewGateway creates a new gateway
@@ -126,19 +125,26 @@ func NewGateway(
 
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	// If the gateway hardware was already started, stop gateway and the background worker.
+	// Make sure to always call stopGateway() before making any changes to the c config or
+	// errors will occur.
+	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
+	// started, so only call stopGateway if this module already started the gateway.
+	// reset before locking the mutex to avoid deadlock.
+	if g.started {
+		err := g.reset(ctx)
+		if err != nil {
+			g.logger.Error(err.Error())
+		}
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
 	}
-	// Determine if the pi is on bookworm or bullseye
-	osRelease, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return fmt.Errorf("cannot determine os release: %w", err)
-	}
-	isBookworm := strings.Contains(string(osRelease), "bookworm")
-
-	g.bookworm = &isBookworm
-
 	if len(deps) == 0 {
 		return errors.New("must add raspberry pi board as dependency")
 	}
@@ -154,23 +160,8 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return errors.New("dependency must be the board")
 	}
 
-	g.board = board
-
-	// If the gateway hardware was already started, stop gateway and the background worker.
-	// Make sure to always call stopGateway() before making any changes to the c config or
-	// errors will occur.
-	// Unexpected behavior will also occur if you call stopGateway() when the gateway hasn't been
-	// started, so only call stopGateway if this module already started the gateway.
-	if g.started {
-		err := g.Close(ctx)
-		if err != nil {
-			return err
-		}
-		g.started = false
-	}
-
-	// // capture C log output
-	// g.startCLogging(ctx)
+	// capture C log output
+	g.startCLogging(ctx)
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -181,25 +172,24 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	rstPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.ResetPin))
+	// adding io before the pin allows you to use the GPIO number.
+	rstPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.ResetPin))
 	if err != nil {
 		return err
 	}
-
 	g.rstPin = rstPin
 
 	if cfg.PowerPin != nil {
-		fmt.Println("HERE")
-		pwrPin, err := board.GPIOPinByName(strconv.Itoa(*cfg.PowerPin))
+		pwrPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.PowerPin))
 		if err != nil {
 			return err
 		}
 		g.pwrPin = pwrPin
+	}
 
-		err = gpio.InitGateway(ctx, rstPin, pwrPin)
-		if err != nil {
-			return fmt.Errorf("error initializing the gateway: %w", err)
-		}
+	err = gpio.ResetGateway(ctx, g.rstPin, g.pwrPin)
+	if err != nil {
+		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
 	errCode := C.setUpGateway(C.int(cfg.Bus))
@@ -209,8 +199,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	g.started = true
-	g.workers.Add(g.receivePackets)
-
+	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
 	return nil
 }
 
@@ -237,7 +226,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
-		g.workers = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		g.loggingWorker = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
 		loggingRoutineStarted[g.Name().Name] = true
 	}
 }
@@ -290,7 +279,9 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
+		g.mu.Lock()
 		numPackets := int(C.receive(packet))
+		g.mu.Unlock()
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -317,7 +308,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 }
 
 func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
-	g.workers.Add(func(ctx context.Context) {
+	g.receivingWorker.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
@@ -488,22 +479,35 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *gateway) Close(ctx context.Context) error {
-	g.logger.Warnf("HERE CLOSING")
-	if g.rstPin != nil && g.bookworm != nil {
-		g.logger.Warnf("HERE RESETING THE GPIO")
-		err := gpio.ResetGPIO(ctx, g.rstPin, g.pwrPin)
-		if err != nil {
-			g.logger.Error("error reseting gateway")
-		}
+	err := g.reset(ctx)
+	if err != nil {
+		return err
 	}
-	if g.workers != nil {
-		g.workers.Stop()
+
+	if g.loggingWorker != nil {
+		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
+	}
+
+	return nil
+}
+
+func (g *gateway) reset(ctx context.Context) error {
+	// close the routine that receives lora packets - otherwise this will error if the gateway has stopped.
+	if g.receivingWorker != nil {
+		g.receivingWorker.Stop()
 	}
 	errCode := C.stopGateway()
 	if errCode != 0 {
 		g.logger.Error("error stopping gateway")
 	}
+	if g.rstPin != nil {
+		err := gpio.ResetGateway(ctx, g.rstPin, g.pwrPin)
+		if err != nil {
+			g.logger.Error("error resetting the gateway")
+		}
+	}
+	g.started = false
 	return nil
 }
 

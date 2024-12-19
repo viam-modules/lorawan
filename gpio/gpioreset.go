@@ -3,76 +3,38 @@ package gpio
 
 import (
 	"context"
-	"fmt"
-	"os/exec"
 	"time"
 
 	"go.viam.com/rdk/components/board"
 )
 
+// it is neccessary to sleep betweeen setting the gpio pins - the gateway will not initislize correctly without it.
 func waitGPIO() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func pinctrlSet(pin, state string, bookworm bool) error {
-	if bookworm {
-		cmd := exec.Command("pinctrl", "set", pin, state)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
+func ResetGateway(ctx context.Context, rst, pwr board.GPIOPin) error {
+	if pwr != nil {
+		err := pwr.Set(ctx, true, nil)
+		if err != nil {
+			return err
 		}
-	} else {
-		cmd := exec.Command("raspi-gpio", "set", pin, state)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("error setting GPIO %s to %s: %w", pin, state, err)
-		}
-	}
-	return nil
-}
 
-// InitGateway initializes the gateway hardware.
-func InitGateway(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
-	return ResetGPIO(ctx, resetPin, powerPin)
-}
-
-func initGPIO(ctx context.Context, resetPin, powerPin board.GPIOPin) error {
-
-	err := resetPin.Set(ctx, false, nil)
-	if err != nil {
-		return err
+		waitGPIO()
 	}
 
-	err = powerPin.Set(ctx, true, nil)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ResetGPIO resets the gateway.
-func ResetGPIO(ctx context.Context, rst, pwr board.GPIOPin) error {
-	err := pwr.Set(ctx, true, nil)
+	err := rst.Set(ctx, true, nil)
 	if err != nil {
 		return err
 	}
 
 	waitGPIO()
-
-	fmt.Println("SETTING RESET PIN TO HIGH")
-
-	err = rst.Set(ctx, true, nil)
-	if err != nil {
-		return err
-	}
-
-	waitGPIO()
-
-	fmt.Println("SETTING RESET PIN TO LOW")
 
 	err = rst.Set(ctx, false, nil)
 	if err != nil {
 		return err
 	}
+
 	waitGPIO()
 	return nil
 }
