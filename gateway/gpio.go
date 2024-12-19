@@ -9,9 +9,11 @@ import (
 	"go.viam.com/utils"
 )
 
+const msToWait = 100
+
 // it is necessary to sleep betweeen setting the gpio pins - the gateway will not initialize correctly without it.
 func waitGPIO(ctx context.Context) error {
-	if !utils.SelectContextOrWait(ctx, 100*time.Millisecond) {
+	if !utils.SelectContextOrWait(ctx, msToWait*time.Millisecond) {
 		return errors.New("context cancelled")
 	}
 	return nil

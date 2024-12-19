@@ -85,10 +85,12 @@ func (conf *Config) Validate(path string) ([]string, error) {
 type gateway struct {
 	resource.Named
 	logger logging.Logger
+	mu     sync.Mutex
 
+	// Using two wait groups so we can stop the receivingWorker at reconfigure
+	// but keep the loggingWorker running.
 	loggingWorker   *utils.StoppableWorkers
 	receivingWorker *utils.StoppableWorkers
-	mu              sync.Mutex
 
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
@@ -123,21 +125,20 @@ func NewGateway(
 
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
 	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
-	// reset before locking the mutex to avoid deadlock.
 	if g.started {
 		err := g.reset(ctx)
 		if err != nil {
 			return err
 		}
 	}
-
-	g.mu.Lock()
-	defer g.mu.Unlock()
 
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
@@ -177,6 +178,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 	g.rstPin = rstPin
 
+	// not every gateway has a power enable pin so it is optional.
 	if cfg.PowerPin != nil {
 		pwrPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.PowerPin))
 		if err != nil {
@@ -282,9 +284,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
-		g.mu.Lock()
 		numPackets := int(C.receive(packet))
-		g.mu.Unlock()
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
