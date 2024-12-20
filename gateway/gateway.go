@@ -156,7 +156,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	board, ok := dep.(board.Board)
 	if !ok {
-		return errors.New("dependency must be the board")
+		return errors.New("dependency must be a raspberry pi board")
 	}
 
 	// capture C log output
