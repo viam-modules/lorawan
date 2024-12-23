@@ -2,9 +2,8 @@ package gateway
 
 import (
 	"context"
-	"testing"
-
 	"gateway/node"
+	"testing"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -18,33 +17,49 @@ func TestValidate(t *testing.T) {
 	// Test valid config with default bus
 	resetPin := 25
 	conf := &Config{
-		ResetPin: &resetPin,
+		BoardName: "pi",
+		ResetPin:  &resetPin,
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, deps, test.ShouldBeNil)
+	test.That(t, len(deps), test.ShouldEqual, 1)
 
 	// Test valid config with bus=1
 	conf = &Config{
-		ResetPin: &resetPin,
-		Bus:      1,
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Bus:       1,
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, deps, test.ShouldBeNil)
+	test.That(t, len(deps), test.ShouldEqual, 1)
 
 	// Test missing reset pin
-	conf = &Config{}
-	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errResetPinRequired))
+	conf = &Config{
+		BoardName: "pi",
+	}
+	deps, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "reset_pin"))
+	test.That(t, deps, test.ShouldBeNil)
 
 	// Test invalid bus value
 	conf = &Config{
-		ResetPin: &resetPin,
-		Bus:      2,
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Bus:       2,
 	}
-	_, err = conf.Validate("")
+	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
+	test.That(t, deps, test.ShouldBeNil)
+
+	// Test missing boardName
+	conf = &Config{
+		ResetPin: &resetPin,
+	}
+
+	deps, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "board"))
+	test.That(t, deps, test.ShouldBeNil)
 }
 
 func TestDoCommand(t *testing.T) {

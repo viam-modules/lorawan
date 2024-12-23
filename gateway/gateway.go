@@ -34,8 +34,7 @@ import (
 // Error variables for validation and operations
 var (
 	// Config validation errors
-	errResetPinRequired = errors.New("reset pin is required")
-	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
+	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
 
 	// Gateway operation errors
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
@@ -56,9 +55,10 @@ var loggingRoutineStarted = make(map[string]bool)
 
 // Config describes the configuration of the gateway
 type Config struct {
-	Bus      int  `json:"spi_bus,omitempty"`
-	PowerPin *int `json:"power_en_pin,omitempty"`
-	ResetPin *int `json:"reset_pin"`
+	Bus       int    `json:"spi_bus,omitempty"`
+	PowerPin  *int   `json:"power_en_pin,omitempty"`
+	ResetPin  *int   `json:"reset_pin"`
+	BoardName string `json:"board"`
 }
 
 func init() {
@@ -72,13 +72,21 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
+	var deps []string
 	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationError(path, errResetPinRequired)
+		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
 	if conf.Bus != 0 && conf.Bus != 1 {
 		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
-	return nil, nil
+
+	if len(conf.BoardName) == 0 {
+		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
+	}
+	deps = append(deps, conf.BoardName)
+
+	return deps, nil
+
 }
 
 // Gateway defines a lorawan gateway.
@@ -144,19 +152,10 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if err != nil {
 		return err
 	}
-	if len(deps) == 0 {
-		return errors.New("must add raspberry pi board as dependency")
-	}
-	var dep resource.Resource
 
-	// Assuming there's only one dep.
-	for _, val := range deps {
-		dep = val
-	}
-
-	board, ok := dep.(board.Board)
-	if !ok {
-		return errors.New("dependency must be a raspberry pi board")
+	board, err := board.FromDependencies(deps, cfg.BoardName)
+	if err != nil {
+		return err
 	}
 
 	// capture C log output
