@@ -35,4 +35,4 @@ jobs:
       run: make lint
 
     - name: Run license finder
-       uses: ./.github/workflows/license_finder.yml
+      uses: ./.github/workflows/license_finder.yml
