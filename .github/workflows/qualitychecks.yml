@@ -1,4 +1,4 @@
-name: run linter and unit tests on each commit
+name: run linter, unit tests, dependency check on each commit
 
 on:
   push:
@@ -34,5 +34,5 @@ jobs:
     - name: Run linter
       run: make lint
 
-    - name: Run license finder
-      run: make license-check
+  license_finder:
+    uses: ./.github/workflows/license_finder.yml
