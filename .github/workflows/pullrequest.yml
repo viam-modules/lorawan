@@ -35,4 +35,4 @@ jobs:
       run: make lint
 
     - name: Run license finder
-      uses: make license-check
+      run: make license-check
