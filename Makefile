@@ -41,3 +41,6 @@ gofmt:
 lint: gofmt tool-install
 	go mod tidy
 	$(TOOL_BIN)/golangci-lint run -v --fix --timeout=10m --config=./etc/.golangci.yaml
+
+license-check:
+	license_finder
