@@ -53,6 +53,8 @@ var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 // the logging routine once.
 var loggingRoutineStarted = make(map[string]bool)
 
+var noReadings = map[string]interface{}{"": "no readings available yet"}
+
 // Config describes the configuration of the gateway
 type Config struct {
 	Bus       int    `json:"spi_bus,omitempty"`
@@ -524,7 +526,7 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 		if extra[data.FromDMString] == true {
 			return map[string]interface{}{}, data.ErrNoCaptureToStore
 		}
-		return map[string]interface{}{"": "no readings available yet"}, nil
+		return noReadings, nil
 	}
 
 	return g.lastReadings, nil
