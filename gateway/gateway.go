@@ -519,11 +519,12 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 	defer g.readingsMu.Unlock()
 
 	// no readings available yet
-	if len(g.lastReadings) == 0 {
+	if len(g.lastReadings) == 0 || g.lastReadings == nil {
 		// Tell the collector not to capture the empty data.
 		if extra[data.FromDMString] == true {
 			return map[string]interface{}{}, data.ErrNoCaptureToStore
 		}
+		return map[string]interface{}{"": "no readings available yet"}, nil
 	}
 
 	return g.lastReadings, nil
