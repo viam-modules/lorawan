@@ -259,7 +259,7 @@ func TestReadings(t *testing.T) {
 	// If lastReadings is empty and the call is not from data manager, return no error.
 	readings, err := g.Readings(context.Background(), nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{"": "no readings available yet"})
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
 	_, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
@@ -268,7 +268,7 @@ func TestReadings(t *testing.T) {
 	// If data.FromDmString is false, return no error
 	_, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, map[string]interface{}{})
+	test.That(t, readings, test.ShouldResemble, map[string]interface{}{"": "no readings available yet"})
 
 	// successful readings call test case.
 	expectedReadings := map[string]interface{}{
