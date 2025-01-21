@@ -40,6 +40,8 @@ const (
 	joinTypeABP  = "ABP"
 )
 
+var noReadings = map[string]interface{}{"": "no readings available yet"}
+
 // Config defines the node's config.
 type Config struct {
 	JoinType    string   `json:"join_type,omitempty"`
@@ -303,7 +305,7 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 			if extra[data.FromDMString] == true {
 				return map[string]interface{}{}, data.ErrNoCaptureToStore
 			}
-			return map[string]interface{}{}, nil
+			return noReadings, nil
 		}
 		return reading.(map[string]interface{}), nil
 	}
