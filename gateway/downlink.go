@@ -50,7 +50,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) e
 	case true:
 		waitTime = JoinRx2WindowSec
 	default:
-		waitTime = Rx2WindowSec
+		waitTime = 2
 	}
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
@@ -65,24 +65,29 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) e
 		return errors.New("failed to send downlink packet")
 	}
 
+	g.logger.Warnf("send the downolink packet")
+
 	return nil
 }
 
-func createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, fCnt uint32) ([]byte, error) {
+func (g *gateway) createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, fCnt uint32) ([]byte, error) {
 	// Create buffer for the complete PHYPayload
 	phyPayload := new(bytes.Buffer)
 
-	// Mhdr
+	// Mhdr unconfirmed data down
 	if err := phyPayload.WriteByte(DownLinkMType); err != nil {
 		return nil, fmt.Errorf("failed to write MHDR: %w", err)
 	}
 
-	if _, err := phyPayload.Write(devAddr); err != nil {
+	// the payload needs the dev addr to be in LE
+	devAddrLE := reverseByteArray(devAddr)
+	if _, err := phyPayload.Write(devAddrLE); err != nil {
 		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
 	}
 
-	// fctrl
-	if err := phyPayload.WriteByte(0x00); err != nil {
+	// fctrl - ADR set to 1 and ACKs set to 0 - no ack required.
+	// fctrl is | ADR | RFU | ACK| FPending | FOptsLen |
+	if err := phyPayload.WriteByte(0x80); err != nil {
 		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
 	}
 
@@ -121,25 +126,32 @@ func createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, fCnt uint32) (
 		return nil, fmt.Errorf("failed to encode fractional seconds: %w", err)
 	}
 
+	// calculate mic
+	payload := append(phyPayload.Bytes(), frmPayload.Bytes()...)
+	mic, err := crypto.ComputeLegacyDownlinkMIC(nwkSKey, types.DevAddr(devAddr), fCnt, payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute MIC: %w", err)
+	}
+
+	g.logger.Warnf("frmpayload: %x", frmPayload.Bytes())
+
 	// Encrypt FRMPayload
 	encryptedPayload, err := crypto.EncryptDownlink(nwkSKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt payload: %w", err)
 	}
 
+	g.logger.Warnf("encrypted payload: %x", encryptedPayload)
+
 	// Add encrypted FRMPayload to PHYPayload
 	if _, err := phyPayload.Write(encryptedPayload); err != nil {
 		return nil, fmt.Errorf("failed to write encrypted payload: %w", err)
-	}
-
-	mic, err := crypto.ComputeLegacyDownlinkMIC(nwkSKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute MIC: %w", err)
 	}
 
 	if _, err := phyPayload.Write(mic[:]); err != nil {
 		return nil, fmt.Errorf("failed to write MIC: %w", err)
 	}
 
+	g.logger.Warnf("%x", phyPayload.Bytes())
 	return phyPayload.Bytes(), nil
 }

@@ -178,7 +178,7 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 
 	d.AppSKey = keys.appSKey
 	d.NwkSKey = keys.nwkSKey
-
+	
 	// return the encrypted join accept message
 	return ja, nil
 }
