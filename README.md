@@ -1,12 +1,16 @@
 # [`lorawan module`](<https://github.com/oliviamiller/lorawan-gateway>)
 
 LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol, enabling efficient communication over large distances with minimal energy usage.
+For more on why this is useful, see the [article on the Viam blog](https://www.viam.com/post/launch-lorawan-support-viam).
 
-This module combines the functionality of a LoRaWAN gateway and network server, enabling communication between LoRaWAN sensors and the viam app.
+This module combines the functionality of a LoRaWAN gateway and network server, enabling communication between LoRaWAN sensors and the Viam app.
 It handles packet forwarding, device management, and message routing to allow LoRaWAN sensor data to be viewed and managed directly in Viam.
+This module provides two models:
 
-`sx1302-gateway`: sensor model for a sx1302 lorawan concentrator hat connected to a raspberry pi.\
-`node`: sensor model for the end nodes sending data to the gateway.
+- `sx1302-gateway`: Sensor model for a SX1302 LoRaWAN concentrator hat connected to a Raspberry Pi.
+- `node`: Sensor model for the end nodes sending data to the gateway.
+
+You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
 
 Compatible with:
 - US915 frequency band
@@ -20,12 +24,12 @@ Hardware Required:
 - SX1302 Gateway HAT/concentrator board
 - US915 LoRaWAN sensors
 
-See [Hardware Tested Section](<https://github.com/oliviamiller/lorawan-gateway/tree/readme?tab=readme-ov-file#hardware-tested>) for tested with hardware.
+See [Hardware Tested Section](https://github.com/viam-modules/lorawan?tab=readme-ov-file#hardware-tested) for hardware we have used this module with successfully.
 
 ## Configure the `viam:sensor:sx1302-gateway`
 
-Navigate to the [**CONFIGURE** tab](https://docs.viam.com/configure/) of your [machine](https://docs.viam.com/fleet/machines/) in the [Viam app](https://app.viam.com/).
-[Add <sx1302-gateway> to your machine](https://docs.viam.com/configure/#components).
+Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
+[Add sx1302-gateway to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
 
 ### Attributes
 
@@ -58,6 +62,8 @@ Example gateway configuration:
 ```
 
 ## Configure the `viam:sensor:node`
+
+As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
 
 The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
@@ -132,11 +138,11 @@ When the gateway is properly configured, the pwr LED will be solid red and the r
 It may take several minutes after starting the module to start receiving data, especially if your node transmits on more than 8 frequency channels.
 The gateway will log info logs when it has received a join request or data uplink.
 
-The gateway communicates through SPI, ensure that SPI in enabled on the pi.
+The gateway communicates through SPI, so [ensure that SPI in enabled on the Pi](https://docs.viam.com/operate/reference/prepare/rpi-setup/#enable-communication-protocols).
 
 To avoid capturing duplicate data, set the data capture frequency equal to or less than the expected uplink interval.
 
-If the error `ERROR: Failed to set SX1250_0 in STANDBY_RC mode` is seen in logs, unplug the raspberry pi for a few minutes and then try again.
+If you see the error `ERROR: Failed to set SX1250_0 in STANDBY_RC mode` in logs, unplug the Raspberry Pi for a few minutes and then try again.
 
 ## Hardware Tested
 The sx1302-gateway model has been tested with:\
