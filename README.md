@@ -10,7 +10,7 @@ This module provides two models:
 - `sx1302-gateway`: Sensor model for a SX1302 LoRaWAN concentrator hat connected to a Raspberry Pi.
 - `node`: Sensor model for the end nodes sending data to the gateway.
 
-You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have connected to your Pi.
+You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
 
 Compatible with:
 - US915 frequency band
