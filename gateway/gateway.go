@@ -493,9 +493,11 @@ func (g *gateway) Close(ctx context.Context) error {
 
 	if g.loggingWorker != nil {
 		if g.logReader != nil {
+			//nolint:errcheck
 			g.logReader.Close()
 		}
 		if g.logWriter != nil {
+			//nolint:errcheck
 			g.logWriter.Close()
 		}
 		g.loggingWorker.Stop()
