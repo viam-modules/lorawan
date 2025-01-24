@@ -50,8 +50,10 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) e
 	case true:
 		waitTime = JoinRx2WindowSec
 	default:
-		waitTime = 2
+		waitTime = 1
 	}
+
+	g.logger.Warnf("waittime : %d", waitTime)
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
 		return errors.New("context canceled")
@@ -86,8 +88,9 @@ func (g *gateway) createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, f
 	}
 
 	// fctrl - ADR set to 1 and ACKs set to 0 - no ack required.
+	// foptslen is 5 bytes
 	// fctrl is | ADR | RFU | ACK| FPending | FOptsLen |
-	if err := phyPayload.WriteByte(0x80); err != nil {
+	if err := phyPayload.WriteByte(0x85); err != nil {
 		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
 	}
 
@@ -98,10 +101,10 @@ func (g *gateway) createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, f
 		return nil, fmt.Errorf("failed to write FCnt: %w", err)
 	}
 
-	// fport is 0 for mac command messages
-	if err := phyPayload.WriteByte(0); err != nil {
-		return nil, fmt.Errorf("failed to write FPort: %w", err)
-	}
+	// // fport is 0 for mac command messages
+	// if err := phyPayload.WriteByte(0); err != nil {
+	// 	return nil, fmt.Errorf("failed to write FPort: %w", err)
+	// }
 
 	// Create frame payload
 	// Time is represented as seconds since GPS epoch
@@ -110,8 +113,8 @@ func (g *gateway) createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, f
 	secondsSinceGPSEpoch := uint32(now.Sub(gpsEpoch).Seconds())
 
 	// Calculate fractional seconds (1/256 resolution)
-	nanoseconds := now.Nanosecond()
-	fractionalSeconds := uint8((nanoseconds / 1e6) * 256 / 1000) // Convert ms to 1/256 resolution
+	// nanoseconds := now.Nanosecond()
+	// fractionalSeconds := uint8((nanoseconds / 1e6) * 256 / 1000) // Convert ms to 1/256 resolution
 
 	// Create FRMPayload buffer
 	frmPayload := new(bytes.Buffer)
@@ -121,8 +124,8 @@ func (g *gateway) createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, f
 		return nil, fmt.Errorf("failed to encode GPS epoch time: %w", err)
 	}
 
-	// Write fractional seconds (1 byte)
-	if err := frmPayload.WriteByte(fractionalSeconds); err != nil {
+	// // Write fractional seconds (1 byte)
+	if err := frmPayload.WriteByte(0); err != nil {
 		return nil, fmt.Errorf("failed to encode fractional seconds: %w", err)
 	}
 
@@ -133,25 +136,21 @@ func (g *gateway) createDeviceTimeAns(devAddr []byte, nwkSKey types.AES128Key, f
 		return nil, fmt.Errorf("failed to compute MIC: %w", err)
 	}
 
-	g.logger.Warnf("frmpayload: %x", frmPayload.Bytes())
+	// // Encrypt FRMPayload
+	// encryptedPayload, err := crypto.EncryptDownlink(nwkSKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to encrypt payload: %w", err)
+	// }
 
-	// Encrypt FRMPayload
-	encryptedPayload, err := crypto.EncryptDownlink(nwkSKey, types.DevAddr(devAddr), fCnt, frmPayload.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt payload: %w", err)
-	}
+	// g.logger.Warnf("encrypted payload: %x", encryptedPayload)
 
-	g.logger.Warnf("encrypted payload: %x", encryptedPayload)
+	// // Add encrypted FRMPayload to PHYPayload
+	// if _, err := phyPayload.Write(encryptedPayload); err != nil {
+	// 	return nil, fmt.Errorf("failed to write encrypted payload: %w", err)
+	// }
 
-	// Add encrypted FRMPayload to PHYPayload
-	if _, err := phyPayload.Write(encryptedPayload); err != nil {
-		return nil, fmt.Errorf("failed to write encrypted payload: %w", err)
-	}
+	payload = append(payload, mic[:]...)
 
-	if _, err := phyPayload.Write(mic[:]); err != nil {
-		return nil, fmt.Errorf("failed to write MIC: %w", err)
-	}
-
-	g.logger.Warnf("%x", phyPayload.Bytes())
-	return phyPayload.Bytes(), nil
+	g.logger.Warnf("%x", payload)
+	return payload, nil
 }
