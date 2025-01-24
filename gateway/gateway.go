@@ -237,20 +237,21 @@ func (g *gateway) startCLogging(ctx context.Context) {
 		}
 		g.logReader = stdoutR
 		g.logWriter = stdoutW
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+
+		// Redirect C's stdout to the write end of the pipe
+		C.redirectToPipe(C.int(g.logWriter.Fd()))
+		scanner := bufio.NewScanner(g.logReader)
+
+		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
 		loggingRoutineStarted[g.Name().Name] = true
 	}
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context) {
+func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
-
-	// Redirect C's stdout to the write end of the pipe
-	C.redirectToPipe(C.int(g.logWriter.Fd()))
-	scanner := bufio.NewScanner(g.logReader)
 
 	// loop to read lines from the scanner and log them
 	for {
