@@ -112,6 +112,7 @@ type gateway struct {
 	pwrPin  board.GPIOPin
 
 	logReader *os.File
+	logWriter *os.File
 }
 
 // NewGateway creates a new gateway
@@ -229,6 +230,13 @@ func (g *gateway) startCLogging(ctx context.Context) {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
+		stdoutR, stdoutW, err := os.Pipe()
+		if err != nil {
+			g.logger.Errorf("unable to create pipe for C logs")
+			return
+		}
+		g.logReader = stdoutR
+		g.logWriter = stdoutW
 		g.loggingWorker = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
 		loggingRoutineStarted[g.Name().Name] = true
 	}
@@ -240,20 +248,9 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
 
-	stdoutR, stdoutW, err := os.Pipe()
-	g.logReader = stdoutR
-	if err != nil {
-		g.logger.Errorf("unable to create pipe for C logs")
-		return
-	}
 	// Redirect C's stdout to the write end of the pipe
-	C.redirectToPipe(C.int(stdoutW.Fd()))
-	scanner := bufio.NewScanner(stdoutR)
-
-	//nolint:errcheck
-	defer stdoutR.Close()
-	//nolint:errcheck
-	defer stdoutW.Close()
+	C.redirectToPipe(C.int(g.logWriter.Fd()))
+	scanner := bufio.NewScanner(g.logReader)
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -486,6 +483,8 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *gateway) Close(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	err := g.reset(ctx)
 	if err != nil {
 		return err
@@ -494,6 +493,9 @@ func (g *gateway) Close(ctx context.Context) error {
 	if g.loggingWorker != nil {
 		if g.logReader != nil {
 			g.logReader.Close()
+		}
+		if g.logWriter != nil {
+			g.logWriter.Close()
 		}
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
