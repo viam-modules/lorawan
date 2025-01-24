@@ -110,6 +110,8 @@ type gateway struct {
 	started bool
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
+
+	logReader *os.File
 }
 
 // NewGateway creates a new gateway
@@ -239,6 +241,7 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 	C.disableBuffering()
 
 	stdoutR, stdoutW, err := os.Pipe()
+	g.logReader = stdoutR
 	if err != nil {
 		g.logger.Errorf("unable to create pipe for C logs")
 		return
@@ -489,6 +492,9 @@ func (g *gateway) Close(ctx context.Context) error {
 	}
 
 	if g.loggingWorker != nil {
+		if g.logReader != nil {
+			g.logReader.Close()
+		}
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
 	}
