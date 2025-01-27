@@ -110,6 +110,9 @@ type gateway struct {
 	started bool
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
+
+	logReader *os.File
+	logWriter *os.File
 }
 
 // NewGateway creates a new gateway
@@ -227,30 +230,28 @@ func (g *gateway) startCLogging(ctx context.Context) {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		stdoutR, stdoutW, err := os.Pipe()
+		if err != nil {
+			g.logger.Errorf("unable to create pipe for C logs")
+			return
+		}
+		g.logReader = stdoutR
+		g.logWriter = stdoutW
+
+		// Redirect C's stdout to the write end of the pipe
+		C.redirectToPipe(C.int(g.logWriter.Fd()))
+		scanner := bufio.NewScanner(g.logReader)
+
+		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
 		loggingRoutineStarted[g.Name().Name] = true
 	}
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context) {
+func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
-
-	stdoutR, stdoutW, err := os.Pipe()
-	if err != nil {
-		g.logger.Errorf("unable to create pipe for C logs")
-		return
-	}
-	// Redirect C's stdout to the write end of the pipe
-	C.redirectToPipe(C.int(stdoutW.Fd()))
-	scanner := bufio.NewScanner(stdoutR)
-
-	//nolint:errcheck
-	defer stdoutR.Close()
-	//nolint:errcheck
-	defer stdoutW.Close()
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -483,12 +484,22 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *gateway) Close(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	err := g.reset(ctx)
 	if err != nil {
 		return err
 	}
 
 	if g.loggingWorker != nil {
+		if g.logReader != nil {
+			//nolint:errcheck
+			g.logReader.Close()
+		}
+		if g.logWriter != nil {
+			//nolint:errcheck
+			g.logWriter.Close()
+		}
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
 	}
