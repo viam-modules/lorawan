@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"gateway/node"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,6 +111,8 @@ type gateway struct {
 	started bool
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
+
+	dataFile *os.File
 }
 
 // NewGateway creates a new gateway
@@ -124,8 +127,15 @@ func NewGateway(
 		logger:  logger,
 		started: false,
 	}
+	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
+	file, err := os.Create(filePath)
+	if err != nil {
+		return nil, err
+	}
+	g.dataFile = file
 
-	err := g.Reconfigure(ctx, deps, conf)
+	err = g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -483,6 +493,8 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *gateway) Close(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	err := g.reset(ctx)
 	if err != nil {
 		return err

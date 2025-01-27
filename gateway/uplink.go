@@ -28,8 +28,37 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
-		g.logger.Infof("received packet from unknown device, ignoring")
-		return "", map[string]interface{}{}, errNoDevice
+		// see if the device is in the file.
+		// Read the device info from the file
+		found := false
+		devices, err := readDeviceInfoFromFile(g.dataFile)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to read device info from file: %w", err)
+		}
+		if devices != nil {
+			// Check if the devAddr is in the file.
+			for _, device := range devices {
+				if bytes.Equal(devAddrBE, []byte(device.DevAddr)) {
+					found = true
+					// find the device in the module's devices by the EUI.
+					mapNode, err := matchDeviceAddr([]byte(device.DevEUI), g.devices)
+					if err != nil {
+						return "", map[string]interface{}{}, err
+					}
+
+					mapNode.AppSKey = []byte(device.AppSKey)
+					mapNode.Addr = []byte(device.DevAddr)
+
+					// replace the device in the map.
+					g.devices[mapNode.NodeName] = mapNode
+
+				}
+			}
+		}
+		if !found {
+			g.logger.Infof("received packet from unknown device, ignoring")
+			return "", map[string]interface{}{}, errNoDevice
+		}
 	}
 
 	// Frame control byte contains various settings

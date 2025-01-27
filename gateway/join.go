@@ -14,8 +14,11 @@ import "C"
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
 	"time"
 
 	"gateway/node"
@@ -26,6 +29,27 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/utils"
 )
+
+type DeviceInfo struct {
+	DevEUI  string `json:"dev_eui"`
+	DevAddr string `json:"dev_addr"`
+	AppSKey string `json:"app_skey"`
+}
+
+// Function to write device info to a file
+// Function to write device info to a file
+func writeDeviceInfoToFile(file *os.File, devices []DeviceInfo) error {
+	data, err := json.MarshalIndent(devices, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal device info to JSON: %w", err)
+	}
+
+	err = os.WriteFile(file.Name(), data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write data to file: %w", err)
+	}
+	return nil
+}
 
 type joinRequest struct {
 	joinEUI  []byte
@@ -50,7 +74,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	joinAccept, err := generateJoinAccept(ctx, jr, device)
+	joinAccept, err := g.generateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
@@ -116,7 +140,7 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	}
 
 	if matched.NodeName == "" {
-		g.logger.Debugf("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
+		g.logger.Infof("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest, nil, errNoDevice
 	}
 
@@ -128,13 +152,61 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	return joinRequest, matched, nil
 }
 
+// Function to read device info from a file
+func readDeviceInfoFromFile(file *os.File) ([]DeviceInfo, error) {
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var devices []DeviceInfo
+	err = json.Unmarshal(data, &devices)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return devices, nil
+}
+
 // Format of Join Accept message:
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
-func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
+func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn := generateJoinNonce()
+
+	// Read the device info from the file
+	devices, err := readDeviceInfoFromFile(g.dataFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read device info from file: %w", err)
+	}
+
+	devEUIBE := reverseByteArray(jr.devEUI)
+
+	if devices != nil {
+		// Check if the devEUI is already present
+		for i, device := range devices {
+			if bytes.Equal([]byte(device.DevEUI), devEUIBE) {
+				// remove the device from the file - we will add it again with the new info.
+				g.logger.Infof("Here removing the device")
+				devices = append(devices[:i], devices[i+1:]...)
+				break
+			}
+		}
+	}
+
+	// Write the updated device info back to the file
+	err = writeDeviceInfoToFile(g.dataFile, devices)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write updated device info to file: %w", err)
+	}
+
+	g.logger.Infof("wrote to the file!@@")
 
 	// generate a random device address to identify uplinks.
 	d.Addr = generateDevAddr()
@@ -208,6 +280,10 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 	}
 
 	d.AppSKey = appsKey[:]
+
+	deviceInfo := []DeviceInfo{DeviceInfo{DevEUI: fmt.Sprintf("%X", devEUIBE), DevAddr: fmt.Sprintf("%X", d.Addr), AppSKey: fmt.Sprintf("%X", d.AppSKey)}}
+
+	writeDeviceInfoToFile(g.dataFile, deviceInfo)
 
 	// return the encrypted join accept message
 	return ja, nil
