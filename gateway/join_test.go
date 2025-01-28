@@ -208,10 +208,10 @@ func TestGenerateJoinAccept(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 }
 
-func TestReadAndWriteDeviceInfoToFile(t *testing.T) {
+func TestAddAndRemoveDeviceInfoToFile(t *testing.T) {
 	file := createDataFile(t)
-	deviceInfos := []deviceInfo{{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}}
-	err := writeDeviceInfoToFile(file, deviceInfos)
+	info := deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}
+	err := addDeviceInfoToFile(file, info)
 	test.That(t, err, test.ShouldBeNil)
 
 	deviceInfo, err := readDeviceInfoFromFile(file)

@@ -132,32 +132,6 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	return joinRequest, matched, nil
 }
 
-// Function to read device info from a file
-func readDeviceInfoFromFile(file *os.File) ([]deviceInfo, error) {
-	// Reset file pointer to the beginning
-	_, err := file.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to the beginning of the file: %w", err)
-	}
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	if len(data) == 0 {
-		return nil, nil
-	}
-
-	var devices []deviceInfo
-	err = json.Unmarshal(data, &devices)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
-	}
-
-	return devices, nil
-}
-
 // Format of Join Accept message:
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
@@ -170,7 +144,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	// Check if this device is already present in the file.
 	// If it is, remove it since the join procedure is being redone.
-	err := removeDeviceInfoFromFile(g.dataFile, devEUIBE)
+	err := searchAndRemove(g.dataFile, devEUIBE)
 	if err != nil {
 		return nil, fmt.Errorf("join procedure failed: %w", err)
 	}
@@ -248,13 +222,14 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = appsKey[:]
 
-	deviceInfo := []deviceInfo{{
+	// Save the OTAA info to the data file.
+	deviceInfo := deviceInfo{
 		DevEUI:  fmt.Sprintf("%X", devEUIBE),
 		DevAddr: fmt.Sprintf("%X", d.Addr),
 		AppSKey: fmt.Sprintf("%X", d.AppSKey),
-	}}
+	}
 
-	err = writeDeviceInfoToFile(g.dataFile, deviceInfo)
+	err = addDeviceInfoToFile(g.dataFile, deviceInfo)
 	if err != nil {
 		// if this errors, log but still return join accept.
 		g.logger.Errorf("failed to write device info to file: %v", err)
@@ -267,7 +242,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 // This function searches for the device in the persistent data file based on the dev EUI sent in the JR.
 // If the dev EUI is found, the device info is removed from the file.
 // The file will later be updated with the info from the new join procedure.
-func removeDeviceInfoFromFile(file *os.File, devEUI []byte) error {
+func searchAndRemove(file *os.File, devEUI []byte) error {
 	// Read the device info from the file
 	devices, err := readDeviceInfoFromFile(file)
 	if err != nil {
@@ -275,18 +250,16 @@ func removeDeviceInfoFromFile(file *os.File, devEUI []byte) error {
 	}
 
 	// Check if the devEUI is already present
-	for i, device := range devices {
+	for _, device := range devices {
 		dev, err := hex.DecodeString(device.DevEUI)
 		if err != nil {
 			return fmt.Errorf("failed to decode file's dev addr: %w", err)
 		}
 
 		if bytes.Equal(dev, devEUI) {
-			// remove the device from the file - we will add it again with the new info.
-			devices = append(devices[:i], devices[i+1:]...)
-			err := writeDeviceInfoToFile(file, devices)
+			err = removeDeviceInfoFromFile(file, devEUI)
 			if err != nil {
-				return fmt.Errorf("failed to write new device info to file: %w", err)
+				return fmt.Errorf("failed to remove old device info from file: %w", err)
 			}
 			break
 		}
@@ -369,9 +342,56 @@ func reverseByteArray(arr []byte) []byte {
 	return reversed
 }
 
-// Function to write the device info into a file.
-func writeDeviceInfoToFile(file *os.File, devices []deviceInfo) error {
-	// Reset file pointer to the beginning
+func removeDeviceInfoFromFile(file *os.File, devEUI []byte) error {
+	// Read the existing data from the file
+	devices, err := readDeviceInfoFromFile(file)
+	if err != nil {
+		return err
+	}
+
+	if devices == nil {
+		return fmt.Errorf("no devices to remove")
+	}
+
+	// Filter out the device with the specified devEUI
+	var updatedDevices []deviceInfo
+	for _, device := range devices {
+		if device.DevEUI != fmt.Sprintf("%X", devEUI) {
+			updatedDevices = append(updatedDevices, device)
+		}
+	}
+
+	err = writeToFile(file, updatedDevices)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Function to write the device info from the persitent data file.
+func addDeviceInfoToFile(file *os.File, newDevice deviceInfo) error {
+	// Read the existing data from the file
+	devices, err := readDeviceInfoFromFile(file)
+	if err != nil {
+		return err
+	}
+
+	if devices == nil {
+		devices = []deviceInfo{}
+	}
+	// Append the new device to the existing array
+	devices = append(devices, newDevice)
+
+	err = writeToFile(file, devices)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeToFile(file *os.File, devices []deviceInfo) error {
+	// Reset the file pointer and truncate the file to overwrite it
 	_, err := file.Seek(0, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek to the beginning of the file: %w", err)
@@ -379,9 +399,10 @@ func writeDeviceInfoToFile(file *os.File, devices []deviceInfo) error {
 
 	err = file.Truncate(0)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to truncate the file: %w", err)
 	}
 
+	// Write the updated array back to the file
 	data, err := json.MarshalIndent(devices, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal device info to JSON: %w", err)
@@ -389,7 +410,33 @@ func writeDeviceInfoToFile(file *os.File, devices []deviceInfo) error {
 
 	_, err = file.Write(data)
 	if err != nil {
-		return fmt.Errorf("failed to write data to file: %w", err)
+		return fmt.Errorf("failed to write updated data to file: %w", err)
 	}
 	return nil
+}
+
+// Function to read the device info from the persitent data file.
+func readDeviceInfoFromFile(file *os.File) ([]deviceInfo, error) {
+	// Reset file pointer to the beginning
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seek to the beginning of the file: %w", err)
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var devices []deviceInfo
+	err = json.Unmarshal(data, &devices)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return devices, nil
 }
