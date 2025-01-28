@@ -14,6 +14,7 @@ import "C"
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,27 +30,6 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/utils"
 )
-
-type DeviceInfo struct {
-	DevEUI  string `json:"dev_eui"`
-	DevAddr string `json:"dev_addr"`
-	AppSKey string `json:"app_skey"`
-}
-
-// Function to write device info to a file
-// Function to write device info to a file
-func writeDeviceInfoToFile(file *os.File, devices []DeviceInfo) error {
-	data, err := json.MarshalIndent(devices, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal device info to JSON: %w", err)
-	}
-
-	err = os.WriteFile(file.Name(), data, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write data to file: %w", err)
-	}
-	return nil
-}
 
 type joinRequest struct {
 	joinEUI  []byte
@@ -153,7 +133,13 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 }
 
 // Function to read device info from a file
-func readDeviceInfoFromFile(file *os.File) ([]DeviceInfo, error) {
+func readDeviceInfoFromFile(file *os.File) ([]deviceInfo, error) {
+	// Reset file pointer to the beginning
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seek to the beginning of the file: %w", err)
+	}
+
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
@@ -163,7 +149,7 @@ func readDeviceInfoFromFile(file *os.File) ([]DeviceInfo, error) {
 		return nil, nil
 	}
 
-	var devices []DeviceInfo
+	var devices []deviceInfo
 	err = json.Unmarshal(data, &devices)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
@@ -191,22 +177,19 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	if devices != nil {
 		// Check if the devEUI is already present
 		for i, device := range devices {
-			if bytes.Equal([]byte(device.DevEUI), devEUIBE) {
+			dev, err := hex.DecodeString(device.DevEUI)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
+			}
+
+			if bytes.Equal(dev, devEUIBE) {
 				// remove the device from the file - we will add it again with the new info.
-				g.logger.Infof("Here removing the device")
 				devices = append(devices[:i], devices[i+1:]...)
+				writeDeviceInfoToFile(g.dataFile, devices)
 				break
 			}
 		}
 	}
-
-	// Write the updated device info back to the file
-	err = writeDeviceInfoToFile(g.dataFile, devices)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write updated device info to file: %w", err)
-	}
-
-	g.logger.Infof("wrote to the file!@@")
 
 	// generate a random device address to identify uplinks.
 	d.Addr = generateDevAddr()
@@ -281,9 +264,12 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = appsKey[:]
 
-	deviceInfo := []DeviceInfo{DeviceInfo{DevEUI: fmt.Sprintf("%X", devEUIBE), DevAddr: fmt.Sprintf("%X", d.Addr), AppSKey: fmt.Sprintf("%X", d.AppSKey)}}
-
-	writeDeviceInfoToFile(g.dataFile, deviceInfo)
+	deviceInfo := []deviceInfo{deviceInfo{DevEUI: fmt.Sprintf("%X", devEUIBE), DevAddr: fmt.Sprintf("%X", d.Addr), AppSKey: fmt.Sprintf("%X", d.AppSKey)}}
+	err = writeDeviceInfoToFile(g.dataFile, deviceInfo)
+	if err != nil {
+		// if this errors, log but still return join accept.
+		g.logger.Errorf("failed to write device info to file: %v", err)
+	}
 
 	// return the encrypted join accept message
 	return ja, nil
@@ -362,4 +348,37 @@ func reverseByteArray(arr []byte) []byte {
 		reversed[i] = arr[j]
 	}
 	return reversed
+}
+
+// deviceInfo is a struct containing OTAA device information.
+// This info is saved across module restarts for each device.
+type deviceInfo struct {
+	DevEUI  string `json:"dev_eui"`
+	DevAddr string `json:"dev_addr"`
+	AppSKey string `json:"app_skey"`
+}
+
+// Function to write the device info into a file.
+func writeDeviceInfoToFile(file *os.File, devices []deviceInfo) error {
+	// Reset file pointer to the beginning
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek to the beginning of the file: %w", err)
+	}
+
+	err = file.Truncate(0)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(devices, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal device info to JSON: %w", err)
+	}
+
+	_, err = file.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write data to file: %w", err)
+	}
+	return nil
 }

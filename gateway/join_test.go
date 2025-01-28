@@ -2,7 +2,10 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"gateway/node"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -25,6 +28,15 @@ var (
 	// Unknown device for testing error cases.
 	unknownDevEUI = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 )
+
+func createDataFile(t *testing.T) *os.File {
+	// Create a temp device data file for testing
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "devices.txt")
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
+	test.That(t, err, test.ShouldBeNil)
+	return file
+}
 
 func TestReverseByteArray(t *testing.T) {
 	tests := []struct {
@@ -151,16 +163,63 @@ func TestGenerateJoinAccept(t *testing.T) {
 		AppKey: testAppKey,
 	}
 
-	joinAccept, err := generateJoinAccept(ctx, jr, device)
+	// Create a gateway with the test file
+	g := &gateway{
+		dataFile: createDataFile(t),
+		logger:   logging.NewTestLogger(t),
+	}
+
+	// Test that the initial join accept message adds the device info to the file.
+	joinAccept, err := g.generateJoinAccept(ctx, jr, device)
 	test.That(t, err, test.ShouldBeNil)
+
+	// Verify join accept message format
 	// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4) = 33 bytes
 	test.That(t, len(joinAccept), test.ShouldEqual, 33)
-	// Join-accept message type
-	test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20))
-	// Device address should be generated and added to device.
-	test.That(t, len(device.Addr), test.ShouldEqual, 4)
-	// AppSKey should be generated and added to device
-	test.That(t, len(device.AppSKey), test.ShouldEqual, 16)
+	test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20)) // Join-accept message type
+	test.That(t, len(device.Addr), test.ShouldEqual, 4)       // Device address should be generated
+	test.That(t, len(device.AppSKey), test.ShouldEqual, 16)   // AppSKey should be generated
+
+	devices, err := readDeviceInfoFromFile(g.dataFile)
+	// Verify device info in file
+	devEUIBE := reverseByteArray(jr.devEUI)
+	test.That(t, devices[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", devEUIBE))
+	test.That(t, devices[0].DevAddr, test.ShouldEqual, fmt.Sprintf("%X", device.Addr))
+	test.That(t, devices[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", device.AppSKey))
+
+	// Test that if the same device joins again - should update existing entry
+	joinAccept2, err := g.generateJoinAccept(ctx, jr, device)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(joinAccept2), test.ShouldEqual, 33)
+
+	// Verify file still has only one entry but with updated info
+	devices, err = readDeviceInfoFromFile(g.dataFile)
+	test.That(t, err, test.ShouldBeNil)
+
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(devices), test.ShouldEqual, 1)
+	test.That(t, devices[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", devEUIBE))
+	test.That(t, devices[0].DevAddr, test.ShouldEqual, fmt.Sprintf("%X", device.Addr))
+	test.That(t, devices[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", device.AppSKey))
+
+	err = g.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
+
+}
+
+func TestReadAndWriteDeviceInfoToFile(t *testing.T) {
+	file := createDataFile(t)
+	deviceInfos := []deviceInfo{deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}}
+	err := writeDeviceInfoToFile(file, deviceInfos)
+	test.That(t, err, test.ShouldBeNil)
+
+	deviceInfo, err := readDeviceInfoFromFile(file)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(deviceInfo), test.ShouldEqual, 1)
+	test.That(t, deviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
+	test.That(t, deviceInfo[0].DevAddr, test.ShouldEqual, "123456")
+	test.That(t, deviceInfo[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", testAppSKey))
+
 }
 
 func TestHandleJoin(t *testing.T) {
@@ -173,8 +232,9 @@ func TestHandleJoin(t *testing.T) {
 	devices[testName] = testDevice
 
 	g := &gateway{
-		logger:  logging.NewTestLogger(t),
-		devices: devices,
+		logger:   logging.NewTestLogger(t),
+		devices:  devices,
+		dataFile: createDataFile(t),
 	}
 
 	// Create valid join request payload
@@ -203,4 +263,7 @@ func TestHandleJoin(t *testing.T) {
 
 	err = g.handleJoin(ctx, unknownPayload)
 	test.That(t, err, test.ShouldEqual, errNoDevice)
+
+	err = g.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 }

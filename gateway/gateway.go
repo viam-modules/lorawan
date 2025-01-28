@@ -127,12 +127,16 @@ func NewGateway(
 		logger:  logger,
 		started: false,
 	}
+
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-	file, err := os.Create(filePath)
+
+	// open the file
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, err
 	}
+
 	g.dataFile = file
 
 	err = g.Reconfigure(ctx, deps, conf)
@@ -504,6 +508,9 @@ func (g *gateway) Close(ctx context.Context) error {
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
 	}
+
+	//nolint:errcheck
+	g.dataFile.Close()
 
 	return nil
 }

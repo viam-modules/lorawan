@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -26,39 +27,26 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// need to reserve the bytes since payload is in LE.
 	devAddrBE := reverseByteArray(devAddr)
 
+	var device *node.Node
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
-		// see if the device is in the file.
-		// Read the device info from the file
-		found := false
-		devices, err := readDeviceInfoFromFile(g.dataFile)
+		g.logger.Debugf("Device not found in the device map, checking the file")
+		deviceInfo, err := g.searchForDeviceInFile(devAddrBE)
 		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to read device info from file: %w", err)
+			return "", map[string]interface{}{}, fmt.Errorf("error while searching for device in file: %w", err)
 		}
-		if devices != nil {
-			// Check if the devAddr is in the file.
-			for _, device := range devices {
-				if bytes.Equal(devAddrBE, []byte(device.DevAddr)) {
-					found = true
-					// find the device in the module's devices by the EUI.
-					mapNode, err := matchDeviceAddr([]byte(device.DevEUI), g.devices)
-					if err != nil {
-						return "", map[string]interface{}{}, err
-					}
-
-					mapNode.AppSKey = []byte(device.AppSKey)
-					mapNode.Addr = []byte(device.DevAddr)
-
-					// replace the device in the map.
-					g.devices[mapNode.NodeName] = mapNode
-
-				}
-			}
-		}
-		if !found {
+		// deviceInfo matching device was not found, this is an unknown device.
+		if deviceInfo == nil {
 			g.logger.Infof("received packet from unknown device, ignoring")
 			return "", map[string]interface{}{}, errNoDevice
 		}
+
+		// device was found, update the device map with the device info.
+		dev, err := g.updateDeviceInfo(deviceInfo)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("error while updating device info: %w", err)
+		}
+		device = dev
 	}
 
 	// Frame control byte contains various settings
@@ -118,6 +106,59 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	return device.NodeName, readings, nil
 }
 
+func (g *gateway) searchForDeviceInFile(packetDevAddr []byte) (*deviceInfo, error) {
+	// read all the saved devices from the file
+	savedDevices, err := readDeviceInfoFromFile(g.dataFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read device info from file: %w", err)
+	}
+	if savedDevices != nil {
+		// Check if the devAddr is in the file.
+		for _, d := range savedDevices {
+			savedAddr, err := hex.DecodeString(d.DevAddr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
+			}
+
+			if bytes.Equal(packetDevAddr, savedAddr) {
+				// found the device! Now we need to find the device in the module's device map by the EUI.
+				return &d, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func (g *gateway) updateDeviceInfo(d *deviceInfo) (*node.Node, error) {
+	eui, err := hex.DecodeString(d.DevEUI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode file's dev EUI: %w", err)
+	}
+
+	device, err := matchDeviceEUI(eui, g.devices)
+	if err != nil {
+		return nil, fmt.Errorf("could not find the matching device in device map: %w", err)
+	}
+
+	// Update the fields in the map with the info from the file.
+	appsKey, err := hex.DecodeString(d.AppSKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode file's app session key %w", err)
+	}
+
+	savedAddr, err := hex.DecodeString(d.DevAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
+	}
+
+	device.AppSKey = appsKey
+	device.Addr = savedAddr
+
+	// Update the device in the map.
+	g.devices[device.NodeName] = device
+	return device, nil
+}
+
 // 8 and 16 bit integers are not supported in protobuf.
 // If the decoder returns those types, convert to 32 bit integer.
 func convertTo32Bit(readings map[string]interface{}) map[string]interface{} {
@@ -146,6 +187,15 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node,
 		}
 	}
 	return nil, fmt.Errorf("no match for DeviceAddress %v", devAddr)
+}
+
+func matchDeviceEUI(EUI []byte, devices map[string]*node.Node) (*node.Node, error) {
+	for _, dev := range devices {
+		if bytes.Equal(EUI, dev.DevEui) {
+			return dev, nil
+		}
+	}
+	return nil, fmt.Errorf("no match for Dev EUI %v", EUI)
 }
 
 func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
