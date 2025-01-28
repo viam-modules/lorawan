@@ -65,6 +65,14 @@ type Config struct {
 	BoardName string `json:"board"`
 }
 
+// deviceInfo is a struct containing OTAA device information.
+// This info is saved across module restarts for each device.
+type deviceInfo struct {
+	DevEUI  string `json:"dev_eui"`
+	DevAddr string `json:"dev_addr"`
+	AppSKey string `json:"app_skey"`
+}
+
 func init() {
 	resource.RegisterComponent(
 		sensor.API,
@@ -114,8 +122,7 @@ type gateway struct {
 
 	logReader *os.File
 	logWriter *os.File
-
-	dataFile *os.File
+	dataFile  *os.File
 }
 
 // NewGateway creates a new gateway
@@ -133,8 +140,6 @@ func NewGateway(
 
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-
-	// open the file
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
 	if err != nil {
 		return nil, err

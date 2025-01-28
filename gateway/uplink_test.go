@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -223,7 +224,7 @@ func TestSearchForDeviceInFile(t *testing.T) {
 	//  Device not found in file should return nil and no error
 	unknownAddr := []byte{0x01, 0x02, 0x03, 0x04}
 	device, err = g.searchForDeviceInFile(unknownAddr)
-	test.That(t, err, test.ShouldBeNil)
+	test.That(t, err, test.ShouldBeError, errNoDevice)
 	test.That(t, device, test.ShouldBeNil)
 
 	// Test File read error

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"gateway/node"
+
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -165,30 +166,13 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// generate random join nonce.
 	jn := generateJoinNonce()
 
-	// Read the device info from the file
-	devices, err := readDeviceInfoFromFile(g.dataFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read device info from file: %w", err)
-	}
-
 	devEUIBE := reverseByteArray(jr.devEUI)
 
-	// Check if the devEUI is already present
-	for i, device := range devices {
-		dev, err := hex.DecodeString(device.DevEUI)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
-		}
-
-		if bytes.Equal(dev, devEUIBE) {
-			// remove the device from the file - we will add it again with the new info.
-			devices = append(devices[:i], devices[i+1:]...)
-			err := writeDeviceInfoToFile(g.dataFile, devices)
-			if err != nil {
-				return nil, fmt.Errorf("failed to write new device info to file: %w", err)
-			}
-			break
-		}
+	// Check if this device is already present in the file.
+	// If it is, remove it since the join procedure is being redone.
+	err := removeDeviceInfoFromFile(g.dataFile, devEUIBE)
+	if err != nil {
+		return nil, fmt.Errorf("join procedure failed: %w", err)
 	}
 
 	// generate a random device address to identify uplinks.
@@ -269,6 +253,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		DevAddr: fmt.Sprintf("%X", d.Addr),
 		AppSKey: fmt.Sprintf("%X", d.AppSKey),
 	}}
+
 	err = writeDeviceInfoToFile(g.dataFile, deviceInfo)
 	if err != nil {
 		// if this errors, log but still return join accept.
@@ -277,6 +262,36 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	// return the encrypted join accept message
 	return ja, nil
+}
+
+// This function searches for the device in the persistent data file based on the dev EUI sent in the JR.
+// If the dev EUI is found, the device info is removed from the file.
+// The file will later be updated with the info from the new join procedure.
+func removeDeviceInfoFromFile(file *os.File, devEUI []byte) error {
+	// Read the device info from the file
+	devices, err := readDeviceInfoFromFile(file)
+	if err != nil {
+		return fmt.Errorf("failed to read device info from file: %w", err)
+	}
+
+	// Check if the devEUI is already present
+	for i, device := range devices {
+		dev, err := hex.DecodeString(device.DevEUI)
+		if err != nil {
+			return fmt.Errorf("failed to decode file's dev addr: %w", err)
+		}
+
+		if bytes.Equal(dev, devEUI) {
+			// remove the device from the file - we will add it again with the new info.
+			devices = append(devices[:i], devices[i+1:]...)
+			err := writeDeviceInfoToFile(file, devices)
+			if err != nil {
+				return fmt.Errorf("failed to write new device info to file: %w", err)
+			}
+			break
+		}
+	}
+	return nil
 }
 
 // Generates random 4 byte dev addr. This is used for the network to identify device's data uplinks.
@@ -352,14 +367,6 @@ func reverseByteArray(arr []byte) []byte {
 		reversed[i] = arr[j]
 	}
 	return reversed
-}
-
-// deviceInfo is a struct containing OTAA device information.
-// This info is saved across module restarts for each device.
-type deviceInfo struct {
-	DevEUI  string `json:"dev_eui"`
-	DevAddr string `json:"dev_addr"`
-	AppSKey string `json:"app_skey"`
 }
 
 // Function to write the device info into a file.

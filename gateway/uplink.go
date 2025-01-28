@@ -20,31 +20,16 @@ import (
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
+// Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
 	devAddrBE := reverseByteArray(devAddr)
 
-	var device *node.Node
-	device, err := matchDeviceAddr(devAddrBE, g.devices)
+	device, err := g.findDevice(devAddrBE)
 	if err != nil {
-		g.logger.Debugf("Device not found in the device map, checking the file")
-		deviceInfo, err := g.searchForDeviceInFile(devAddrBE)
-		if err != nil {
-			if errors.Is(err, errNoDevice) {
-				// deviceInfo matching device was not found, this is an unknown device.
-				g.logger.Infof("received packet from unknown device, ignoring")
-				return "", map[string]interface{}{}, errNoDevice
-			}
-			return "", map[string]interface{}{}, fmt.Errorf("error while searching for device in file: %w", err)
-		}
-		// device was found, update the device map with the device info.
-		dev, err := g.updateDeviceInfo(deviceInfo)
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("error while updating device info: %w", err)
-		}
-		device = dev
+		return "", nil, err
 	}
 
 	// Frame control byte contains various settings
@@ -104,6 +89,32 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	return device.NodeName, readings, nil
 }
 
+func (g *gateway) findDevice(devAddr []byte) (*node.Node, error) {
+	// First check for the device address in the gateway's device map.
+	device, err := matchDeviceAddr(devAddr, g.devices)
+	if err != nil {
+		g.logger.Debugf("Device address not found in the device map, checking the file")
+		// Search for the device address in the persistent data file.
+		deviceInfo, err := g.searchForDeviceInFile(devAddr)
+		if err != nil {
+			if errors.Is(err, errNoDevice) {
+				// deviceInfo matching device was not found, this is an unknown device.
+				g.logger.Infof("received packet from unknown device, ignoring")
+				return nil, errNoDevice
+			}
+			return nil, fmt.Errorf("error while searching for device in file: %w", err)
+		}
+		// device was found in the file, update the gateway's device map with the device info.
+		dev, err := g.updateDeviceInfo(deviceInfo)
+		if err != nil {
+			return nil, fmt.Errorf("error while updating device info: %w", err)
+		}
+		return dev, nil
+	}
+	return device, nil
+
+}
+
 func (g *gateway) searchForDeviceInFile(packetDevAddr []byte) (*deviceInfo, error) {
 	// read all the saved devices from the file
 	savedDevices, err := readDeviceInfoFromFile(g.dataFile)
@@ -118,7 +129,7 @@ func (g *gateway) searchForDeviceInFile(packetDevAddr []byte) (*deviceInfo, erro
 		}
 
 		if bytes.Equal(packetDevAddr, savedAddr) {
-			// found the device! Now we need to find the device in the module's device map by the EUI.
+			// device found in the file!
 			return &d, nil
 		}
 	}
