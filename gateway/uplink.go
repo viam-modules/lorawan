@@ -7,11 +7,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"gateway/node"
 	"os"
 	"reflect"
 	"time"
-
-	"gateway/node"
 
 	"github.com/robertkrimen/otto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -33,14 +32,14 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		g.logger.Debugf("Device not found in the device map, checking the file")
 		deviceInfo, err := g.searchForDeviceInFile(devAddrBE)
 		if err != nil {
+			if errors.Is(err, errNoDevice) {
+				// deviceInfo matching device was not found, this is an unknown device.
+				g.logger.Infof("received packet from unknown device, ignoring")
+				return "", map[string]interface{}{}, errNoDevice
+
+			}
 			return "", map[string]interface{}{}, fmt.Errorf("error while searching for device in file: %w", err)
 		}
-		// deviceInfo matching device was not found, this is an unknown device.
-		if deviceInfo == nil {
-			g.logger.Infof("received packet from unknown device, ignoring")
-			return "", map[string]interface{}{}, errNoDevice
-		}
-
 		// device was found, update the device map with the device info.
 		dev, err := g.updateDeviceInfo(deviceInfo)
 		if err != nil {
@@ -112,21 +111,19 @@ func (g *gateway) searchForDeviceInFile(packetDevAddr []byte) (*deviceInfo, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
-	if savedDevices != nil {
-		// Check if the devAddr is in the file.
-		for _, d := range savedDevices {
-			savedAddr, err := hex.DecodeString(d.DevAddr)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
-			}
+	// Check if the devAddr is in the file.
+	for _, d := range savedDevices {
+		savedAddr, err := hex.DecodeString(d.DevAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
+		}
 
-			if bytes.Equal(packetDevAddr, savedAddr) {
-				// found the device! Now we need to find the device in the module's device map by the EUI.
-				return &d, nil
-			}
+		if bytes.Equal(packetDevAddr, savedAddr) {
+			// found the device! Now we need to find the device in the module's device map by the EUI.
+			return &d, nil
 		}
 	}
-	return nil, nil
+	return nil, errNoDevice
 }
 
 func (g *gateway) updateDeviceInfo(d *deviceInfo) (*node.Node, error) {

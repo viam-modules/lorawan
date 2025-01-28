@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gateway/node"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"gateway/node"
-
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -54,7 +52,7 @@ func setupTestGateway(t *testing.T) *gateway {
 	// Create a temp device data file for testing
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
 	test.That(t, err, test.ShouldBeNil)
 
 	testDevices := make(map[string]*node.Node)
@@ -80,13 +78,13 @@ func setupFileTest(t *testing.T) *gateway {
 	// Create a temp device data file for testing
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Write device info to file
 	devices := []deviceInfo{
 		{
-			DevEUI:  "0102030405060708", // matches testNode.DevEui
+			DevEUI:  fmt.Sprintf("%X", testDevEUI),
 			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
 			AppSKey: fmt.Sprintf("%X", testAppSKey),
 		},
@@ -199,7 +197,6 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, device.AppSKey, test.ShouldResemble, testAppSKey)
 
 	g.Close(context.Background())
-
 }
 
 func TestSearchForDeviceInFile(t *testing.T) {
@@ -221,7 +218,7 @@ func TestSearchForDeviceInFile(t *testing.T) {
 	device, err := g.searchForDeviceInFile(testDeviceAddr)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, device, test.ShouldNotBeNil)
-	test.That(t, device.DevAddr, test.ShouldEqual, testDeviceAddr)
+	test.That(t, device.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
 
 	//  Device not found in file should return nil and no error
 	unknownAddr := []byte{0x01, 0x02, 0x03, 0x04}

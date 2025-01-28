@@ -22,8 +22,6 @@ import (
 	"os"
 	"time"
 
-	"gateway/node"
-
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -120,7 +118,7 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	}
 
 	if matched.NodeName == "" {
-		g.logger.Infof("received join requested with dev EUI %x - unknown device, ignoring", devEUIBE)
+		g.logger.Infof("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest, nil, errNoDevice
 	}
 
@@ -264,7 +262,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = appsKey[:]
 
-	deviceInfo := []deviceInfo{deviceInfo{DevEUI: fmt.Sprintf("%X", devEUIBE), DevAddr: fmt.Sprintf("%X", d.Addr), AppSKey: fmt.Sprintf("%X", d.AppSKey)}}
+	deviceInfo := []deviceInfo{{DevEUI: fmt.Sprintf("%X", devEUIBE), DevAddr: fmt.Sprintf("%X", d.Addr), AppSKey: fmt.Sprintf("%X", d.AppSKey)}}
 	err = writeDeviceInfoToFile(g.dataFile, deviceInfo)
 	if err != nil {
 		// if this errors, log but still return join accept.

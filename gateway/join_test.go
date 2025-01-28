@@ -3,10 +3,11 @@ package gateway
 import (
 	"context"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gateway/node"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -33,7 +34,7 @@ func createDataFile(t *testing.T) *os.File {
 	// Create a temp device data file for testing
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
 	test.That(t, err, test.ShouldBeNil)
 	return file
 }
@@ -181,6 +182,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 	test.That(t, len(device.AppSKey), test.ShouldEqual, 16)   // AppSKey should be generated
 
 	devices, err := readDeviceInfoFromFile(g.dataFile)
+	test.That(t, err, test.ShouldBeNil)
 	// Verify device info in file
 	devEUIBE := reverseByteArray(jr.devEUI)
 	test.That(t, devices[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", devEUIBE))
@@ -204,12 +206,11 @@ func TestGenerateJoinAccept(t *testing.T) {
 
 	err = g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
-
 }
 
 func TestReadAndWriteDeviceInfoToFile(t *testing.T) {
 	file := createDataFile(t)
-	deviceInfos := []deviceInfo{deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}}
+	deviceInfos := []deviceInfo{{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}}
 	err := writeDeviceInfoToFile(file, deviceInfos)
 	test.That(t, err, test.ShouldBeNil)
 
@@ -219,7 +220,6 @@ func TestReadAndWriteDeviceInfoToFile(t *testing.T) {
 	test.That(t, deviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
 	test.That(t, deviceInfo[0].DevAddr, test.ShouldEqual, "123456")
 	test.That(t, deviceInfo[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", testAppSKey))
-
 }
 
 func TestHandleJoin(t *testing.T) {

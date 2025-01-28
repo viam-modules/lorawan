@@ -16,13 +16,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"gateway/node"
 
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
@@ -89,7 +90,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	return deps, nil
-
 }
 
 // Gateway defines a lorawan gateway.
@@ -112,6 +112,9 @@ type gateway struct {
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
 
+	logReader *os.File
+	logWriter *os.File
+
 	dataFile *os.File
 }
 
@@ -132,7 +135,7 @@ func NewGateway(
 	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
 
 	// open the file
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
 	if err != nil {
 		return nil, err
 	}
@@ -241,30 +244,28 @@ func (g *gateway) startCLogging(ctx context.Context) {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		stdoutR, stdoutW, err := os.Pipe()
+		if err != nil {
+			g.logger.Errorf("unable to create pipe for C logs")
+			return
+		}
+		g.logReader = stdoutR
+		g.logWriter = stdoutW
+
+		// Redirect C's stdout to the write end of the pipe
+		C.redirectToPipe(C.int(g.logWriter.Fd()))
+		scanner := bufio.NewScanner(g.logReader)
+
+		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
 		loggingRoutineStarted[g.Name().Name] = true
 	}
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context) {
+func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
-
-	stdoutR, stdoutW, err := os.Pipe()
-	if err != nil {
-		g.logger.Errorf("unable to create pipe for C logs")
-		return
-	}
-	// Redirect C's stdout to the write end of the pipe
-	C.redirectToPipe(C.int(stdoutW.Fd()))
-	scanner := bufio.NewScanner(stdoutR)
-
-	//nolint:errcheck
-	defer stdoutR.Close()
-	//nolint:errcheck
-	defer stdoutW.Close()
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -505,6 +506,14 @@ func (g *gateway) Close(ctx context.Context) error {
 	}
 
 	if g.loggingWorker != nil {
+		if g.logReader != nil {
+			//nolint:errcheck
+			g.logReader.Close()
+		}
+		if g.logWriter != nil {
+			//nolint:errcheck
+			g.logWriter.Close()
+		}
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
 	}
