@@ -36,7 +36,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 				// deviceInfo matching device was not found, this is an unknown device.
 				g.logger.Infof("received packet from unknown device, ignoring")
 				return "", map[string]interface{}{}, errNoDevice
-
 			}
 			return "", map[string]interface{}{}, fmt.Errorf("error while searching for device in file: %w", err)
 		}
@@ -186,13 +185,13 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node,
 	return nil, fmt.Errorf("no match for DeviceAddress %v", devAddr)
 }
 
-func matchDeviceEUI(EUI []byte, devices map[string]*node.Node) (*node.Node, error) {
+func matchDeviceEUI(eui []byte, devices map[string]*node.Node) (*node.Node, error) {
 	for _, dev := range devices {
-		if bytes.Equal(EUI, dev.DevEui) {
+		if bytes.Equal(eui, dev.DevEui) {
 			return dev, nil
 		}
 	}
-	return nil, fmt.Errorf("no match for Dev EUI %v", EUI)
+	return nil, fmt.Errorf("no match for Dev EUI %v", eui)
 }
 
 func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {

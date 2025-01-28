@@ -507,19 +507,25 @@ func (g *gateway) Close(ctx context.Context) error {
 
 	if g.loggingWorker != nil {
 		if g.logReader != nil {
-			//nolint:errcheck
-			g.logReader.Close()
+
+			if err := g.logReader.Close(); err != nil {
+				g.logger.Errorf("error closing log reader: %s", err)
+			}
 		}
 		if g.logWriter != nil {
-			//nolint:errcheck
-			g.logWriter.Close()
+			if err := g.logWriter.Close(); err != nil {
+				g.logger.Errorf("error closing log writer: %s", err)
+			}
 		}
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
 	}
 
-	//nolint:errcheck
-	g.dataFile.Close()
+	if g.dataFile != nil {
+		if err := g.dataFile.Close(); err != nil {
+			g.logger.Errorf("error closing data file: %s", err)
+		}
+	}
 
 	return nil
 }

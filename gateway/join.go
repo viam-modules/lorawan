@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -172,20 +173,21 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	devEUIBE := reverseByteArray(jr.devEUI)
 
-	if devices != nil {
-		// Check if the devEUI is already present
-		for i, device := range devices {
-			dev, err := hex.DecodeString(device.DevEUI)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
-			}
+	// Check if the devEUI is already present
+	for i, device := range devices {
+		dev, err := hex.DecodeString(device.DevEUI)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode file's dev addr: %w", err)
+		}
 
-			if bytes.Equal(dev, devEUIBE) {
-				// remove the device from the file - we will add it again with the new info.
-				devices = append(devices[:i], devices[i+1:]...)
-				writeDeviceInfoToFile(g.dataFile, devices)
-				break
+		if bytes.Equal(dev, devEUIBE) {
+			// remove the device from the file - we will add it again with the new info.
+			devices = append(devices[:i], devices[i+1:]...)
+			err := writeDeviceInfoToFile(g.dataFile, devices)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write new device info to file: %w", err)
 			}
+			break
 		}
 	}
 
@@ -262,7 +264,11 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = appsKey[:]
 
-	deviceInfo := []deviceInfo{{DevEUI: fmt.Sprintf("%X", devEUIBE), DevAddr: fmt.Sprintf("%X", d.Addr), AppSKey: fmt.Sprintf("%X", d.AppSKey)}}
+	deviceInfo := []deviceInfo{{
+		DevEUI:  fmt.Sprintf("%X", devEUIBE),
+		DevAddr: fmt.Sprintf("%X", d.Addr),
+		AppSKey: fmt.Sprintf("%X", d.AppSKey),
+	}}
 	err = writeDeviceInfoToFile(g.dataFile, deviceInfo)
 	if err != nil {
 		// if this errors, log but still return join accept.
