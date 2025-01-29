@@ -25,8 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"gateway/node"
-
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -391,10 +389,12 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
-		g.mu.Lock()
-		defer g.mu.Unlock()
 		if newN, ok := newNode.(map[string]interface{}); ok {
 			node, err := convertToNode(newN)
 			if err != nil {
@@ -467,12 +467,12 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	// Update the fields in the map with the info from the file.
 	appsKey, err := hex.DecodeString(d.AppSKey)
 	if err != nil {
-		return fmt.Errorf("failed to decode file's app session key %v", err)
+		return fmt.Errorf("failed to decode file's app session key: %w", err)
 	}
 
 	savedAddr, err := hex.DecodeString(d.DevAddr)
 	if err != nil {
-		return fmt.Errorf("failed to decode file's dev addr: %v", err)
+		return fmt.Errorf("failed to decode file's dev addr: %w", err)
 	}
 
 	device.AppSKey = appsKey
@@ -572,7 +572,6 @@ func (g *gateway) Close(ctx context.Context) error {
 
 	if g.loggingWorker != nil {
 		if g.logReader != nil {
-
 			if err := g.logReader.Close(); err != nil {
 				g.logger.Errorf("error closing log reader: %s", err)
 			}
