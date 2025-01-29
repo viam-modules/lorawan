@@ -391,9 +391,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		return map[string]interface{}{"validate": 1}, nil
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
