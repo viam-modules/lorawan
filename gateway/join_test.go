@@ -3,12 +3,10 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"gateway/node"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"gateway/node"
-
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -153,73 +151,142 @@ func TestParseJoinRequestPacket(t *testing.T) {
 }
 
 func TestGenerateJoinAccept(t *testing.T) {
-	ctx := context.Background()
-	jr := joinRequest{
-		joinEUI:  testJoinEUI,
-		devEUI:   testDevEUILE,
-		devNonce: testDevNonce,
+	testFile := createDataFile(t)
+	tests := []struct {
+		name            string
+		joinRequest     joinRequest
+		device          *node.Node
+		file            *os.File
+		checkFile       bool // whether to check file contents after test
+		expectedFileLen int
+	}{
+		{
+			name: "Device sending initial join reuqest should generate valid join accept, get OTAA fields populated, and added to file",
+			joinRequest: joinRequest{
+				joinEUI:  testJoinEUI,
+				devEUI:   testDevEUILE,
+				devNonce: testDevNonce,
+			},
+			device: &node.Node{
+				AppKey: testAppKey,
+			},
+			file:            testFile,
+			expectedFileLen: 1,
+			checkFile:       true,
+		},
+		{
+			name: "Same device joining again should generate JA, get OTAA fields repopulated, and info replaced in file",
+			joinRequest: joinRequest{
+				joinEUI:  testJoinEUI,
+				devEUI:   testDevEUILE,
+				devNonce: testDevNonce,
+			},
+			device: &node.Node{
+				AppKey: testAppKey,
+			},
+			file:            testFile,
+			expectedFileLen: 1,
+			checkFile:       true,
+		},
+		{
+			name: "New device joining should generate JA, get OTTAA fields popualated, and appended to file",
+			joinRequest: joinRequest{
+				joinEUI:  testJoinEUI,
+				devEUI:   []byte{0x11, 0x11, 0x11, 0x0D, 0x0C, 0x0B, 0x0A, 0x09}, // Different DevEUI
+				devNonce: testDevNonce,
+			},
+			device: &node.Node{
+				AppKey: testAppKey,
+			},
+			file:            testFile,
+			expectedFileLen: 2,
+			checkFile:       true,
+		},
+		{
+			name: "If writing to the file errors, should still return valid JA",
+			joinRequest: joinRequest{
+				joinEUI:  testJoinEUI,
+				devEUI:   testDevEUILE,
+				devNonce: testDevNonce,
+			},
+			device: &node.Node{
+				AppKey: testAppKey,
+			},
+			file:      nil,
+			checkFile: false,
+		},
 	}
 
-	device := &node.Node{
-		AppKey: testAppKey,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			var file *os.File
+			if tt.file != nil {
+				var err error
+				file, err = os.OpenFile(tt.file.Name(), os.O_RDWR|os.O_CREATE, 0o644)
+				test.That(t, err, test.ShouldBeNil)
+			}
+
+			g := &gateway{
+				dataFile: file,
+				logger:   logging.NewTestLogger(t),
+			}
+
+			joinAccept, err := g.generateJoinAccept(ctx, tt.joinRequest, tt.device)
+			test.That(t, err, test.ShouldBeNil)
+			// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4)
+			test.That(t, len(joinAccept), test.ShouldEqual, 33)
+			test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20))  // Join-accept message type
+			test.That(t, len(tt.device.Addr), test.ShouldEqual, 4)     // Device address should be generated
+			test.That(t, len(tt.device.AppSKey), test.ShouldEqual, 16) // AppSKey should be generated
+
+			if tt.checkFile {
+				devices, err := readDeviceInfoFromFile(g.dataFile)
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, len(devices), test.ShouldEqual, tt.expectedFileLen)
+				// Find the device in the file
+				found := false
+				devEUIBE := reverseByteArray(tt.joinRequest.devEUI)
+				for _, d := range devices {
+					if d.DevEUI == fmt.Sprintf("%X", devEUIBE) {
+						test.That(t, d.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", tt.device.Addr))
+						test.That(t, d.AppSKey, test.ShouldEqual, fmt.Sprintf("%X", tt.device.AppSKey))
+						found = true
+						break
+					}
+				}
+				test.That(t, found, test.ShouldBeTrue)
+			}
+			err = g.Close(ctx)
+			test.That(t, err, test.ShouldBeNil)
+		})
 	}
-
-	// Create a gateway with the test file
-	g := &gateway{
-		dataFile: createDataFile(t),
-		logger:   logging.NewTestLogger(t),
-	}
-
-	// Test that the initial join accept message adds the device info to the file.
-	joinAccept, err := g.generateJoinAccept(ctx, jr, device)
-	test.That(t, err, test.ShouldBeNil)
-
-	// Verify join accept message format
-	// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4) = 33 bytes
-	test.That(t, len(joinAccept), test.ShouldEqual, 33)
-	test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20)) // Join-accept message type
-	test.That(t, len(device.Addr), test.ShouldEqual, 4)       // Device address should be generated
-	test.That(t, len(device.AppSKey), test.ShouldEqual, 16)   // AppSKey should be generated
-
-	devices, err := readDeviceInfoFromFile(g.dataFile)
-	test.That(t, err, test.ShouldBeNil)
-	// Verify device info in file
-	devEUIBE := reverseByteArray(jr.devEUI)
-	test.That(t, devices[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", devEUIBE))
-	test.That(t, devices[0].DevAddr, test.ShouldEqual, fmt.Sprintf("%X", device.Addr))
-	test.That(t, devices[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", device.AppSKey))
-
-	// Test that if the same device joins again - should update existing entry
-	joinAccept2, err := g.generateJoinAccept(ctx, jr, device)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(joinAccept2), test.ShouldEqual, 33)
-
-	// Verify file still has only one entry but with updated info
-	devices, err = readDeviceInfoFromFile(g.dataFile)
-	test.That(t, err, test.ShouldBeNil)
-
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(devices), test.ShouldEqual, 1)
-	test.That(t, devices[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", devEUIBE))
-	test.That(t, devices[0].DevAddr, test.ShouldEqual, fmt.Sprintf("%X", device.Addr))
-	test.That(t, devices[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", device.AppSKey))
-
-	err = g.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
 }
 
-func TestAddAndRemoveDeviceInfoToFile(t *testing.T) {
+func TestAddAndRemoveDeviceInfo(t *testing.T) {
 	file := createDataFile(t)
 	info := deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}
+	info2 := deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUILE), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}
 	err := addDeviceInfoToFile(file, info)
+	test.That(t, err, test.ShouldBeNil)
+
+	err = addDeviceInfoToFile(file, info2)
 	test.That(t, err, test.ShouldBeNil)
 
 	deviceInfo, err := readDeviceInfoFromFile(file)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deviceInfo), test.ShouldEqual, 1)
+	test.That(t, len(deviceInfo), test.ShouldEqual, 2)
 	test.That(t, deviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
 	test.That(t, deviceInfo[0].DevAddr, test.ShouldEqual, "123456")
 	test.That(t, deviceInfo[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", testAppSKey))
+
+	err = removeDeviceInfoFromFile(file, info)
+	test.That(t, err, test.ShouldBeNil)
+
+	newDeviceInfo, err := readDeviceInfoFromFile(file)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(newDeviceInfo), test.ShouldEqual, 1)
+	test.That(t, newDeviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUILE))
 }
 
 func TestHandleJoin(t *testing.T) {

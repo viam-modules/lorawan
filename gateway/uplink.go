@@ -7,11 +7,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"os"
 	"reflect"
 	"time"
 
+	"gateway/node"
 	"github.com/robertkrimen/otto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -112,9 +112,9 @@ func (g *gateway) findDevice(devAddr []byte) (*node.Node, error) {
 		return dev, nil
 	}
 	return device, nil
-
 }
 
+// searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
 func (g *gateway) searchForDeviceInFile(packetDevAddr []byte) (*deviceInfo, error) {
 	// read all the saved devices from the file
 	savedDevices, err := readDeviceInfoFromFile(g.dataFile)
@@ -136,6 +136,7 @@ func (g *gateway) searchForDeviceInFile(packetDevAddr []byte) (*deviceInfo, erro
 	return nil, errNoDevice
 }
 
+// updateDeviceInfo adds the device info from the file into the gateway's device map.
 func (g *gateway) updateDeviceInfo(d *deviceInfo) (*node.Node, error) {
 	eui, err := hex.DecodeString(d.DevEUI)
 	if err != nil {

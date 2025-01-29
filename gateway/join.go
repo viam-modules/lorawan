@@ -16,13 +16,13 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"gateway/node"
 	"io"
 	"math/rand"
 	"os"
 	"time"
-
-	"gateway/node"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
@@ -146,7 +146,8 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// If it is, remove it since the join procedure is being redone.
 	err := searchAndRemove(g.dataFile, devEUIBE)
 	if err != nil {
-		return nil, fmt.Errorf("join procedure failed: %w", err)
+		// If this errors, log and continue as we can still complete the join procedure without the file.
+		g.logger.Errorf("failed to search and remove device info from file: %v", err)
 	}
 
 	// generate a random device address to identify uplinks.
@@ -257,7 +258,7 @@ func searchAndRemove(file *os.File, devEUI []byte) error {
 		}
 
 		if bytes.Equal(dev, devEUI) {
-			err = removeDeviceInfoFromFile(file, devEUI)
+			err = removeDeviceInfoFromFile(file, device)
 			if err != nil {
 				return fmt.Errorf("failed to remove old device info from file: %w", err)
 			}
@@ -342,7 +343,7 @@ func reverseByteArray(arr []byte) []byte {
 	return reversed
 }
 
-func removeDeviceInfoFromFile(file *os.File, devEUI []byte) error {
+func removeDeviceInfoFromFile(file *os.File, devToRemove deviceInfo) error {
 	// Read the existing data from the file
 	devices, err := readDeviceInfoFromFile(file)
 	if err != nil {
@@ -350,13 +351,13 @@ func removeDeviceInfoFromFile(file *os.File, devEUI []byte) error {
 	}
 
 	if devices == nil {
-		return fmt.Errorf("no devices to remove")
+		return errors.New("no devices to remove")
 	}
 
-	// Filter out the device with the specified devEUI
+	// Filter out the device based on dev EUI
 	var updatedDevices []deviceInfo
 	for _, device := range devices {
-		if device.DevEUI != fmt.Sprintf("%X", devEUI) {
+		if device.DevEUI != devToRemove.DevEUI {
 			updatedDevices = append(updatedDevices, device)
 		}
 	}

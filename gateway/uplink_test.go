@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"gateway/node"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -203,7 +203,7 @@ func TestParseDataUplink(t *testing.T) {
 func TestSearchForDeviceInFile(t *testing.T) {
 	g := setupTestGateway(t)
 
-	// Device found in file should return device info and no error
+	// Device found in file should return device info
 	devices := []deviceInfo{
 		{
 			DevEUI:  "0102030405060708",
@@ -221,7 +221,7 @@ func TestSearchForDeviceInFile(t *testing.T) {
 	test.That(t, device, test.ShouldNotBeNil)
 	test.That(t, device.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
 
-	//  Device not found in file should return nil and no error
+	//  Device not found in file should return errNoDevice
 	unknownAddr := []byte{0x01, 0x02, 0x03, 0x04}
 	device, err = g.searchForDeviceInFile(unknownAddr)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
@@ -260,7 +260,7 @@ func TestUpdateDeviceInfo(t *testing.T) {
 	test.That(t, device.AppSKey, test.ShouldResemble, newAppSKey)
 	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
 
-	// Device not found in map
+	// If the device is not found in the map should return error
 	g.devices = make(map[string]*node.Node) // clear devices map
 	_, err = g.updateDeviceInfo(validInfo)
 	test.That(t, err, test.ShouldNotBeNil)
