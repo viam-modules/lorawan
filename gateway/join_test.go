@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"gateway/node"
 	"os"
-	"path/filepath"
 	"testing"
+
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -27,15 +27,6 @@ var (
 	// Unknown device for testing error cases.
 	unknownDevEUI = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 )
-
-func createDataFile(t *testing.T) *os.File {
-	// Create a temp device data file for testing
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
-	test.That(t, err, test.ShouldBeNil)
-	return file
-}
 
 func TestReverseByteArray(t *testing.T) {
 	tests := []struct {
@@ -241,7 +232,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			test.That(t, len(tt.device.AppSKey), test.ShouldEqual, 16) // AppSKey should be generated
 
 			if tt.checkFile {
-				devices, err := readDeviceInfoFromFile(g.dataFile)
+				devices, err := readFromFile(g.dataFile)
 				test.That(t, err, test.ShouldBeNil)
 				test.That(t, len(devices), test.ShouldEqual, tt.expectedFileLen)
 				// Find the device in the file
@@ -273,7 +264,7 @@ func TestAddAndRemoveDeviceInfo(t *testing.T) {
 	err = addDeviceInfoToFile(file, info2)
 	test.That(t, err, test.ShouldBeNil)
 
-	deviceInfo, err := readDeviceInfoFromFile(file)
+	deviceInfo, err := readFromFile(file)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deviceInfo), test.ShouldEqual, 2)
 	test.That(t, deviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
@@ -283,7 +274,7 @@ func TestAddAndRemoveDeviceInfo(t *testing.T) {
 	err = removeDeviceInfoFromFile(file, info)
 	test.That(t, err, test.ShouldBeNil)
 
-	newDeviceInfo, err := readDeviceInfoFromFile(file)
+	newDeviceInfo, err := readFromFile(file)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(newDeviceInfo), test.ShouldEqual, 1)
 	test.That(t, newDeviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUILE))

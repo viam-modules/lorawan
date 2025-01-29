@@ -245,7 +245,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 // The file will later be updated with the info from the new join procedure.
 func searchAndRemove(file *os.File, devEUI []byte) error {
 	// Read the device info from the file
-	devices, err := readDeviceInfoFromFile(file)
+	devices, err := readFromFile(file)
 	if err != nil {
 		return fmt.Errorf("failed to read device info from file: %w", err)
 	}
@@ -345,7 +345,7 @@ func reverseByteArray(arr []byte) []byte {
 
 func removeDeviceInfoFromFile(file *os.File, devToRemove deviceInfo) error {
 	// Read the existing data from the file
-	devices, err := readDeviceInfoFromFile(file)
+	devices, err := readFromFile(file)
 	if err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func removeDeviceInfoFromFile(file *os.File, devToRemove deviceInfo) error {
 // Function to write the device info from the persitent data file.
 func addDeviceInfoToFile(file *os.File, newDevice deviceInfo) error {
 	// Read the existing data from the file
-	devices, err := readDeviceInfoFromFile(file)
+	devices, err := readFromFile(file)
 	if err != nil {
 		return err
 	}
@@ -417,7 +417,7 @@ func writeToFile(file *os.File, devices []deviceInfo) error {
 }
 
 // Function to read the device info from the persitent data file.
-func readDeviceInfoFromFile(file *os.File) ([]deviceInfo, error) {
+func readFromFile(file *os.File) ([]deviceInfo, error) {
 	// Reset file pointer to the beginning
 	_, err := file.Seek(0, io.SeekStart)
 	if err != nil {

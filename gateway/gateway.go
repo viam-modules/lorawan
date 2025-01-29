@@ -13,7 +13,9 @@ import "C"
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -391,6 +393,8 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
+		g.mu.Lock()
+		defer g.mu.Unlock()
 		if newN, ok := newNode.(map[string]interface{}); ok {
 			node, err := convertToNode(newN)
 			if err != nil {
@@ -408,6 +412,19 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 				return nil, err
 			}
 			g.devices[node.NodeName] = mergedNode
+
+			// Check if the device is in the persistent data file, if it is add the OTAA info.
+			deviceInfo, err := g.searchForDeviceInFile(mergedNode.DevEui)
+			if err != nil {
+				if !errors.Is(err, errNoDevice) {
+					return nil, fmt.Errorf("error while searching for device in file: %w", err)
+				}
+			}
+			// device was found in the file, update the gateway's device map with the device info.
+			err = g.updateDeviceInfo(mergedNode, deviceInfo)
+			if err != nil {
+				return nil, fmt.Errorf("error while updating device info: %w", err)
+			}
 		}
 	}
 	// Remove a node from the device map and readings map.
@@ -421,6 +438,49 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+}
+
+// searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
+func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
+	// read all the saved devices from the file
+	savedDevices, err := readFromFile(g.dataFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read device info from file: %w", err)
+	}
+	// Check if the devAddr is in the file.
+	for _, d := range savedDevices {
+		savedEUI, err := hex.DecodeString(d.DevEUI)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode file's dev EUI: %w", err)
+		}
+
+		if bytes.Equal(devEUI, savedEUI) {
+			// device found in the file
+			return &d, nil
+		}
+	}
+	return nil, errNoDevice
+}
+
+// updateDeviceInfo adds the device info from the file into the gateway's device map.
+func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
+	// Update the fields in the map with the info from the file.
+	appsKey, err := hex.DecodeString(d.AppSKey)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's app session key %v", err)
+	}
+
+	savedAddr, err := hex.DecodeString(d.DevAddr)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's dev addr: %v", err)
+	}
+
+	device.AppSKey = appsKey
+	device.Addr = savedAddr
+
+	// Update the device in the map.
+	g.devices[device.NodeName] = device
+	return nil
 }
 
 // mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
