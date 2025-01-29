@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"gateway/node"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"go.viam.com/rdk/components/sensor"
@@ -17,37 +15,11 @@ import (
 	"go.viam.com/utils/protoutils"
 )
 
-func createDataFile(t *testing.T) *os.File {
-	// Create a temp device data file for testing
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
-	test.That(t, err, test.ShouldBeNil)
-	return file
-}
+// setupTestGateway creates a test gateway with a configured test device.
+func setupTestGateway(t *testing.T) *gateway {
+	//Create a temp device data file for testing
+	file := createDataFile(t)
 
-// setupTestGatewayWithFileDevice creates a test gateway with device info only in file.
-func setupFileAndGateway(t *testing.T) *gateway {
-	// Create a temp device data file for testing
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
-	test.That(t, err, test.ShouldBeNil)
-
-	// Write device info to file
-	devices := []deviceInfo{
-		{
-			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-			AppSKey: fmt.Sprintf("%X", testAppSKey),
-		},
-	}
-	data, err := json.MarshalIndent(devices, "", "  ")
-	test.That(t, err, test.ShouldBeNil)
-	_, err = file.Write(data)
-	test.That(t, err, test.ShouldBeNil)
-
-	// Create gateway with empty devices map but device info in file
 	testDevices := make(map[string]*node.Node)
 	testNode := &node.Node{
 		NodeName:    testNodeName,
@@ -62,6 +34,26 @@ func setupFileAndGateway(t *testing.T) *gateway {
 		devices:  testDevices,
 		dataFile: file,
 	}
+}
+
+// creates a test gateway with device info populated in the file
+func setupFileAndGateway(t *testing.T) *gateway {
+	g := setupTestGateway(t)
+
+	// Write device info to file
+	devices := []deviceInfo{
+		{
+			DevEUI:  fmt.Sprintf("%X", testDevEUI),
+			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
+			AppSKey: fmt.Sprintf("%X", testAppSKey),
+		},
+	}
+	data, err := json.MarshalIndent(devices, "", "  ")
+	test.That(t, err, test.ShouldBeNil)
+	_, err = g.dataFile.Write(data)
+	test.That(t, err, test.ShouldBeNil)
+
+	return g
 }
 
 func TestValidate(t *testing.T) {
@@ -115,7 +107,6 @@ func TestValidate(t *testing.T) {
 
 func TestDoCommand(t *testing.T) {
 	g := setupFileAndGateway(t)
-
 	s := (sensor.Sensor)(g)
 
 	n := node.Node{
@@ -144,6 +135,8 @@ func TestDoCommand(t *testing.T) {
 	}
 
 	// Test Register device command - device not in file
+	// clear devices
+	g.devices = map[string]*node.Node{}
 	registerCmd := make(map[string]interface{})
 	registerCmd["register_device"] = n
 	doOverWire(s, registerCmd)

@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"gateway/node"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -447,7 +448,7 @@ func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
-	// Check if the devAddr is in the file.
+	// Check if the dev EUI is in the file.
 	for _, d := range savedDevices {
 		savedEUI, err := hex.DecodeString(d.DevEUI)
 		if err != nil {
