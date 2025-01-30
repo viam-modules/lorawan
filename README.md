@@ -37,7 +37,7 @@ The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the board connected to the HAT. the board communicates with the gateway through SPI |
+| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
 | reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1) |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
