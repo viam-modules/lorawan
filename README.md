@@ -76,7 +76,7 @@ The node component supports two types of activation: OTAA (Over-the-Air Activati
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
 | uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software.
 
-The gateway component must be added as a dependency in the depends on drop down.
+The gateway component must be added as a dependency in the `Depends on` drop down.
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
