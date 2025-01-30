@@ -139,6 +139,7 @@ func NewGateway(
 		started: false,
 	}
 
+	// Create or open the file used to save device data across restarts.
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)

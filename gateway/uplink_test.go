@@ -136,7 +136,9 @@ func TestParseDataUplink(t *testing.T) {
 	_, _, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload())
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
-	g.Close(context.Background())
+
+	err = g.Close(context.Background())
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestConvertTo32Bit(t *testing.T) {
