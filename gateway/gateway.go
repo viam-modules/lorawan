@@ -401,28 +401,27 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			}
 
 			oldNode, exists := g.devices[node.NodeName]
-			if !exists {
+			switch exists {
+			case false:
 				g.devices[node.NodeName] = node
-				return map[string]interface{}{}, nil
+			case true:
+				// node with that name already exists, merge them
+				mergedNode, err := mergeNodes(node, oldNode)
+				if err != nil {
+					return nil, err
+				}
+				g.devices[node.NodeName] = mergedNode
 			}
-			// node with that name already exists, merge them
-			mergedNode, err := mergeNodes(node, oldNode)
-			if err != nil {
-				return nil, err
-			}
-			g.devices[node.NodeName] = mergedNode
-
 			// Check if the device is in the persistent data file, if it is add the OTAA info.
-			deviceInfo, err := g.searchForDeviceInFile(mergedNode.DevEui)
+			deviceInfo, err := g.searchForDeviceInFile(g.devices[node.NodeName].DevEui)
 			if err != nil {
 				if !errors.Is(err, errNoDevice) {
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)
 				}
-
 			}
 			if deviceInfo != nil {
 				// device was found in the file, update the gateway's device map with the device info.
-				err = g.updateDeviceInfo(mergedNode, deviceInfo)
+				err = g.updateDeviceInfo(g.devices[node.NodeName], deviceInfo)
 				if err != nil {
 					return nil, fmt.Errorf("error while updating device info: %w", err)
 				}
@@ -449,6 +448,8 @@ func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
+
+	g.logger.Warnf("HERE: saved devices %s", savedDevices)
 	// Check if the dev EUI is in the file.
 	for _, d := range savedDevices {
 		savedEUI, err := hex.DecodeString(d.DevEUI)
@@ -457,6 +458,7 @@ func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 		}
 
 		if bytes.Equal(devEUI, savedEUI) {
+			g.logger.Warnf("found!")
 			// device found in the file
 			return &d, nil
 		}

@@ -159,9 +159,11 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, dev.DecoderPath, test.ShouldResemble, "/newpath")
 
 	// Test that if device is in file, OTAA fields get populated
+	// clear map and device otaa info for the new test
 	dev = g.devices[testNodeName]
-	// clear map for the new test
 	g.devices = map[string]*node.Node{}
+	dev.AppSKey = nil
+	dev.Addr = nil
 	registerCmd["register_device"] = dev
 	doOverWire(s, registerCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 1)
