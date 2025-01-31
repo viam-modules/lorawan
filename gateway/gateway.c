@@ -5,10 +5,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define MAX_RX_PKT 8
-
 #define RADIO_0_FREQ     902700000
 #define RADIO_1_FREQ     903700000
+
+const int MAX_RX_PKT = 10;  // Declare MAX_RX_PKT as an int so it can be used in go
 
 // the IF chain frequencies allow the gateway to read on multiple frequency channels.
 // subtracting main frequenecy - intermediate frequency will give that channel's freq.
@@ -109,7 +109,7 @@ struct lgw_pkt_rx_s* createRxPacketArray() {
 }
 
 int receive(struct lgw_pkt_rx_s* packet)  {
-    return lgw_receive(1, packet);
+    return lgw_receive(8, packet);
 }
 
 int send(struct lgw_pkt_tx_s* packet) {
