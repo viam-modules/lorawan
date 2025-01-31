@@ -139,7 +139,7 @@ type Node struct {
 
 	DecoderPath string
 	NodeName    string
-	gateway     sensor.Sensor
+	gateways    []sensor.Sensor
 	JoinType    string
 }
 
@@ -208,22 +208,21 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 		n.JoinType = "OTAA"
 	}
 
-	gateway, err := getGateway(ctx, deps)
+	gateways, err := getGateway(ctx, deps)
 	if err != nil {
 		return err
 	}
 
-	cmd := make(map[string]interface{})
+	for _, g := range gateways {
+		cmd := make(map[string]interface{})
+		// send the device to the gateway.
+		cmd["register_device"] = n
 
-	// send the device to the gateway.
-	cmd["register_device"] = n
-
-	_, err = gateway.DoCommand(ctx, cmd)
-	if err != nil {
-		return err
+		_, err = g.DoCommand(ctx, cmd)
+		if err != nil {
+			return err
+		}
 	}
-
-	n.gateway = gateway
 
 	// Warn if user's configured capture frequency is more than the expected uplink interval.
 	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
@@ -247,67 +246,91 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 }
 
 // getGateway sends the validate docommand to the gateway to confirm the dependency.
-func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
+func getGateway(ctx context.Context, deps resource.Dependencies) ([]sensor.Sensor, error) {
 	if len(deps) == 0 {
 		return nil, errors.New("must add sx1302-gateway as dependency")
 	}
-	var dep resource.Resource
 
-	// Assuming there's only one dep.
-	for _, val := range deps {
-		dep = val
+	var gateways []sensor.Sensor
+
+	// assuming all deps are gateways
+	for _, dep := range deps {
+
+		gateway, ok := dep.(sensor.Sensor)
+		if !ok {
+			return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		}
+
+		cmd := make(map[string]interface{})
+		cmd["validate"] = 1
+
+		// Validate that the dependency is the gateway - gateway will return 1.
+		ret, err := gateway.DoCommand(ctx, cmd)
+		if err != nil {
+			return nil, err
+		}
+		retVal, ok := ret["validate"]
+		if !ok {
+			return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		}
+		if retVal.(float64) != 1 {
+			return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		}
+
+		gateways = append(gateways, gateway)
 	}
 
-	gateway, ok := dep.(sensor.Sensor)
-	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
-	}
-
-	cmd := make(map[string]interface{})
-	cmd["validate"] = 1
-
-	// Validate that the dependency is the gateway - gateway will return 1.
-	ret, err := gateway.DoCommand(ctx, cmd)
-	if err != nil {
-		return nil, err
-	}
-
-	retVal, ok := ret["validate"]
-	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
-	}
-	if retVal.(float64) != 1 {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
-	}
-	return gateway, nil
+	return gateways, nil
 }
 
 // Close removes the device from the gateway.
 func (n *Node) Close(ctx context.Context) error {
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
-	_, err := n.gateway.DoCommand(ctx, cmd)
-	return err
+	for _, gateway := range n.gateways {
+		_, err := gateway.DoCommand(ctx, cmd)
+		if err != nil {
+			n.logger.Errorf("error removing node from gateway: %w", err)
+		}
+	}
+	return nil
 }
 
 // Readings returns the node's readings.
 func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
-	if n.gateway != nil {
-		allReadings, err := n.gateway.Readings(ctx, nil)
-		if err != nil {
-			return map[string]interface{}{}, err
+	var readingsList []map[string]interface{}
+	if n.gateways != nil {
+		// get readings from all gateways
+		for _, gateway := range n.gateways {
+			allReadings, err := gateway.Readings(ctx, nil)
+			if err != nil {
+				return map[string]interface{}{}, err
+			}
+			reading, ok := allReadings[n.NodeName]
+			// no readings available yet
+			if !ok {
+				// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
+				if extra[data.FromDMString] == true {
+					return map[string]interface{}{}, data.ErrNoCaptureToStore
+				}
+				return noReadings, nil
+			}
+			readingsList = append(readingsList, reading.(map[string]interface{}))
 		}
 
-		reading, ok := allReadings[n.NodeName]
-		// no readings available yet
-		if !ok {
-			// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
-			if extra[data.FromDMString] == true {
-				return map[string]interface{}{}, data.ErrNoCaptureToStore
+		var latestTime time.Time
+		var latestReading map[string]interface{}
+		for reading := range readingsList {
+			t, err := time.Parse(time.RFC3339, reading["time"])
+			if err != nil {
+				return nil, err
 			}
-			return noReadings, nil
+			if t.After(latest) {
+				latest = t
+				latestReading = reading
+			}
 		}
-		return reading.(map[string]interface{}), nil
+		return latestReading, nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
 }
