@@ -387,6 +387,8 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
@@ -448,8 +450,6 @@ func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
-
-	g.logger.Warnf("HERE: saved devices %s", savedDevices)
 	// Check if the dev EUI is in the file.
 	for _, d := range savedDevices {
 		savedEUI, err := hex.DecodeString(d.DevEUI)
