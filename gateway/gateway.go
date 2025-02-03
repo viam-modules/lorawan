@@ -470,7 +470,6 @@ func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 		}
 
 		if bytes.Equal(devEUI, savedEUI) {
-			g.logger.Warnf("found!")
 			// device found in the file
 			return &d, nil
 		}
