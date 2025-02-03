@@ -291,9 +291,9 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
-		// convert from c array to go slice
 		numPackets := int(C.receive(p))
 		maxRxPkt := int(C.MAX_RX_PKT)
+		// convert from c array to go slice
 		packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), maxRxPkt)
 
 		switch numPackets {
