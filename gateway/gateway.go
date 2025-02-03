@@ -292,7 +292,6 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 		numPackets := int(C.receive(p))
-		maxRxPkt := int(C.MAX_RX_PKT)
 
 		switch numPackets {
 		case 0:
@@ -306,7 +305,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			g.logger.Errorf("error receiving lora packet")
 		default:
 			// convert from c array to go slice
-			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), maxRxPkt)
+			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
 			for i := range numPackets {
 				// received a LORA packet
 				var payload []byte
