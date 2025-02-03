@@ -109,7 +109,7 @@ struct lgw_pkt_rx_s* createRxPacketArray() {
 }
 
 int receive(struct lgw_pkt_rx_s* packet)  {
-    return lgw_receive(8, packet);
+    return lgw_receive(MAX_RX_PKT, packet);
 }
 
 int send(struct lgw_pkt_tx_s* packet) {
