@@ -316,7 +316,9 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
-				g.handlePacket(ctx, payload)
+				if payload != nil {
+					g.handlePacket(ctx, payload)
+				}
 			}
 		}
 	}
