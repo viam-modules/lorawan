@@ -10,4 +10,5 @@ int stopGateway();
 int setUpGateway(int com_path);
 void disableBuffering();
 void redirectToPipe(int fd);
-int MAX_RX_PKT;
+extern const int MAX_RX_PKT;
+
