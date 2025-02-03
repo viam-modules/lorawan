@@ -14,11 +14,15 @@ import "C"
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"math/rand"
-	"time"
-
 	"gateway/node"
+	"io"
+	"math/rand"
+	"os"
+	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
@@ -50,7 +54,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	joinAccept, err := generateJoinAccept(ctx, jr, device)
+	joinAccept, err := g.generateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
@@ -132,9 +136,19 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
-func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
+func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn := generateJoinNonce()
+
+	devEUIBE := reverseByteArray(jr.devEUI)
+
+	// Check if this device is already present in the file.
+	// If it is, remove it since the join procedure is being redone.
+	err := searchAndRemove(g.dataFile, devEUIBE)
+	if err != nil {
+		// If this errors, log and continue as we can still complete the join procedure without the file.
+		g.logger.Errorf("failed to search and remove device info from file: %v", err)
+	}
 
 	// generate a random device address to identify uplinks.
 	d.Addr = generateDevAddr()
@@ -209,8 +223,49 @@ func generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]by
 
 	d.AppSKey = appsKey[:]
 
+	// Save the OTAA info to the data file.
+	deviceInfo := deviceInfo{
+		DevEUI:  fmt.Sprintf("%X", devEUIBE),
+		DevAddr: fmt.Sprintf("%X", d.Addr),
+		AppSKey: fmt.Sprintf("%X", d.AppSKey),
+	}
+
+	err = addDeviceInfoToFile(g.dataFile, deviceInfo)
+	if err != nil {
+		// if this errors, log but still return join accept.
+		g.logger.Errorf("failed to write device info to file: %v", err)
+	}
+
 	// return the encrypted join accept message
 	return ja, nil
+}
+
+// This function searches for the device in the persistent data file based on the dev EUI sent in the JR.
+// If the dev EUI is found, the device info is removed from the file.
+// The file will later be updated with the info from the new join procedure.
+func searchAndRemove(file *os.File, devEUI []byte) error {
+	// Read the device info from the file
+	devices, err := readFromFile(file)
+	if err != nil {
+		return fmt.Errorf("failed to read device info from file: %w", err)
+	}
+
+	// Check if the devEUI is already present
+	for _, device := range devices {
+		dev, err := hex.DecodeString(device.DevEUI)
+		if err != nil {
+			return fmt.Errorf("failed to decode file's dev addr: %w", err)
+		}
+
+		if bytes.Equal(dev, devEUI) {
+			err = removeDeviceInfoFromFile(file, device)
+			if err != nil {
+				return fmt.Errorf("failed to remove old device info from file: %w", err)
+			}
+			break
+		}
+	}
+	return nil
 }
 
 // Generates random 4 byte dev addr. This is used for the network to identify device's data uplinks.
@@ -286,4 +341,103 @@ func reverseByteArray(arr []byte) []byte {
 		reversed[i] = arr[j]
 	}
 	return reversed
+}
+
+func removeDeviceInfoFromFile(file *os.File, devToRemove deviceInfo) error {
+	// Read the existing data from the file
+	devices, err := readFromFile(file)
+	if err != nil {
+		return err
+	}
+
+	if devices == nil {
+		return errors.New("no devices to remove")
+	}
+
+	// Filter out the device based on dev EUI
+	var updatedDevices []deviceInfo
+	for _, device := range devices {
+		if device.DevEUI != devToRemove.DevEUI {
+			updatedDevices = append(updatedDevices, device)
+		}
+	}
+
+	err = writeToFile(file, updatedDevices)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Function to write the device info from the persitent data file.
+func addDeviceInfoToFile(file *os.File, newDevice deviceInfo) error {
+	// Read the existing data from the file
+	devices, err := readFromFile(file)
+	if err != nil {
+		return err
+	}
+
+	if devices == nil {
+		devices = []deviceInfo{}
+	}
+	// Append the new device to the existing array
+	devices = append(devices, newDevice)
+
+	err = writeToFile(file, devices)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeToFile(file *os.File, devices []deviceInfo) error {
+	// Reset the file pointer and truncate the file to overwrite it
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek to the beginning of the file: %w", err)
+	}
+
+	err = file.Truncate(0)
+	if err != nil {
+		return fmt.Errorf("failed to truncate the file: %w", err)
+	}
+
+	// Write the updated array back to the file
+	data, err := json.MarshalIndent(devices, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal device info to JSON: %w", err)
+	}
+
+	_, err = file.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write updated data to file: %w", err)
+	}
+	return nil
+}
+
+// Function to read the device info from the persitent data file.
+func readFromFile(file *os.File) ([]deviceInfo, error) {
+	// Reset file pointer to the beginning
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seek to the beginning of the file: %w", err)
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var devices []deviceInfo
+	err = json.Unmarshal(data, &devices)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return devices, nil
 }
