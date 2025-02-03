@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
@@ -290,6 +291,8 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scann
 					g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
 				case strings.Contains(line, "ERROR"):
 					g.logger.Error(line)
+				case strings.Contains(line, "WARNING"):
+					g.logger.Warn(line)
 				default:
 					g.logger.Debug(line)
 				}
@@ -300,14 +303,17 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scann
 
 func (g *gateway) receivePackets(ctx context.Context) {
 	// receive the radio packets
-	packet := C.createRxPacketArray()
+	p := C.createRxPacketArray()
+	defer C.free(unsafe.Pointer(p))
 	for {
 		select {
 		case <-ctx.Done():
+
 			return
 		default:
 		}
-		numPackets := int(C.receive(packet))
+		numPackets := int(C.receive(p))
+
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -316,19 +322,25 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				return
 			case <-time.After(10 * time.Millisecond):
 			}
-		case 1:
-			// received a LORA packet
-			var payload []byte
-			if packet.size == 0 {
-				continue
-			}
-			// Convert packet to go byte array
-			for i := range int(packet.size) {
-				payload = append(payload, byte(packet.payload[i]))
-			}
-			g.handlePacket(ctx, payload)
-		default:
+		case -1:
 			g.logger.Errorf("error receiving lora packet")
+		default:
+			// convert from c array to go slice
+			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
+			for i := range numPackets {
+				// received a LORA packet
+				var payload []byte
+				if packets[i].size == 0 {
+					continue
+				}
+				// Convert packet to go byte array
+				for j := range int(packets[i].size) {
+					payload = append(payload, byte(packets[i].payload[j]))
+				}
+				if payload != nil {
+					g.handlePacket(ctx, payload)
+				}
+			}
 		}
 	}
 }
