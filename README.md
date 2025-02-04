@@ -61,9 +61,8 @@ Example gateway configuration:
 }
 ```
 
-## Configure the `viam:sensor:node`
-
 As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
+## Configure the `viam:sensor:node`
 
 The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
