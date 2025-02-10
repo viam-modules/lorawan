@@ -33,6 +33,16 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 
 ### Attributes
 
+Example gateway configuration:
+```json
+{
+    "board": "rpi",
+    "spi_bus": 0,
+    "reset_pin": 17,
+    "power_en_pin": 27
+}
+```
+
 The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 
 | Name | Type | Required | Default | Description |
@@ -42,31 +52,38 @@ The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 | spi_bus | int | no | 0 | SPI bus number (0 or 1) |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
 
-Example gateway configuration:
-```json
-{
-  "components": [
-    {
-      "name": "lora-gateway",
-      "model": "viam:sensor:sx1302-gateway",
-      "type": "sensor",
-      "attributes": {
-        "board": "rpi",
-        "spi_bus": 0,
-        "reset_pin": 17,
-        "power_en_pin": 27
-      }
-    }
-  ]
-}
-```
+## Set up the  `viam:sensor:node`
 
 As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
-## Configure the `viam:sensor:node`
 
 The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
 
+## Configure the `viam:sensor:node`
+
+Example OTAA node configuration:
+
+```json
+{
+  "join_type": "OTAA",
+  "decoder_path": "/path/to/decoder.js",
+  "dev_eui": "0123456789ABCDEF",
+  "app_key": "0123456789ABCDEF0123456789ABCDEF",
+  "uplink_interval_mins": 10
+}
+```
+
+Example ABP node configuration:
+```json
+{
+  "join_type": "ABP",
+  "decoder_path": "/path/to/decoder.js",
+  "dev_addr": "01234567",
+  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "uplink_interval_mins": 10
+}
+```
 ### Common Attributes
 
 | Name | Type | Required | Description |
@@ -92,47 +109,6 @@ The node registers itself with the gateway so the gateway will recognize message
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
-
-Example OTAA node configuration:
-```json
-{
-  "components": [
-    {
-      "name": "temperature-sensor",
-      "model": "viam:sensor:node",
-      "type": "sensor",
-      "depends_on": ["lora-gateway"],
-      "attributes": {
-        "join_type": "OTAA",
-        "decoder_path": "/path/to/decoder.js",
-        "dev_eui": "0123456789ABCDEF",
-        "app_key": "0123456789ABCDEF0123456789ABCDEF"
-      }
-    }
-  ]
-}
-```
-
-Example ABP node configuration:
-```json
-{
-  "components": [
-    {
-      "name": "humidity-sensor",
-      "model": "viam:sensor:node",
-      "type": "sensor",
-      "depends_on": ["lora-gateway"],
-      "attributes": {
-        "join_type": "ABP",
-        "decoder_path": "/path/to/decoder.js",
-        "dev_addr": "01234567",
-        "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
-        "network_s_key": "0123456789ABCDEF0123456789ABCDEF"
-      }
-    }
-  ]
-}
-```
 
 ## Troubleshooting Notes
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.
