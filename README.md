@@ -33,15 +33,6 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 
 ### Attributes
 
-The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
-| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
-| spi_bus | int | no | 0 | SPI bus number (0 or 1) |
-| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
-
 Example gateway configuration:
 ```json
 {
@@ -61,39 +52,26 @@ Example gateway configuration:
 }
 ```
 
+The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
+| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
+| spi_bus | int | no | 0 | SPI bus number (0 or 1) |
+| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+
+## Set up the  `viam:sensor:node`
+
 As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
-## Configure the `viam:sensor:node`
 
 The node model supports any US915 class A V1.0.3 device.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
 
-### Common Attributes
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| decoder_path | string | yes | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
-| join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software.
-
-The gateway component must be added as a dependency in the `Depends on` drop down.
-The node registers itself with the gateway so the gateway will recognize messages from the node.
-
-### OTAA Attributes
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
-
-### ABP Attributes
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+## Configure the `viam:sensor:node`
 
 Example OTAA node configuration:
+
 ```json
 {
   "components": [
@@ -133,6 +111,31 @@ Example ABP node configuration:
   ]
 }
 ```
+### Common Attributes
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| decoder_path | string | yes | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
+| join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
+| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software.
+
+The gateway component must be added as a dependency in the `Depends on` drop down.
+The node registers itself with the gateway so the gateway will recognize messages from the node.
+
+### OTAA Attributes
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
+
+### ABP Attributes
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
 ## Troubleshooting Notes
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.
