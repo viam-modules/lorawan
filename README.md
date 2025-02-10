@@ -36,19 +36,10 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 Example gateway configuration:
 ```json
 {
-  "components": [
-    {
-      "name": "lora-gateway",
-      "model": "viam:sensor:sx1302-gateway",
-      "type": "sensor",
-      "attributes": {
-        "board": "rpi",
-        "spi_bus": 0,
-        "reset_pin": 17,
-        "power_en_pin": 27
-      }
-    }
-  ]
+    "board": "rpi",
+    "spi_bus": 0,
+    "reset_pin": 17,
+    "power_en_pin": 27
 }
 ```
 
@@ -74,41 +65,23 @@ Example OTAA node configuration:
 
 ```json
 {
-  "components": [
-    {
-      "name": "temperature-sensor",
-      "model": "viam:sensor:node",
-      "type": "sensor",
-      "depends_on": ["lora-gateway"],
-      "attributes": {
-        "join_type": "OTAA",
-        "decoder_path": "/path/to/decoder.js",
-        "dev_eui": "0123456789ABCDEF",
-        "app_key": "0123456789ABCDEF0123456789ABCDEF"
-      }
-    }
-  ]
+  "join_type": "OTAA",
+  "decoder_path": "/path/to/decoder.js",
+  "dev_eui": "0123456789ABCDEF",
+  "app_key": "0123456789ABCDEF0123456789ABCDEF",
+  "uplink_interval_mins": 10
 }
 ```
 
 Example ABP node configuration:
 ```json
 {
-  "components": [
-    {
-      "name": "humidity-sensor",
-      "model": "viam:sensor:node",
-      "type": "sensor",
-      "depends_on": ["lora-gateway"],
-      "attributes": {
-        "join_type": "ABP",
-        "decoder_path": "/path/to/decoder.js",
-        "dev_addr": "01234567",
-        "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
-        "network_s_key": "0123456789ABCDEF0123456789ABCDEF"
-      }
-    }
-  ]
+  "join_type": "ABP",
+  "decoder_path": "/path/to/decoder.js",
+  "dev_addr": "01234567",
+  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "uplink_interval_mins": 10
 }
 ```
 ### Common Attributes
