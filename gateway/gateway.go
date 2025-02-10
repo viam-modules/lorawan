@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"gateway/node"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,7 +27,6 @@ import (
 	"unsafe"
 
 	"go.viam.com/rdk/components/board"
-	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -49,9 +47,6 @@ var (
 	errSendJoinAccept     = errors.New("failed to send join accept packet")
 )
 
-// Model represents a lorawan gateway model.
-var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
-
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -59,47 +54,12 @@ var loggingRoutineStarted = make(map[string]bool)
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
 
-// Config describes the configuration of the gateway
-type Config struct {
-	Bus       int    `json:"spi_bus,omitempty"`
-	PowerPin  *int   `json:"power_en_pin,omitempty"`
-	ResetPin  *int   `json:"reset_pin"`
-	BoardName string `json:"board"`
-}
-
 // deviceInfo is a struct containing OTAA device information.
 // This info is saved across module restarts for each device.
 type deviceInfo struct {
 	DevEUI  string `json:"dev_eui"`
 	DevAddr string `json:"dev_addr"`
 	AppSKey string `json:"app_skey"`
-}
-
-func init() {
-	resource.RegisterComponent(
-		sensor.API,
-		Model,
-		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: NewGateway,
-		})
-}
-
-// Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
-	var deps []string
-	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
-	}
-	if conf.Bus != 0 && conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
-	}
-
-	if len(conf.BoardName) == 0 {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
-	}
-	deps = append(deps, conf.BoardName)
-
-	return deps, nil
 }
 
 // Gateway defines a lorawan gateway.
@@ -125,65 +85,15 @@ type gateway struct {
 	logReader *os.File
 	logWriter *os.File
 	dataFile  *os.File
-}
 
-// NewGateway creates a new gateway
-func NewGateway(
-	ctx context.Context,
-	deps resource.Dependencies,
-	conf resource.Config,
-	logger logging.Logger,
-) (sensor.Sensor, error) {
-	g := &gateway{
-		Named:   conf.ResourceName().AsNamed(),
-		logger:  logger,
-		started: false,
-	}
-
-	// Create or open the file used to save device data across restarts.
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
-	if err != nil {
-		return nil, err
-	}
-
-	g.dataFile = file
-
-	err = g.Reconfigure(ctx, deps, conf)
-	if err != nil {
-		return nil, err
-	}
-
-	return g, nil
+	// bool to determine if gateway is SPI or USB
+	spi bool
 }
 
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-
-	// If the gateway hardware was already started, stop gateway and the background worker.
-	// Make sure to always call stopGateway() before making any changes to the c config or
-	// errors will occur.
-	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
-	// started, so only call stopGateway if this module already started the gateway.
-	if g.started {
-		err := g.reset(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	cfg, err := resource.NativeConfig[*Config](conf)
-	if err != nil {
-		return err
-	}
-
-	board, err := board.FromDependencies(deps, cfg.BoardName)
-	if err != nil {
-		return err
-	}
 
 	// capture C log output
 	g.startCLogging(ctx)
@@ -197,31 +107,74 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// adding io before the pin allows you to use the GPIO number.
-	rstPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.ResetPin))
-	if err != nil {
-		return err
-	}
-	g.rstPin = rstPin
+	// If the gateway hardware was already started, stop gateway and the background worker.
+	// Make sure to always call stopGateway() before making any changes to the c config or
+	// errors will occur.
+	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
+	// started, so only call stopGateway if this module already started the gateway.
+	if g.spi {
+		if g.started {
+			err := g.reset(ctx)
+			if err != nil {
+				return err
+			}
+		}
 
-	// not every gateway has a power enable pin so it is optional.
-	if cfg.PowerPin != nil {
-		pwrPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.PowerPin))
+		cfg, err := resource.NativeConfig[*Config](conf)
 		if err != nil {
 			return err
 		}
-		g.pwrPin = pwrPin
-	}
 
-	err = resetGateway(ctx, g.rstPin, g.pwrPin)
-	if err != nil {
-		return fmt.Errorf("error initializing the gateway: %w", err)
-	}
+		board, err := board.FromDependencies(deps, cfg.BoardName)
+		if err != nil {
+			return err
+		}
 
-	errCode := C.setUpGateway(C.int(cfg.Bus))
-	if errCode != 0 {
-		strErr := parseErrorCode(int(errCode))
-		return fmt.Errorf("failed to set up the gateway: %s", strErr)
+		// adding io before the pin allows you to use the GPIO number.
+		rstPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.ResetPin))
+		if err != nil {
+			return err
+		}
+		g.rstPin = rstPin
+
+		// not every gateway has a power enable pin so it is optional.
+		if cfg.PowerPin != nil {
+			pwrPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.PowerPin))
+			if err != nil {
+				return err
+			}
+			g.pwrPin = pwrPin
+		}
+
+		var path string
+		switch cfg.Bus {
+		case 1:
+			path = "/dev/spidev0.1"
+		default:
+			path = "/dev/spidev0.0"
+		}
+
+		err = resetGateway(ctx, g.rstPin, g.pwrPin)
+		if err != nil {
+			return fmt.Errorf("error initializing the gateway: %w", err)
+		}
+
+		errCode := C.setUpGateway(0, C.CString(path))
+		if errCode != 0 {
+			strErr := parseErrorCode(int(errCode))
+			return fmt.Errorf("failed to set up the gateway: %s", strErr)
+		}
+	} else {
+		cfg, err := resource.NativeConfig[*USBConfig](conf)
+		if err != nil {
+			return err
+		}
+
+		errCode := C.setUpGateway(1, C.CString(cfg.Path))
+		if errCode != 0 {
+			strErr := parseErrorCode(int(errCode))
+			return fmt.Errorf("failed to set up the gateway: %s", strErr)
+		}
 	}
 
 	g.started = true
