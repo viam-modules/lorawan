@@ -2,8 +2,6 @@ package gateway
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -34,7 +32,7 @@ func init() {
 		})
 }
 
-// NewGateway creates a new gateway
+// NewUSBGateway creates a new gateway
 func newUSBGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -48,10 +46,7 @@ func newUSBGateway(
 		spi:     false,
 	}
 
-	// Create or open the file used to save device data across restarts.
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+	file, err := getDataFile()
 	if err != nil {
 		return nil, err
 	}

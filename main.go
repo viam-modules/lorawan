@@ -12,7 +12,8 @@ import (
 
 func main() {
 	module.ModularMain(
-		resource.APIModel{API: sensor.API, Model: gateway.Model},
+		resource.APIModel{API: sensor.API, Model: gateway.ModelHAT},
+		resource.APIModel{API: sensor.API, Model: gateway.ModelUSB},
 		resource.APIModel{API: sensor.API, Model: node.Model},
 	)
 }

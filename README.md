@@ -8,9 +8,10 @@ It handles packet forwarding, device management, and message routing to allow Lo
 This module provides two models:
 
 - `sx1302-gateway`: Sensor model for a SX1302 LoRaWAN concentrator hat connected to a Raspberry Pi.
+- `sx1302-usb`: Sensor model for a sx1302 gateway that connects through USB/
 - `node`: Sensor model for the end nodes sending data to the gateway.
 
-You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
+You'll configure a sx1302 model, and one or more `node`s depending on how many sensors you have.
 
 Compatible with:
 - US915 frequency band
@@ -20,8 +21,8 @@ Compatible with:
 ## Requirements
 
 Hardware Required:
-- Raspberry Pi (any model with GPIO pins)
-- SX1302 Gateway HAT/concentrator board
+- Compute board
+- SX1302 Gateway
 - US915 LoRaWAN sensors
 
 See [Hardware Tested Section](https://github.com/viam-modules/lorawan?tab=readme-ov-file#hardware-tested) for hardware we have used this module with successfully.
@@ -51,6 +52,26 @@ The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 | reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1) |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+
+
+## Set up the `viam:sensor:sx1302-usb`
+Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
+[Add sx1302-usb to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
+
+## Configure the `viam:sensor:sx1302-usb`
+Example configuration:
+```json
+{
+    "path":"<serial-path>"
+}
+```
+
+The following attributes are available for `viam:sensor:sx1302-usb` sensors:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| path | string | yes | - | Serial path of the connected USB gateway |
+
 
 ## Set up the  `viam:sensor:node`
 

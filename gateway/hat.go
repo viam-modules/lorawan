@@ -2,19 +2,17 @@ package gateway
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 )
 
-// Model represents a lorawan gateway model.
-var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
+// Model represents a lorawan gateway HAT model.
+var ModelHAT = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
-// Config describes the configuration of the gateway
-type Config struct {
+// HATConfig describes the configuration of the gateway hat
+type HATConfig struct {
 	Bus       int    `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
 	ResetPin  *int   `json:"reset_pin"`
@@ -24,14 +22,14 @@ type Config struct {
 func init() {
 	resource.RegisterComponent(
 		sensor.API,
-		Model,
-		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: NewGateway,
+		ModelHAT,
+		resource.Registration[sensor.Sensor, *HATConfig]{
+			Constructor: NewGatewayHAT,
 		})
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *HATConfig) Validate(path string) ([]string, error) {
 	var deps []string
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
@@ -48,8 +46,8 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return deps, nil
 }
 
-// NewGateway creates a new gateway
-func NewGateway(
+// NewGatewayHAT creates a new gateway HAT
+func NewGatewayHAT(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
@@ -63,9 +61,7 @@ func NewGateway(
 	}
 
 	// Create or open the file used to save device data across restarts.
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+	file, err := getDataFile()
 	if err != nil {
 		return nil, err
 	}

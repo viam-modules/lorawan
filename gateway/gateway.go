@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"gateway/node"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -96,7 +97,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	defer g.mu.Unlock()
 
 	// capture C log output
-	g.startCLogging(ctx)
+	g.startCLogging()
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -120,7 +121,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			}
 		}
 
-		cfg, err := resource.NativeConfig[*Config](conf)
+		cfg, err := resource.NativeConfig[*HATConfig](conf)
 		if err != nil {
 			return err
 		}
@@ -199,9 +200,20 @@ func parseErrorCode(errCode int) string {
 	}
 }
 
+func getDataFile() (*os.File, error) {
+	// Create or open the file used to save device data across restarts.
+	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
 // startCLogging starts the goroutine to capture C logs into the logger.
 // If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging(ctx context.Context) {
+func (g *gateway) startCLogging() {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")

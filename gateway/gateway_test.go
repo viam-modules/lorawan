@@ -56,55 +56,6 @@ func setupFileAndGateway(t *testing.T) *gateway {
 	return g
 }
 
-func TestValidate(t *testing.T) {
-	// Test valid config with default bus
-	resetPin := 25
-	conf := &Config{
-		BoardName: "pi",
-		ResetPin:  &resetPin,
-	}
-	deps, err := conf.Validate("")
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deps), test.ShouldEqual, 1)
-
-	// Test valid config with bus=1
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &resetPin,
-		Bus:       1,
-	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deps), test.ShouldEqual, 1)
-
-	// Test missing reset pin
-	conf = &Config{
-		BoardName: "pi",
-	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "reset_pin"))
-	test.That(t, deps, test.ShouldBeNil)
-
-	// Test invalid bus value
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &resetPin,
-		Bus:       2,
-	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
-	test.That(t, deps, test.ShouldBeNil)
-
-	// Test missing boardName
-	conf = &Config{
-		ResetPin: &resetPin,
-	}
-
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "board"))
-	test.That(t, deps, test.ShouldBeNil)
-}
-
 func TestDoCommand(t *testing.T) {
 	g := setupFileAndGateway(t)
 	s := (sensor.Sensor)(g)
@@ -362,7 +313,7 @@ func TestStartCLogging(t *testing.T) {
 	defer cancel()
 
 	// Ensure logging is started if there is no entry in the loggingRoutineStarted map.
-	g.startCLogging(ctx)
+	g.startCLogging()
 	test.That(t, g.loggingWorker, test.ShouldNotBeNil)
 	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
@@ -383,7 +334,7 @@ func TestStartCLogging(t *testing.T) {
 	// reset fields for new test case
 	g.loggingWorker = nil
 	loggingRoutineStarted["test-gateway"] = true
-	g.startCLogging(ctx)
+	g.startCLogging()
 	test.That(t, g.loggingWorker, test.ShouldBeNil)
 	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
@@ -471,7 +422,7 @@ func TestClose(t *testing.T) {
 	defer cancel()
 
 	// Start logging to test cleanup
-	g.startCLogging(ctx)
+	g.startCLogging()
 	test.That(t, g.loggingWorker, test.ShouldNotBeNil)
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 

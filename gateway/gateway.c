@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+
 #define RADIO_0_FREQ     902700000
 #define RADIO_1_FREQ     903700000
 int MAX_RX_PKT = 10;
@@ -25,7 +26,36 @@ const int32_t ifFrequencies[9] = {
 // This defines what RF chain to use for each of the 8 if chains
 const int32_t rfChains [9] = {0, 0, 0, 0, 1, 1, 1};
 
+struct lgw_pkt_rx_s* createRxPacketArray() {
+    return (struct lgw_pkt_rx_s*)malloc(sizeof(struct lgw_pkt_rx_s) * MAX_RX_PKT);
+}
 
+void disableBuffering() {
+    setbuf(stdout, NULL);
+}
+
+#ifdef TESTING
+// Mock implementations for testing - do nothing
+void redirectToPipe(int fd) {
+}
+
+int setUpGateway(int type, char* path) {
+    return 0;
+}
+
+int stopGateway() {
+    return 0;
+}
+
+int receive(struct lgw_pkt_rx_s* packet)  {
+    return 0;
+}
+
+int send(struct lgw_pkt_tx_s* packet) {
+    return 0;
+}
+
+#else
 int setUpGateway(int type, char* path) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
@@ -96,9 +126,6 @@ int stopGateway() {
     return lgw_stop();
 }
 
-struct lgw_pkt_rx_s* createRxPacketArray() {
-    return (struct lgw_pkt_rx_s*)malloc(sizeof(struct lgw_pkt_rx_s) * MAX_RX_PKT);
-}
 
 int receive(struct lgw_pkt_rx_s* packet)  {
     return lgw_receive(MAX_RX_PKT, packet);
@@ -108,20 +135,10 @@ int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }
 
-void disableBuffering() {
-    setbuf(stdout, NULL);
-}
-
-
-#ifdef TESTING
-void redirectToPipe(int fd) {
-    // Mock implementation for testing - does nothing
-}
-
-#else
 void redirectToPipe(int fd) {
     fflush(stdout);          // Flush anything in the current stdout buffer
     dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
 }
+
 #endif
 

@@ -27,13 +27,13 @@ func realMain() error {
 
 	cfg := resource.Config{
 		Name: "foo",
-		ConvertedAttributes: &gateway.Config{
+		ConvertedAttributes: &gateway.HATConfig{
 			PowerPin: &pp,
 			ResetPin: &rp,
 		},
 	}
 
-	g, err := gateway.NewGateway(ctx, nil, cfg, logger)
+	g, err := gateway.NewGatewayHAT(ctx, nil, cfg, logger)
 	if err != nil {
 		return err
 	}

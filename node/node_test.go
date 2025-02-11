@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"go.viam.com/rdk/components/encoder"
+	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -242,7 +243,7 @@ func TestNewNode(t *testing.T) {
 
 	mockGateway := createMockGateway()
 	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
+	deps[sensor.Named(testGatewayName)] = mockGateway
 
 	// Test OTAA config
 	validConf := resource.Config{
