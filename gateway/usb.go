@@ -2,6 +2,11 @@ package gateway
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -9,7 +14,7 @@ import (
 )
 
 type USBConfig struct {
-	Path string `json:"serial_path"`
+	Path string `json:"serial_path,omitempty"`
 }
 
 // Model represents a lorawan gateway model.
@@ -17,9 +22,6 @@ var ModelUSB = resource.NewModel("viam", "lorawan", "sx1302-usb")
 
 // Validate ensures all parts of the config are valid.
 func (conf *USBConfig) Validate(path string) ([]string, error) {
-	if conf.Path == "" {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "serial_path")
-	}
 	return nil, nil
 }
 
@@ -59,4 +61,27 @@ func newUSBGateway(
 	}
 
 	return g, nil
+}
+
+// called in gateway reconigure to find the serial path of USB gateway.
+func getSerialPath(path string) (string, error) {
+	osType := runtime.GOOS
+	if osType != "linux" {
+		return "", errors.New("only linux is supported")
+	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return "", fmt.Errorf("path %s does not exist. Ensure a serial device is connected.", path)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return "", fmt.Errorf("Failed to read directory %s: %v", path, err)
+	}
+
+	if len(entries) > 1 {
+		return "", fmt.Errorf("more than one serial device connected - unable to determine serial path. Please provide serial_path in the config.")
+	}
+	return filepath.Join(path, entries[0].Name()), nil
 }

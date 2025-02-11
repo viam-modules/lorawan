@@ -166,12 +166,21 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			return fmt.Errorf("failed to set up the gateway: %s", strErr)
 		}
 	} else {
+		// serial gateway
 		cfg, err := resource.NativeConfig[*USBConfig](conf)
 		if err != nil {
 			return err
 		}
+		serialPath := cfg.Path
+		if serialPath == "" {
+			var err error
+			serialPath, err = getSerialPath("/dev/serial/by-path")
+			if err != nil {
+				return err
+			}
+		}
 
-		errCode := C.setUpGateway(1, C.CString(cfg.Path))
+		errCode := C.setUpGateway(1, C.CString(serialPath))
 		if errCode != 0 {
 			strErr := parseErrorCode(int(errCode))
 			return fmt.Errorf("failed to set up the gateway: %s", strErr)
