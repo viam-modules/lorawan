@@ -13,11 +13,12 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
+// USBConfig provides the config for a USB gateway.
 type USBConfig struct {
 	Path string `json:"serial_path,omitempty"`
 }
 
-// Model represents a lorawan gateway model.
+// ModelUSB represents a lorawan gateway model.
 var ModelUSB = resource.NewModel("viam", "lorawan", "sx1302-usb")
 
 // Validate ensures all parts of the config are valid.
@@ -30,11 +31,11 @@ func init() {
 		sensor.API,
 		ModelUSB,
 		resource.Registration[sensor.Sensor, *USBConfig]{
-			Constructor: newUSBGateway,
+			Constructor: NewUSBGateway,
 		})
 }
 
-// NewUSBGateway creates a new gateway
+// NewUSBGateway creates a new USB gateway.
 func NewUSBGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -49,7 +50,7 @@ func NewUSBGateway(
 	return g, nil
 }
 
-// NewUSBGateway creates a new gateway
+// NewUSBGateway creates a new gateway.
 func newUSBGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -94,11 +95,12 @@ func getSerialPath(path string) (string, error) {
 	// Read directory contents
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return "", fmt.Errorf("Failed to read directory %s: %v", path, err)
+		return "", fmt.Errorf("failed to read directory %s: %w", path, err)
 	}
 
 	if len(entries) > 1 {
-		return "", fmt.Errorf("more than one serial device connected - unable to determine serial path. Please provide serial_path in the config.")
+		return "", fmt.Errorf(
+			"more than one serial device connected -unable to determine serial path. Please provide serial_path in the config.")
 	}
 	return filepath.Join(path, entries[0].Name()), nil
 }

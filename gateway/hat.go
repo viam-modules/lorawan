@@ -8,10 +8,10 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
-// Model represents a lorawan gateway HAT model.
+// ModelHAT represents a lorawan gateway HAT model.
 var ModelHAT = resource.NewModel("viam", "lorawan", "sx1302-gateway")
 
-// HATConfig describes the configuration of the gateway hat
+// HATConfig describes the configuration of the gateway hat.
 type HATConfig struct {
 	Bus       int    `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
@@ -46,14 +46,13 @@ func (conf *HATConfig) Validate(path string) ([]string, error) {
 	return deps, nil
 }
 
-// NewGatewayHAT creates a new gateway HAT
+// NewGatewayHAT creates a new gateway HAT.
 func NewGatewayHAT(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-
 	g, err := newGatewayHAT(ctx, deps, conf, logger, false)
 	if err != nil {
 		return nil, err
@@ -62,7 +61,7 @@ func NewGatewayHAT(
 	return g, nil
 }
 
-// NewGatewayHAT creates a new gateway HAT
+// NewGatewayHAT creates a new gateway HAT.
 func newGatewayHAT(
 	ctx context.Context,
 	deps resource.Dependencies,
