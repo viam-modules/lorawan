@@ -35,13 +35,13 @@ func init() {
 }
 
 // NewUSBGateway creates a new gateway
-func newUSBGateway(
+func NewUSBGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	g, err := NewUSBGateway(ctx, deps, conf, logger, false)
+	g, err := newUSBGateway(ctx, deps, conf, logger, false)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func newUSBGateway(
 }
 
 // NewUSBGateway creates a new gateway
-func NewUSBGateway(
+func newUSBGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,

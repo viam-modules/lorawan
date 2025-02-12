@@ -26,7 +26,7 @@ func TestNewUSBGateway(t *testing.T) {
 	deps := resource.Dependencies{}
 	logger := logging.NewTestLogger(t)
 
-	gw, err := NewUSBGateway(context.Background(), deps, conf, logger, true)
+	gw, err := newUSBGateway(context.Background(), deps, conf, logger, true)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, gw, test.ShouldNotBeNil)
 
@@ -42,7 +42,7 @@ func TestNewUSBGateway(t *testing.T) {
 		ConvertedAttributes: &USBConfig{},
 	}
 
-	gw, err = NewUSBGateway(context.Background(), deps, conf, logger, true)
+	gw, err = newUSBGateway(context.Background(), deps, conf, logger, true)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "does not exist")
 	test.That(t, gw, test.ShouldBeNil)
 }
