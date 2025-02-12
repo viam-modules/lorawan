@@ -41,6 +41,22 @@ func newUSBGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
+	g, err := NewUSBGateway(ctx, deps, conf, logger, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return g, nil
+}
+
+// NewUSBGateway creates a new gateway
+func NewUSBGateway(
+	ctx context.Context,
+	deps resource.Dependencies,
+	conf resource.Config,
+	logger logging.Logger,
+	test bool,
+) (sensor.Sensor, error) {
 	g := &gateway{
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
@@ -48,14 +64,15 @@ func newUSBGateway(
 		spi:     false,
 	}
 
-	file, err := getDataFile()
-	if err != nil {
-		return nil, err
+	if !test {
+		file, err := getDataFile()
+		if err != nil {
+			return nil, err
+		}
+		g.dataFile = file
 	}
 
-	g.dataFile = file
-
-	err = g.Reconfigure(ctx, deps, conf)
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}

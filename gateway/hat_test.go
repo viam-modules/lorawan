@@ -87,7 +87,7 @@ func TestNewGatewayHAT(t *testing.T) {
 	deps := make(resource.Dependencies)
 	deps[board.Named("pi")] = b
 
-	gw, err := NewGatewayHAT(context.Background(), deps, conf, logger)
+	gw, err := newGatewayHAT(context.Background(), deps, conf, logger, true)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, gw, test.ShouldNotBeNil)
 

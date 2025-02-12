@@ -53,6 +53,23 @@ func NewGatewayHAT(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
+
+	g, err := newGatewayHAT(ctx, deps, conf, logger, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return g, nil
+}
+
+// NewGatewayHAT creates a new gateway HAT
+func newGatewayHAT(
+	ctx context.Context,
+	deps resource.Dependencies,
+	conf resource.Config,
+	logger logging.Logger,
+	test bool,
+) (sensor.Sensor, error) {
 	g := &gateway{
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
@@ -60,15 +77,17 @@ func NewGatewayHAT(
 		spi:     true,
 	}
 
-	// Create or open the file used to save device data across restarts.
-	file, err := getDataFile()
-	if err != nil {
-		return nil, err
+	if !test {
+		// Create or open the file used to save device data across restarts.
+		file, err := getDataFile()
+		if err != nil {
+			return nil, err
+		}
+
+		g.dataFile = file
 	}
 
-	g.dataFile = file
-
-	err = g.Reconfigure(ctx, deps, conf)
+	err := g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
