@@ -125,6 +125,7 @@ type gateway struct {
 	logReader *os.File
 	logWriter *os.File
 	dataFile  *os.File
+	dataMu    sync.Mutex
 }
 
 // NewGateway creates a new gateway
@@ -371,8 +372,21 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 				return
 			}
 			g.updateReadings(name, readings)
+		case 0x80:
+			g.logger.Infof("received data uplink confirmed data up")
+			name, readings, err := g.parseDataUplink(ctx, payload)
+			if err != nil {
+				// don't log as error if it was a request from unknown device.
+				if errors.Is(errNoDevice, err) {
+					return
+				}
+				g.logger.Errorf("error parsing uplink message: %s", err)
+				return
+			}
+			g.updateReadings(name, readings)
+
 		default:
-			g.logger.Warnf("received unsupported packet type")
+			g.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
 		}
 	})
 }
@@ -458,10 +472,12 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 // searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
 func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	// read all the saved devices from the file
+	g.dataMu.Lock()
 	savedDevices, err := readFromFile(g.dataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
+	g.dataMu.Unlock()
 	// Check if the dev EUI is in the file.
 	for _, d := range savedDevices {
 		savedEUI, err := hex.DecodeString(d.DevEUI)

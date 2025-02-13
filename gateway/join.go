@@ -144,7 +144,8 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	// Check if this device is already present in the file.
 	// If it is, remove it since the join procedure is being redone.
-	err := searchAndRemove(g.dataFile, devEUIBE)
+
+	err := g.searchAndRemove(g.dataFile, devEUIBE)
 	if err != nil {
 		// If this errors, log and continue as we can still complete the join procedure without the file.
 		g.logger.Errorf("failed to search and remove device info from file: %v", err)
@@ -230,7 +231,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		AppSKey: fmt.Sprintf("%X", d.AppSKey),
 	}
 
-	err = addDeviceInfoToFile(g.dataFile, deviceInfo)
+	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
 	if err != nil {
 		// if this errors, log but still return join accept.
 		g.logger.Errorf("failed to write device info to file: %v", err)
@@ -243,7 +244,9 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 // This function searches for the device in the persistent data file based on the dev EUI sent in the JR.
 // If the dev EUI is found, the device info is removed from the file.
 // The file will later be updated with the info from the new join procedure.
-func searchAndRemove(file *os.File, devEUI []byte) error {
+func (g *gateway) searchAndRemove(file *os.File, devEUI []byte) error {
+	g.dataMu.Lock()
+	defer g.dataMu.Unlock()
 	// Read the device info from the file
 	devices, err := readFromFile(file)
 	if err != nil {
@@ -371,7 +374,9 @@ func removeDeviceInfoFromFile(file *os.File, devToRemove deviceInfo) error {
 }
 
 // Function to write the device info from the persitent data file.
-func addDeviceInfoToFile(file *os.File, newDevice deviceInfo) error {
+func (g *gateway) addDeviceInfoToFile(file *os.File, newDevice deviceInfo) error {
+	g.dataMu.Lock()
+	defer g.dataMu.Unlock()
 	// Read the existing data from the file
 	devices, err := readFromFile(file)
 	if err != nil {

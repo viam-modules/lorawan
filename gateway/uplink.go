@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -154,7 +153,7 @@ func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b
 	switch v.(type) {
 	case map[string]interface{}:
 	default:
-		return map[string]interface{}{}, errors.New("decoder returned unexpected data type")
+		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %s", reflect.TypeOf(v))
 	}
 
 	readings := v.(map[string]interface{})
