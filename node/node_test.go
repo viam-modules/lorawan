@@ -57,27 +57,29 @@ func TestConfigValidate(t *testing.T) {
 	conf := &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeOTAA,
+		JoinType:    JoinTypeOTAA,
 		DevEUI:      testDevEUI,
 		AppKey:      testAppKey,
+		Gateways:    []string{testGatewayName},
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, deps, test.ShouldBeNil)
+	test.That(t, len(deps), test.ShouldEqual, 1)
+	test.That(t, deps[0], test.ShouldEqual, testGatewayName)
 
 	// Test missing decoder path
 	conf = &Config{
 		Interval: &testInterval,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDecoderPathRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDecoderPathRequired))
 
 	// Test missing interval
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errIntervalRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrIntervalRequired))
 
 	zeroInterval := 0.0
 	// Test zero interval
@@ -86,7 +88,7 @@ func TestConfigValidate(t *testing.T) {
 		Interval:    &zeroInterval,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errIntervalZero))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrIntervalZero))
 
 	// Test invalid join type
 	conf = &Config{
@@ -95,7 +97,7 @@ func TestConfigValidate(t *testing.T) {
 		JoinType:    "INVALID",
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidJoinType))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrInvalidJoinType))
 }
 
 func TestValidateOTAAAttributes(t *testing.T) {
@@ -103,49 +105,49 @@ func TestValidateOTAAAttributes(t *testing.T) {
 	conf := &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeOTAA,
+		JoinType:    JoinTypeOTAA,
 		AppKey:      testAppKey,
 	}
 	_, err := conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevEUIRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUIRequired))
 
 	// Test invalid DevEUI length
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeOTAA,
+		JoinType:    JoinTypeOTAA,
 		DevEUI:      "0123456", // Not 8 bytes
 		AppKey:      testAppKey,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevEUILength))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUILength))
 
 	// Test missing AppKey
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeOTAA,
+		JoinType:    JoinTypeOTAA,
 		DevEUI:      testDevEUI,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppKeyRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyRequired))
 
 	// Test invalid AppKey length
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeOTAA,
+		JoinType:    JoinTypeOTAA,
 		DevEUI:      testDevEUI,
 		AppKey:      "0123456", // Not 16 bytes
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppKeyLength))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyLength))
 
 	// Test valid OTAA config
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeOTAA,
+		JoinType:    JoinTypeOTAA,
 		DevEUI:      testDevEUI,
 		AppKey:      testAppKey,
 	}
@@ -158,76 +160,76 @@ func TestValidateABPAttributes(t *testing.T) {
 	conf := &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		NwkSKey:     testNwkSKey,
 		DevAddr:     testDevAddr,
 	}
 	_, err := conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppSKeyRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyRequired))
 
 	// Test invalid AppSKey length
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		AppSKey:     "0123456", // Not 16 bytes
 		NwkSKey:     testNwkSKey,
 		DevAddr:     testDevAddr,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errAppSKeyLength))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyLength))
 
 	// Test missing NwkSKey
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		AppSKey:     testAppSKey,
 		DevAddr:     testDevAddr,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errNwkSKeyRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyRequired))
 
 	// Test invalid NwkSKey length
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     "0123456", // Not 16 bytes
 		DevAddr:     testDevAddr,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errNwkSKeyLength))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyLength))
 
 	// Test missing DevAddr
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevAddrRequired))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrRequired))
 
 	// Test invalid DevAddr length
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
 		DevAddr:     "0123", // Not 4 bytes
 	}
 	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errDevAddrLength))
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrLength))
 
 	// Test valid ABP config
 	conf = &Config{
 		DecoderPath: testDecoderPath,
 		Interval:    &testInterval,
-		JoinType:    joinTypeABP,
+		JoinType:    JoinTypeABP,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
 		DevAddr:     testDevAddr,
@@ -250,7 +252,7 @@ func TestNewNode(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    joinTypeOTAA,
+			JoinType:    JoinTypeOTAA,
 			DevEUI:      testDevEUI,
 			AppKey:      testAppKey,
 		},
@@ -262,7 +264,7 @@ func TestNewNode(t *testing.T) {
 
 	node := n.(*Node)
 	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
-	test.That(t, node.JoinType, test.ShouldEqual, joinTypeOTAA)
+	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Test with valid ABP config
@@ -271,7 +273,7 @@ func TestNewNode(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    joinTypeABP,
+			JoinType:    JoinTypeABP,
 			AppSKey:     testAppSKey,
 			NwkSKey:     testNwkSKey,
 			DevAddr:     testDevAddr,
@@ -284,7 +286,7 @@ func TestNewNode(t *testing.T) {
 
 	node = n.(*Node)
 	test.That(t, node.NodeName, test.ShouldEqual, "test-node-abp")
-	test.That(t, node.JoinType, test.ShouldEqual, joinTypeABP)
+	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeABP)
 	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Verify ABP byte arrays
@@ -310,7 +312,7 @@ func TestReadings(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    joinTypeOTAA,
+			JoinType:    JoinTypeOTAA,
 			DevEUI:      testDevEUI,
 			AppKey:      testAppKey,
 		},
@@ -330,7 +332,7 @@ func TestReadings(t *testing.T) {
 		ConvertedAttributes: &Config{
 			DecoderPath: testDecoderPath,
 			Interval:    &testInterval,
-			JoinType:    joinTypeOTAA,
+			JoinType:    JoinTypeOTAA,
 			DevEUI:      testDevEUI,
 			AppKey:      testAppKey,
 		},

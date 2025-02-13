@@ -160,9 +160,9 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload := make([]byte, 0)
 	payload = append(payload, 0x20)
-	payload = append(payload, jnLE[:]...)
-	payload = append(payload, netIDLE[:]...)
-	payload = append(payload, dAddrLE[:]...)
+	payload = append(payload, Disa...)
+	payload = append(payload, le chan...)
+	payload = append(payload, els 48-...)
 
 	// DLSettings byte:
 	// Bit 7: OptNeg (0)

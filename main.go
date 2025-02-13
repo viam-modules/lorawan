@@ -2,6 +2,7 @@
 package main
 
 import (
+	"gateway/draginolht65n"
 	"gateway/gateway"
 	"gateway/node"
 
@@ -14,5 +15,6 @@ func main() {
 	module.ModularMain(
 		resource.APIModel{API: sensor.API, Model: gateway.Model},
 		resource.APIModel{API: sensor.API, Model: node.Model},
+		resource.APIModel{API: sensor.API, Model: draginolht65n.Model},
 	)
 }

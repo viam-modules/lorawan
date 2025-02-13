@@ -153,7 +153,6 @@ func TestParseJoinRequestPacket(t *testing.T) {
 
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
-
 }
 
 func TestGenerateJoinAccept(t *testing.T) {
