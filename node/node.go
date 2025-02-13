@@ -34,9 +34,10 @@ var (
 )
 
 const (
-	// Join types.
+	// JoinTypeOTAA is the OTAA Join type.
 	JoinTypeOTAA = "OTAA"
-	JoinTypeABP  = "ABP"
+	// JoinTypeABP is the ABP Join type.
+	JoinTypeABP = "ABP"
 )
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
