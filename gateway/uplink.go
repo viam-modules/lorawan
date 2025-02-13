@@ -20,6 +20,7 @@ import (
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
+// Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 

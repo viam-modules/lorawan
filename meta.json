@@ -1,24 +1,28 @@
 {
-    "$schema": "https://dl.viam.dev/module.schema.json",
-    "module_id": "viam:lorawan",
-    "visibility": "public",
-    "url": "https://github.com/oliviamiller/lorawan",
-    "description": "A module to collect data from LoRaWAN sensors",
-    "models": [
-        {
-            "api": "rdk:component:sensor",
-            "model": "viam:lorawan:sx1302-gateway"
-         },
-         {
-            "api": "rdk:component:sensor",
-            "model": "viam:lorawan:node"
-         }
-    ],
-    "build": {
-        "path": "module.tar.gz",
-        "build": "make module.tar.gz",
-        "arch": ["linux/arm64"]
-      },
-    "entrypoint": "lorawan",
-    "first_run": "first_run.sh"
-    }
+  "$schema": "https://dl.viam.dev/module.schema.json",
+  "module_id": "viam:lorawan",
+  "visibility": "public",
+  "url": "https://github.com/oliviamiller/lorawan",
+  "description": "A module to collect data from LoRaWAN sensors",
+  "models": [
+      {
+          "api": "rdk:component:sensor",
+          "model": "viam:lorawan:sx1302-gateway",
+          "markdown_link": "README.md#attributes",
+          "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT."
+        },
+       {
+          "api": "rdk:component:sensor",
+          "model": "viam:lorawan:node",
+          "markdown_link": "README.md#configure-the-viamsensornode",
+          "short_description": "A sensor compoenent for a LoRaWAN node."
+       }
+  ],
+  "build": {
+      "path": "module.tar.gz",
+      "build": "make module.tar.gz",
+      "arch": ["linux/arm64"]
+    },
+  "entrypoint": "lorawan",
+  "first_run": "first_run.sh"
+  }

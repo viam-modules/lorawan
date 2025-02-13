@@ -2,13 +2,35 @@ package gateway
 
 import (
 	"context"
-	"testing"
-
 	"gateway/node"
+	"testing"
 
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
+
+// setupTestGateway creates a test gateway with a configured test device.
+func setupUplinkGateway(t *testing.T) *gateway {
+	//Create a temp device data file for testing
+	file := createDataFile(t)
+
+	testDevices := make(map[string]*node.Node)
+	testNode := &node.Node{
+		Addr:        testDeviceAddr,
+		AppSKey:     testAppSKey,
+		NodeName:    testNodeName,
+		DecoderPath: testDecoderPath,
+		JoinType:    "OTAA",
+		DevEui:      testDevEUI,
+	}
+	testDevices[testNodeName] = testNode
+
+	return &gateway{
+		logger:   logging.NewTestLogger(t),
+		devices:  testDevices,
+		dataFile: file,
+	}
+}
 
 var (
 	// Test device configuration.
@@ -44,24 +66,6 @@ var (
 	expectedHumidity = 460.8
 	expectedCurrent  = 0.0
 )
-
-// setupTestGateway creates a test gateway with a configured test device.
-func setupTestGateway(t *testing.T) *gateway {
-	testDevices := make(map[string]*node.Node)
-	testNode := &node.Node{
-		Addr:        testDeviceAddr,
-		AppSKey:     testAppSKey,
-		NodeName:    testNodeName,
-		DecoderPath: testDecoderPath,
-		JoinType:    "OTAA",
-	}
-	testDevices[testNodeName] = testNode
-
-	return &gateway{
-		logger:  logging.NewTestLogger(t),
-		devices: testDevices,
-	}
-}
 
 // createInvalidPayload creates an invalid payload for testing error cases.
 func createInvalidPayload() []byte {
@@ -102,7 +106,7 @@ func createUnknownDevicePayload() []byte {
 }
 
 func TestParseDataUplink(t *testing.T) {
-	g := setupTestGateway(t)
+	g := setupUplinkGateway(t)
 
 	// Test valid data uplink
 	deviceName, readings, err := g.parseDataUplink(context.Background(), validUplinkData)
@@ -132,6 +136,9 @@ func TestParseDataUplink(t *testing.T) {
 	_, _, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload())
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
+
+	err = g.Close(context.Background())
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestConvertTo32Bit(t *testing.T) {

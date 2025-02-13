@@ -13,15 +13,19 @@ import "C"
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"gateway/node"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
@@ -63,6 +67,14 @@ type Config struct {
 	BoardName string `json:"board"`
 }
 
+// deviceInfo is a struct containing OTAA device information.
+// This info is saved across module restarts for each device.
+type deviceInfo struct {
+	DevEUI  string `json:"dev_eui"`
+	DevAddr string `json:"dev_addr"`
+	AppSKey string `json:"app_skey"`
+}
+
 func init() {
 	resource.RegisterComponent(
 		sensor.API,
@@ -88,7 +100,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	return deps, nil
-
 }
 
 // Gateway defines a lorawan gateway.
@@ -110,6 +121,10 @@ type gateway struct {
 	started bool
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
+
+	logReader *os.File
+	logWriter *os.File
+	dataFile  *os.File
 }
 
 // NewGateway creates a new gateway
@@ -125,7 +140,17 @@ func NewGateway(
 		started: false,
 	}
 
-	err := g.Reconfigure(ctx, deps, conf)
+	// Create or open the file used to save device data across restarts.
+	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+	if err != nil {
+		return nil, err
+	}
+
+	g.dataFile = file
+
+	err = g.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -227,30 +252,28 @@ func (g *gateway) startCLogging(ctx context.Context) {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(g.captureCOutputToLogs)
+		stdoutR, stdoutW, err := os.Pipe()
+		if err != nil {
+			g.logger.Errorf("unable to create pipe for C logs")
+			return
+		}
+		g.logReader = stdoutR
+		g.logWriter = stdoutW
+
+		// Redirect C's stdout to the write end of the pipe
+		C.redirectToPipe(C.int(g.logWriter.Fd()))
+		scanner := bufio.NewScanner(g.logReader)
+
+		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
 		loggingRoutineStarted[g.Name().Name] = true
 	}
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context) {
+func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	C.disableBuffering()
-
-	stdoutR, stdoutW, err := os.Pipe()
-	if err != nil {
-		g.logger.Errorf("unable to create pipe for C logs")
-		return
-	}
-	// Redirect C's stdout to the write end of the pipe
-	C.redirectToPipe(C.int(stdoutW.Fd()))
-	scanner := bufio.NewScanner(stdoutR)
-
-	//nolint:errcheck
-	defer stdoutR.Close()
-	//nolint:errcheck
-	defer stdoutW.Close()
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -268,6 +291,8 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 					g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
 				case strings.Contains(line, "ERROR"):
 					g.logger.Error(line)
+				case strings.Contains(line, "WARNING"):
+					g.logger.Warn(line)
 				default:
 					g.logger.Debug(line)
 				}
@@ -278,14 +303,17 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context) {
 
 func (g *gateway) receivePackets(ctx context.Context) {
 	// receive the radio packets
-	packet := C.createRxPacketArray()
+	p := C.createRxPacketArray()
+	defer C.free(unsafe.Pointer(p))
 	for {
 		select {
 		case <-ctx.Done():
+
 			return
 		default:
 		}
-		numPackets := int(C.receive(packet))
+		numPackets := int(C.receive(p))
+
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -294,19 +322,25 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				return
 			case <-time.After(10 * time.Millisecond):
 			}
-		case 1:
-			// received a LORA packet
-			var payload []byte
-			if packet.size == 0 {
-				continue
-			}
-			// Convert packet to go byte array
-			for i := range int(packet.size) {
-				payload = append(payload, byte(packet.payload[i]))
-			}
-			g.handlePacket(ctx, payload)
-		default:
+		case -1:
 			g.logger.Errorf("error receiving lora packet")
+		default:
+			// convert from c array to go slice
+			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
+			for i := range numPackets {
+				// received a LORA packet
+				var payload []byte
+				if packets[i].size == 0 {
+					continue
+				}
+				// Convert packet to go byte array
+				for j := range int(packets[i].size) {
+					payload = append(payload, byte(packets[i].payload[j]))
+				}
+				if payload != nil {
+					g.handlePacket(ctx, payload)
+				}
+			}
 		}
 	}
 }
@@ -365,10 +399,13 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	// Validate that the dependency is correct.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
+
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
@@ -378,16 +415,31 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			}
 
 			oldNode, exists := g.devices[node.NodeName]
-			if !exists {
+			switch exists {
+			case false:
 				g.devices[node.NodeName] = node
-				return map[string]interface{}{}, nil
+			case true:
+				// node with that name already exists, merge them
+				mergedNode, err := mergeNodes(node, oldNode)
+				if err != nil {
+					return nil, err
+				}
+				g.devices[node.NodeName] = mergedNode
 			}
-			// node with that name already exists, merge them
-			mergedNode, err := mergeNodes(node, oldNode)
+			// Check if the device is in the persistent data file, if it is add the OTAA info.
+			deviceInfo, err := g.searchForDeviceInFile(g.devices[node.NodeName].DevEui)
 			if err != nil {
-				return nil, err
+				if !errors.Is(err, errNoDevice) {
+					return nil, fmt.Errorf("error while searching for device in file: %w", err)
+				}
 			}
-			g.devices[node.NodeName] = mergedNode
+			if deviceInfo != nil {
+				// device was found in the file, update the gateway's device map with the device info.
+				err = g.updateDeviceInfo(g.devices[node.NodeName], deviceInfo)
+				if err != nil {
+					return nil, fmt.Errorf("error while updating device info: %w", err)
+				}
+			}
 		}
 	}
 	// Remove a node from the device map and readings map.
@@ -401,6 +453,49 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+}
+
+// searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
+func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
+	// read all the saved devices from the file
+	savedDevices, err := readFromFile(g.dataFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read device info from file: %w", err)
+	}
+	// Check if the dev EUI is in the file.
+	for _, d := range savedDevices {
+		savedEUI, err := hex.DecodeString(d.DevEUI)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode file's dev EUI: %w", err)
+		}
+
+		if bytes.Equal(devEUI, savedEUI) {
+			// device found in the file
+			return &d, nil
+		}
+	}
+	return nil, errNoDevice
+}
+
+// updateDeviceInfo adds the device info from the file into the gateway's device map.
+func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
+	// Update the fields in the map with the info from the file.
+	appsKey, err := hex.DecodeString(d.AppSKey)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's app session key: %w", err)
+	}
+
+	savedAddr, err := hex.DecodeString(d.DevAddr)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's dev addr: %w", err)
+	}
+
+	device.AppSKey = appsKey
+	device.Addr = savedAddr
+
+	// Update the device in the map.
+	g.devices[device.NodeName] = device
+	return nil
 }
 
 // mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
@@ -483,14 +578,32 @@ func convertToBytes(key interface{}) ([]byte, error) {
 
 // Close closes the gateway.
 func (g *gateway) Close(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	err := g.reset(ctx)
 	if err != nil {
 		return err
 	}
 
 	if g.loggingWorker != nil {
+		if g.logReader != nil {
+			if err := g.logReader.Close(); err != nil {
+				g.logger.Errorf("error closing log reader: %s", err)
+			}
+		}
+		if g.logWriter != nil {
+			if err := g.logWriter.Close(); err != nil {
+				g.logger.Errorf("error closing log writer: %s", err)
+			}
+		}
 		g.loggingWorker.Stop()
 		delete(loggingRoutineStarted, g.Name().Name)
+	}
+
+	if g.dataFile != nil {
+		if err := g.dataFile.Close(); err != nil {
+			g.logger.Errorf("error closing data file: %s", err)
+		}
 	}
 
 	return nil
