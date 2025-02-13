@@ -11,7 +11,7 @@ import (
 
 // setupTestGateway creates a test gateway with a configured test device.
 func setupUplinkGateway(t *testing.T) *gateway {
-	//Create a temp device data file for testing
+	// Create a temp device data file for testing
 	file := createDataFile(t)
 
 	testDevices := make(map[string]*node.Node)
