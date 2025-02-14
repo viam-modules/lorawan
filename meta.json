@@ -15,13 +15,13 @@
           "api": "rdk:component:sensor",
           "model": "viam:lorawan:node",
           "markdown_link": "README.md#configure-the-viamsensornode",
-          "short_description": "A sensor compoenent for a LoRaWAN node."
+          "short_description": "A sensor component for a LoRaWAN node."
        },
        {
         "api": "rdk:component:sensor",
         "model": "viam:lorawan:dragino-LHT65N",
         "markdown_link": "README.md#configure-the-viamsensornode",
-        "short_description": "A sensor compoenent for a dragino LHT65N LoRaWAN node."
+        "short_description": "A sensor component for a dragino LHT65N LoRaWAN node."
      }
   ],
   "build": {

@@ -128,7 +128,6 @@ func CheckCaptureFrequency(c resource.Config, interval float64, logger logging.L
 
 // WriteDecoderFile writes an embeded decoderFile into the data folder of the module.
 func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, error) {
-	// Create or open the file used to save device data across restarts.
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, decoderFilename)
 

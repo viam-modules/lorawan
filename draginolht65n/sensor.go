@@ -84,10 +84,8 @@ func newLHT65N(
 		return nil, err
 	}
 	n := &LHT65N{
-		Named:  conf.ResourceName().AsNamed(),
-		logger: logger,
-		// This returns the name given to the resource by user
-		// may be different if using remotes
+		Named:       conf.ResourceName().AsNamed(),
+		logger:      logger,
 		node:        node.NewSensor(conf, logger),
 		decoderPath: decoderFilePath,
 	}
@@ -108,9 +106,6 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 	}
 
 	nodeCfg := cfg.getNodeConfig(n.decoderPath)
-	if len(deps) == 0 {
-		n.logger.Info("yo no deps")
-	}
 
 	err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg)
 	if err != nil {
