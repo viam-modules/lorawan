@@ -28,7 +28,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
-		g.logger.Infof("received packet from unknown device, ignoring")
+		g.logger.Debugf("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, errNoDevice
 	}
 

@@ -27,6 +27,7 @@ import (
 	"unsafe"
 
 	"gateway/node"
+
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -351,7 +352,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
-			g.logger.Infof("received join request")
+			g.logger.Debugf("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -361,7 +362,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
-			g.logger.Infof("received data uplink")
+			g.logger.Debugf("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -373,7 +374,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 			}
 			g.updateReadings(name, readings)
 		case 0x80:
-			g.logger.Infof("received confirmed data uplink")
+			g.logger.Debugf("received confirmed data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
