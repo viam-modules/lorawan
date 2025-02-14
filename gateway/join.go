@@ -18,12 +18,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"io"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -163,8 +163,11 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload := make([]byte, 0)
 	payload = append(payload, 0x20)
+	//nolint:all
 	payload = append(payload, jnLE[:]...)
+	//nolint:all
 	payload = append(payload, netIDLE[:]...)
+	//nolint:all
 	payload = append(payload, dAddrLE[:]...)
 
 	// DLSettings byte:

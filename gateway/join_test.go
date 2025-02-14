@@ -3,11 +3,11 @@ package gateway
 import (
 	"context"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"

@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gateway/node"
 	"testing"
 
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
@@ -17,7 +17,7 @@ import (
 
 // setupTestGateway creates a test gateway with a configured test device.
 func setupTestGateway(t *testing.T) *gateway {
-	//Create a temp device data file for testing
+	// Create a temp device data file for testing
 	file := createDataFile(t)
 
 	testDevices := make(map[string]*node.Node)
@@ -36,7 +36,7 @@ func setupTestGateway(t *testing.T) *gateway {
 	}
 }
 
-// creates a test gateway with device info populated in the file
+// creates a test gateway with device info populated in the file.
 func setupFileAndGateway(t *testing.T) *gateway {
 	g := setupTestGateway(t)
 
@@ -450,7 +450,6 @@ func TestUpdateDeviceInfo(t *testing.T) {
 	test.That(t, device.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, device.AppSKey, test.ShouldResemble, newAppSKey)
 	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
-
 }
 
 func TestClose(t *testing.T) {
