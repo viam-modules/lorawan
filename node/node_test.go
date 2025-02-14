@@ -3,7 +3,12 @@ package node
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 
 	"go.viam.com/rdk/components/encoder"
 	"go.viam.com/rdk/data"
@@ -355,4 +360,87 @@ func TestReadings(t *testing.T) {
 	_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldResemble, noReadings)
+}
+
+type ctrl struct {
+	statusCode int
+	response   string
+}
+
+func (c *ctrl) mockHandler(w http.ResponseWriter, r *http.Request) {
+	resp := []byte(c.response)
+
+	w.WriteHeader(c.statusCode)
+	w.Write(resp)
+}
+
+// HTTPMock creates a mock HTTP server.
+func HTTPMock(pattern string, statusCode int, response string) *httptest.Server {
+	c := &ctrl{statusCode, response}
+
+	handler := http.NewServeMux()
+	handler.HandleFunc(pattern, c.mockHandler)
+
+	return httptest.NewServer(handler)
+}
+
+func TestWriteDecoder(t *testing.T) {
+	logger := logging.NewTestLogger(t)
+	// Prep first run directory
+	dataDirectory1 := t.TempDir()
+
+	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
+
+	t.Run("Test successful request of decoder", func(t *testing.T) {
+		resp := "good test"
+		srv := HTTPMock("/myurl", http.StatusOK, resp)
+		sClient := &http.Client{
+			Timeout: time.Second * 180,
+		}
+		decoderName1 := "decoder1.js"
+
+		fileName1, err := WriteDecoderFileFromURL(context.Background(), decoderName1, srv.URL+"/myurl", sClient, logger)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, fileName1, test.ShouldContainSubstring, decoderName1)
+		file1, err := os.ReadFile(fileName1)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, string(file1), test.ShouldEqual, resp)
+		// second decoder
+
+		resp2 := "good test 2"
+		srv2 := HTTPMock("/myurl", http.StatusOK, resp2)
+		sClient2 := &http.Client{
+			Timeout: time.Second * 180,
+		}
+		decoderName2 := "decoder2.js"
+
+		fileName2, err := WriteDecoderFileFromURL(context.Background(), decoderName2, srv2.URL+"/myurl", sClient2, logger)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, fileName2, test.ShouldContainSubstring, decoderName2)
+		file2, err := os.ReadFile(fileName2)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, string(file2), test.ShouldEqual, resp2)
+		dirEntries, err := os.ReadDir(dataDirectory1)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, len(dirEntries), test.ShouldEqual, 2)
+
+		// repeat decoder
+		_, err = WriteDecoderFileFromURL(context.Background(), decoderName1, srv.URL+"/myurl", sClient, logger)
+		test.That(t, err, test.ShouldBeNil)
+		dirEntries, err = os.ReadDir(dataDirectory1)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, len(dirEntries), test.ShouldEqual, 2)
+	})
+
+	t.Run("Test failed request of decoder", func(t *testing.T) {
+		resp := "bad test"
+		srv := HTTPMock("/myurl", http.StatusNotFound, resp)
+		sClient := &http.Client{
+			Timeout: time.Second * 180,
+		}
+		decoderBad := "decoder3.js"
+
+		_, err := WriteDecoderFileFromURL(context.Background(), decoderBad, srv.URL+"/myurl", sClient, logger)
+		test.That(t, err, test.ShouldBeError, fmt.Errorf(ErrBadDecoderURL, 404))
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -157,10 +158,8 @@ func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, err
 	return filePath, nil
 }
 
-// GetFileFromURL writes a decoder file from a url into the data folder of the module.
-func GetFileFromURL(ctx context.Context, decoderFilename, url string, logger logging.Logger) (string, error) {
-	url = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/refs/heads/main/LHT65N/LHT65N Chirpstack  4.0 decoder.txt"
-
+// WriteDecoderFileFromURL writes a decoder file from a url into the data folder of the module.
+func WriteDecoderFileFromURL(ctx context.Context, decoderFilename, url string, httpClient *http.Client, logger logging.Logger) (string, error) {
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, decoderFilename)
 
@@ -174,17 +173,13 @@ func GetFileFromURL(ctx context.Context, decoderFilename, url string, logger log
 			return "", err
 		}
 
-		logger.Info("Getting decoder")
-		httpClient := &http.Client{
-			Timeout: time.Second * 25,
-		}
 		res, err := httpClient.Do(req)
 		if err != nil {
 			return "", err
 		}
 		// check that the request was successful.
 		if res.StatusCode != http.StatusOK {
-			return "", err
+			return "", fmt.Errorf(ErrBadDecoderURL, res.StatusCode)
 		}
 		// get the decoder data.
 		decoderData, err := io.ReadAll(res.Body)
@@ -193,7 +188,8 @@ func GetFileFromURL(ctx context.Context, decoderFilename, url string, logger log
 		}
 		//nolint:errcheck
 		defer res.Body.Close()
-		logger.Infof("Writing decoder to file %s", filePath)
+
+		logger.Debugf("Writing decoder to file %s", filePath)
 		//nolint:all
 		err = os.WriteFile(filePath, decoderData, 0755)
 		if err != nil {

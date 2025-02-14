@@ -31,6 +31,8 @@ var (
 	ErrNwkSKeyLength       = errors.New("network session key must be 16 bytes")
 	ErrDevAddrRequired     = errors.New("device address is required for ABP join type")
 	ErrDevAddrLength       = errors.New("device address must be 4 bytes")
+	ErrBadDecoderURL       = "Error Retreiving decoder url is invalid, please report to maintainer: " +
+		"Status Code %v"
 )
 
 const (

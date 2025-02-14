@@ -3,7 +3,8 @@ package draginolht65n
 
 import (
 	"context"
-	"embed"
+	"net/http"
+	"time"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -11,10 +12,11 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
-//go:embed LHT65NChirpstack4decoder.js
-var decoderFile embed.FS
-
-const decoderFilename = "LHT65NChirpstack4decoder.js"
+const (
+	decoderFilename = "LHT65NChirpstack4decoder.js"
+	decoderURL      = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/refs/heads/main/LHT65N/" +
+		"LHT65N Chirpstack  4.0 decoder.txt"
+)
 
 // Model represents a dragino-LHT65N lorawan node model.
 var Model = resource.NewModel("viam", "lorawan", "dragino-LHT65N")
@@ -79,10 +81,14 @@ func newLHT65N(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	decoderFilePath, err := node.WriteDecoderFile(decoderFilename, decoderFile)
+	httpClient := &http.Client{
+		Timeout: time.Second * 25,
+	}
+	decoderFilePath, err := node.WriteDecoderFileFromURL(ctx, decoderFilename, decoderURL, httpClient, logger)
 	if err != nil {
 		return nil, err
 	}
+
 	n := &LHT65N{
 		Named:       conf.ResourceName().AsNamed(),
 		logger:      logger,
