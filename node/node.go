@@ -3,9 +3,7 @@ package node
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
-	"time"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -13,31 +11,38 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
+// LorawanFamily is the model family for the Lorawan module.
+var LorawanFamily = resource.NewModelFamily("viam", "lorawan")
+
 // Model represents a lorawan node model.
-var Model = resource.NewModel("viam", "lorawan", "node")
+var Model = LorawanFamily.WithModel("node")
 
 // Error variables for validation.
 var (
-	errDecoderPathRequired = errors.New("decoder path is required")
-	errIntervalRequired    = errors.New("uplink_interval_mins is required")
-	errIntervalZero        = errors.New("uplink_interval_mins cannot be zero")
-	errInvalidJoinType     = errors.New("join type is OTAA or ABP - defaults to OTAA")
-	errDevEUIRequired      = errors.New("dev EUI is required for OTAA join type")
-	errDevEUILength        = errors.New("dev EUI must be 8 bytes")
-	errAppKeyRequired      = errors.New("app key is required for OTAA join type")
-	errAppKeyLength        = errors.New("app key must be 16 bytes")
-	errAppSKeyRequired     = errors.New("app session key is required for ABP join type")
-	errAppSKeyLength       = errors.New("app session key must be 16 bytes")
-	errNwkSKeyRequired     = errors.New("network session key is required for ABP join type")
-	errNwkSKeyLength       = errors.New("network session key must be 16 bytes")
-	errDevAddrRequired     = errors.New("device address is required for ABP join type")
-	errDevAddrLength       = errors.New("device address must be 4 bytes")
+	ErrDecoderPathRequired = errors.New("decoder path is required")
+	ErrGatewayEmpty        = errors.New("gateway name cannot be empty")
+	ErrIntervalRequired    = errors.New("uplink_interval_mins is required")
+	ErrIntervalZero        = errors.New("uplink_interval_mins cannot be zero")
+	ErrInvalidJoinType     = errors.New("join type is OTAA or ABP - defaults to OTAA")
+	ErrDevEUIRequired      = errors.New("dev EUI is required for OTAA join type")
+	ErrDevEUILength        = errors.New("dev EUI must be 8 bytes")
+	ErrAppKeyRequired      = errors.New("app key is required for OTAA join type")
+	ErrAppKeyLength        = errors.New("app key must be 16 bytes")
+	ErrAppSKeyRequired     = errors.New("app session key is required for ABP join type")
+	ErrAppSKeyLength       = errors.New("app session key must be 16 bytes")
+	ErrNwkSKeyRequired     = errors.New("network session key is required for ABP join type")
+	ErrNwkSKeyLength       = errors.New("network session key must be 16 bytes")
+	ErrDevAddrRequired     = errors.New("device address is required for ABP join type")
+	ErrDevAddrLength       = errors.New("device address must be 4 bytes")
+	ErrBadDecoderURL       = "Error Retreiving decoder url is invalid, please report to maintainer: " +
+		"Status Code %v"
 )
 
 const (
-	// Join types.
-	joinTypeOTAA = "OTAA"
-	joinTypeABP  = "ABP"
+	// JoinTypeOTAA is the OTAA Join type.
+	JoinTypeOTAA = "OTAA"
+	// JoinTypeABP is the ABP Join type.
+	JoinTypeABP = "ABP"
 )
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
@@ -52,6 +57,7 @@ type Config struct {
 	AppSKey     string   `json:"app_s_key,omitempty"`
 	NwkSKey     string   `json:"network_s_key,omitempty"`
 	DevAddr     string   `json:"dev_addr,omitempty"`
+	Gateways    []string `json:"gateways"`
 }
 
 func init() {
@@ -66,64 +72,77 @@ func init() {
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.DecoderPath == "" {
-		return nil, resource.NewConfigValidationError(path, errDecoderPathRequired)
+		return nil, resource.NewConfigValidationError(path, ErrDecoderPathRequired)
 	}
 
 	if conf.Interval == nil {
-		return nil, resource.NewConfigValidationError(path, errIntervalRequired)
+		return nil, resource.NewConfigValidationError(path, ErrIntervalRequired)
 	}
 
 	if *conf.Interval == 0 {
-		return nil, resource.NewConfigValidationError(path, errIntervalZero)
+		return nil, resource.NewConfigValidationError(path, ErrIntervalZero)
 	}
 
-	switch conf.JoinType {
-	case joinTypeABP:
-		return conf.validateABPAttributes(path)
-	case joinTypeOTAA, "":
-		return conf.validateOTAAAttributes(path)
-	default:
-		return nil, resource.NewConfigValidationError(path, errInvalidJoinType)
+	deps := []string{}
+	for _, gateway := range conf.Gateways {
+		if gateway == "" {
+			return nil, resource.NewConfigValidationError(path, ErrGatewayEmpty)
+		}
+		deps = append(deps, gateway)
 	}
+
+	var err error
+	switch conf.JoinType {
+	case JoinTypeABP:
+		err = conf.validateABPAttributes(path)
+	case JoinTypeOTAA, "":
+		err = conf.validateOTAAAttributes(path)
+	default:
+		err = resource.NewConfigValidationError(path, ErrInvalidJoinType)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return deps, nil
 }
 
-func (conf *Config) validateOTAAAttributes(path string) ([]string, error) {
+func (conf *Config) validateOTAAAttributes(path string) error {
 	if conf.DevEUI == "" {
-		return nil, resource.NewConfigValidationError(path, errDevEUIRequired)
+		return resource.NewConfigValidationError(path, ErrDevEUIRequired)
 	}
 	if len(conf.DevEUI) != 16 {
-		return nil, resource.NewConfigValidationError(path, errDevEUILength)
+		return resource.NewConfigValidationError(path, ErrDevEUILength)
 	}
 	if conf.AppKey == "" {
-		return nil, resource.NewConfigValidationError(path, errAppKeyRequired)
+		return resource.NewConfigValidationError(path, ErrAppKeyRequired)
 	}
 	if len(conf.AppKey) != 32 {
-		return nil, resource.NewConfigValidationError(path, errAppKeyLength)
+		return resource.NewConfigValidationError(path, ErrAppKeyLength)
 	}
-	return nil, nil
+	return nil
 }
 
-func (conf *Config) validateABPAttributes(path string) ([]string, error) {
+func (conf *Config) validateABPAttributes(path string) error {
 	if conf.AppSKey == "" {
-		return nil, resource.NewConfigValidationError(path, errAppSKeyRequired)
+		return resource.NewConfigValidationError(path, ErrAppSKeyRequired)
 	}
 	if len(conf.AppSKey) != 32 {
-		return nil, resource.NewConfigValidationError(path, errAppSKeyLength)
+		return resource.NewConfigValidationError(path, ErrAppSKeyLength)
 	}
 	if conf.NwkSKey == "" {
-		return nil, resource.NewConfigValidationError(path, errNwkSKeyRequired)
+		return resource.NewConfigValidationError(path, ErrNwkSKeyRequired)
 	}
 	if len(conf.NwkSKey) != 32 {
-		return nil, resource.NewConfigValidationError(path, errNwkSKeyLength)
+		return resource.NewConfigValidationError(path, ErrNwkSKeyLength)
 	}
 	if conf.DevAddr == "" {
-		return nil, resource.NewConfigValidationError(path, errDevAddrRequired)
+		return resource.NewConfigValidationError(path, ErrDevAddrRequired)
 	}
 	if len(conf.DevAddr) != 8 {
-		return nil, resource.NewConfigValidationError(path, errDevAddrLength)
+		return resource.NewConfigValidationError(path, ErrDevAddrLength)
 	}
 
-	return nil, nil
+	return nil
 }
 
 // Node defines a lorawan node device.
@@ -172,75 +191,14 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 		return err
 	}
 
-	switch cfg.JoinType {
-	case "OTAA", "":
-		appKey, err := hex.DecodeString(cfg.AppKey)
-		if err != nil {
-			return err
-		}
-		n.AppKey = appKey
-
-		devEui, err := hex.DecodeString(cfg.DevEUI)
-		if err != nil {
-			return err
-		}
-		n.DevEui = devEui
-	case "ABP":
-		devAddr, err := hex.DecodeString(cfg.DevAddr)
-		if err != nil {
-			return err
-		}
-
-		n.Addr = devAddr
-
-		appSKey, err := hex.DecodeString(cfg.AppSKey)
-		if err != nil {
-			return err
-		}
-
-		n.AppSKey = appSKey
-	}
-
-	n.DecoderPath = cfg.DecoderPath
-	n.JoinType = cfg.JoinType
-
-	if n.JoinType == "" {
-		n.JoinType = "OTAA"
-	}
-
-	gateway, err := getGateway(ctx, deps)
+	err = n.ReconfigureWithConfig(ctx, deps, cfg)
 	if err != nil {
 		return err
 	}
 
-	cmd := make(map[string]interface{})
-
-	// send the device to the gateway.
-	cmd["register_device"] = n
-
-	_, err = gateway.DoCommand(ctx, cmd)
+	err = CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
 	if err != nil {
 		return err
-	}
-
-	n.gateway = gateway
-
-	// Warn if user's configured capture frequency is more than the expected uplink interval.
-	captureFreq, err := getCaptureFrequencyHzFromConfig(conf)
-	if err != nil {
-		return err
-	}
-
-	intervalSeconds := (time.Duration(*cfg.Interval) * time.Minute).Seconds()
-	expectedFreq := 1 / intervalSeconds
-
-	if captureFreq > expectedFreq {
-		n.logger.Warnf(
-			`"configured capture frequency (%v) is greater than the frequency (%v)
-			of expected uplink interval for node %v: lower capture frequency to avoid duplicate data"`,
-			captureFreq,
-			expectedFreq,
-			n.NodeName)
 	}
 
 	return nil
@@ -254,6 +212,7 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 	var dep resource.Resource
 
 	// Assuming there's only one dep.
+	// TODO: expand to multiple gateways
 	for _, val := range deps {
 		dep = val
 	}
@@ -310,25 +269,4 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		return reading.(map[string]interface{}), nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
-}
-
-// getCaptureFrequencyHzFromConfig extract the capture_frequency_hz from the device config.
-func getCaptureFrequencyHzFromConfig(c resource.Config) (float64, error) {
-	var captureFreqHz float64
-	var captureMethodFound bool
-	for _, assocResourceCfg := range c.AssociatedResourceConfigs {
-		if captureMethodsMapInterface := assocResourceCfg.Attributes["capture_methods"]; captureMethodsMapInterface != nil {
-			captureMethodFound = true
-			for _, captureMethodsInterface := range captureMethodsMapInterface.([]interface{}) {
-				captureMethods := captureMethodsInterface.(map[string]interface{})
-				if captureMethods["method"].(string) == "Readings" {
-					captureFreqHz = captureMethods["capture_frequency_hz"].(float64)
-				}
-			}
-		}
-	}
-	if captureMethodFound && captureFreqHz <= 0 {
-		return 0.0, errors.New("zero or negative capture frequency")
-	}
-	return captureFreqHz, nil
 }

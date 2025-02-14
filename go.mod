@@ -1,4 +1,4 @@
-module gateway
+module github.com/viam-modules/gateway
 
 go 1.23
 

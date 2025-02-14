@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gateway/node"
-
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -153,7 +152,6 @@ func TestParseJoinRequestPacket(t *testing.T) {
 
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
-
 }
 
 func TestGenerateJoinAccept(t *testing.T) {
