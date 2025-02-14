@@ -159,7 +159,9 @@ func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, err
 }
 
 // WriteDecoderFileFromURL writes a decoder file from a url into the data folder of the module.
-func WriteDecoderFileFromURL(ctx context.Context, decoderFilename, url string, httpClient *http.Client, logger logging.Logger) (string, error) {
+func WriteDecoderFileFromURL(ctx context.Context, decoderFilename, url string,
+	httpClient *http.Client, logger logging.Logger,
+) (string, error) {
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, decoderFilename)
 
