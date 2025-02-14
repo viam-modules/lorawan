@@ -35,6 +35,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	if phyPayload[0] == 0x80 {
 		g.logger.Warnf("GOT CONFIRMED DATA SENDING DOWNLINK")
+		g.logger.Warnf("nwksKey %x", device.NwkSKey)
 		payload, err := createAckDownlink(devAddr, types.AES128Key(device.NwkSKey))
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to create downlink")
@@ -49,6 +50,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
+	g.logger.Infof("FCTRL: %x", fctrl)
 	foptsLength := fctrl & 0x0F
 
 	// frame count - should increase by 1 with each packet sent

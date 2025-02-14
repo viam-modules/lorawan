@@ -50,7 +50,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) e
 	case true:
 		waitTime = joinRx2WindowSec
 	default:
-		waitTime = 1
+		waitTime = 2
 	}
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
@@ -86,8 +86,8 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
 	}
 
-	// 3. FCtrl: ADR (1), RFU (0), ACK (1), FPending (0), FOptsLen (5)
-	if err := phyPayload.WriteByte(0xA5); err != nil {
+	// 3. FCtrl: ADR (1), RFU (0), ACK (1), FPending (0), FOptsLen (0)
+	if err := phyPayload.WriteByte(0xA0); err != nil {
 		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
 	}
 
@@ -98,7 +98,7 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 	}
 
 	// Fport
-	if err := phyPayload.WriteByte(0); err != nil { // Change to 0x00 for MAC-only downlink
+	if err := phyPayload.WriteByte(0x00); err != nil { // Change to 0x00 for MAC-only downlink
 		return nil, fmt.Errorf("failed to write FPort: %w", err)
 	}
 
@@ -111,7 +111,7 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 		return nil, fmt.Errorf("failed to write mic: %w", err)
 	}
 
-	// increment fCntDownå
+	// increment fCntDown
 	// TODO: write fcntDown to a file to persist across restarts.
 	fCntDown += 1
 

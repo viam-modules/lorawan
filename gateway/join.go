@@ -197,6 +197,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		DevEUI:  fmt.Sprintf("%X", devEUIBE),
 		DevAddr: fmt.Sprintf("%X", d.Addr),
 		AppSKey: fmt.Sprintf("%X", d.AppSKey),
+		NwkSKey: fmt.Sprintf("%X", d.NwkSKey),
 	}
 
 	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)

@@ -74,6 +74,7 @@ type deviceInfo struct {
 	DevEUI  string `json:"dev_eui"`
 	DevAddr string `json:"dev_addr"`
 	AppSKey string `json:"app_skey"`
+	NwkSKey string `json:"nwk_skey"`
 }
 
 func init() {
@@ -507,8 +508,14 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 		return fmt.Errorf("failed to decode file's dev addr: %w", err)
 	}
 
+	nwksKey, err := hex.DecodeString(d.NwkSKey)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's nwk session key: %w", err)
+	}
+
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
+	device.NwkSKey = nwksKey
 
 	// Update the device in the map.
 	g.devices[device.NodeName] = device
