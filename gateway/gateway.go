@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 	"time"
 	"unsafe"
 
+	"gateway/node"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -373,7 +373,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 			}
 			g.updateReadings(name, readings)
 		case 0x80:
-			g.logger.Infof("received data uplink confirmed data up")
+			g.logger.Infof("received confirmed data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
