@@ -2,9 +2,9 @@ package gateway
 
 import (
 	"context"
-	"gateway/node"
 	"testing"
 
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )

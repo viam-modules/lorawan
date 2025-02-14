@@ -1,9 +1,9 @@
 package draginolht65n
 
 import (
-	"gateway/node"
 	"testing"
 
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/test"
 )
 
@@ -16,9 +16,7 @@ const (
 	testGatewayName = "gateway"
 )
 
-var (
-	testInterval = 5.0
-)
+var testInterval = 5.0
 
 func TestConfigValidate(t *testing.T) {
 	// valid config

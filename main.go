@@ -2,10 +2,9 @@
 package main
 
 import (
-	"gateway/draginolht65n"
-	"gateway/gateway"
-	"gateway/node"
-
+	"github.com/viam-modules/gateway/draginolht65n"
+	"github.com/viam-modules/gateway/gateway"
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"

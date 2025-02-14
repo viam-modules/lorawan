@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"

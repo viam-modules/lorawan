@@ -5,10 +5,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/viam-modules/gateway/gateway"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-
-	"gateway/gateway"
 )
 
 func main() {
@@ -38,7 +37,7 @@ func realMain() error {
 		return err
 	}
 
-	for _ = range 10 {
+	for range 10 {
 		time.Sleep(time.Second)
 		r, err := g.Readings(ctx, nil)
 		if err != nil {

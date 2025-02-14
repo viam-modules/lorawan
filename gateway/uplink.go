@@ -10,9 +10,8 @@ import (
 	"reflect"
 	"time"
 
-	"gateway/node"
-
 	"github.com/robertkrimen/otto"
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )

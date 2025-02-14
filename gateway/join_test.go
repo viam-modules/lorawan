@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gateway/node"
-
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
