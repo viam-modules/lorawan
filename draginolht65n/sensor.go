@@ -19,7 +19,7 @@ const (
 )
 
 // Model represents a dragino-LHT65N lorawan node model.
-var Model = resource.NewModel("viam", "lorawan", "dragino-LHT65N")
+var Model = node.LorawanFamily.WithModel("dragino-LHT65N")
 
 // Config defines the dragino-LHT65N's config.
 type Config struct {

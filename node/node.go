@@ -11,8 +11,11 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
+// LorawanFamily is the model family for the Lorawan module.
+var LorawanFamily = resource.NewModelFamily("viam", "lorawan")
+
 // Model represents a lorawan node model.
-var Model = resource.NewModel("viam", "lorawan", "node")
+var Model = LorawanFamily.WithModel("node")
 
 // Error variables for validation.
 var (
