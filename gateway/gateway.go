@@ -474,11 +474,11 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	// read all the saved devices from the file
 	g.dataMu.Lock()
+	defer g.dataMu.Unlock()
 	savedDevices, err := readFromFile(g.dataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
-	g.dataMu.Unlock()
 	// Check if the dev EUI is in the file.
 	for _, d := range savedDevices {
 		savedEUI, err := hex.DecodeString(d.DevEUI)
