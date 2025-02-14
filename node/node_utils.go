@@ -107,11 +107,11 @@ func getCaptureFrequencyHzFromConfig(c resource.Config) (float64, error) {
 
 // CheckCaptureFrequency check the resource's capture frequency
 // and reports to the user whether a safe value has been configured.
-func CheckCaptureFrequency(c resource.Config, interval float64, logger logging.Logger) (bool, error) {
+func CheckCaptureFrequency(c resource.Config, interval float64, logger logging.Logger) error {
 	// Warn if user's configured capture frequency is more than the expected uplink interval.
 	captureFreq, err := getCaptureFrequencyHzFromConfig(c)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	intervalSeconds := (time.Duration(interval) * time.Minute).Seconds()
@@ -124,9 +124,9 @@ func CheckCaptureFrequency(c resource.Config, interval float64, logger logging.L
 			captureFreq,
 			expectedFreq,
 			c.ResourceName().AsNamed().Name().Name)
-		return false, nil
+		return nil
 	}
-	return true, nil
+	return nil
 }
 
 // WriteDecoderFile writes an embedded decoderFile into the data folder of the module.

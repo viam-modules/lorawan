@@ -118,7 +118,7 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 		return err
 	}
 
-	_, err = node.CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
+	err = node.CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
 	if err != nil {
 		return err
 	}

@@ -196,7 +196,7 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 		return err
 	}
 
-	_, err = CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
+	err = CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
 	if err != nil {
 		return err
 	}
