@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -28,7 +27,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
-		g.logger.Infof("received packet from unknown device, ignoring")
+		g.logger.Debugf("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
@@ -153,7 +152,7 @@ func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b
 	switch v.(type) {
 	case map[string]interface{}:
 	default:
-		return map[string]interface{}{}, errors.New("decoder returned unexpected data type")
+		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %s", reflect.TypeOf(v))
 	}
 
 	readings := v.(map[string]interface{})
