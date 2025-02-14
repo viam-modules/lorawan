@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -32,6 +33,19 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
+	if phyPayload[0] == 0x80 {
+		g.logger.Warnf("GOT CONFIRMED DATA SENDING DOWNLINK")
+		payload, err := createAckDownlink(devAddr, types.AES128Key(device.NwkSKey))
+		if err != nil {
+			return "", map[string]interface{}{}, errors.New("failed to create downlink")
+		}
+
+		err = g.sendDownLink(ctx, payload, false)
+		if err != nil {
+			return "", map[string]interface{}{}, errors.New("failed to send downlink")
+		}
+	}
+
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
@@ -42,7 +56,9 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	// fopts not supported in this module yet.
 	if foptsLength != 0 {
-		_ = phyPayload[8 : 8+foptsLength]
+		fopts := phyPayload[8 : 8+foptsLength]
+		g.logger.Infof("FOPTS: %x", fopts)
+
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
