@@ -6,6 +6,8 @@ import (
 	"embed"
 	"encoding/hex"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -126,7 +128,7 @@ func CheckCaptureFrequency(c resource.Config, interval float64, logger logging.L
 	return true, nil
 }
 
-// WriteDecoderFile writes an embeded decoderFile into the data folder of the module.
+// WriteDecoderFile writes an embedded decoderFile into the data folder of the module.
 func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, error) {
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, decoderFilename)
@@ -152,5 +154,57 @@ func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, err
 		// an actual error happened, and the file may or may not exist.
 		return "", err
 	}
+	return filePath, nil
+}
+
+// GetFileFromURL writes a decoder file from a url into the data folder of the module.
+func GetFileFromURL(ctx context.Context, decoderFilename, url string, logger logging.Logger) (string, error) {
+	url = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/refs/heads/main/LHT65N/LHT65N Chirpstack  4.0 decoder.txt"
+
+	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+	filePath := filepath.Join(moduleDataDir, decoderFilename)
+
+	// check if the decoder was already written
+	//nolint:gosec
+	if _, err := os.Stat(filePath); errors.Is(err, os.ErrNotExist) {
+		// the decoder hasn't been written yet, so lets write it.
+		// create an http request
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return "", err
+		}
+
+		logger.Info("Getting decoder")
+		httpClient := &http.Client{
+			Timeout: time.Second * 25,
+		}
+		res, err := httpClient.Do(req)
+		if err != nil {
+			return "", err
+		}
+		// check that the request was successful.
+		if res.StatusCode != http.StatusOK {
+			return "", err
+		}
+		// get the decoder data.
+		decoderData, err := io.ReadAll(res.Body)
+		if err != nil {
+			return "", err
+		}
+		//nolint:errcheck
+		defer res.Body.Close()
+		logger.Infof("Writing decoder to file %s", filePath)
+		//nolint:all
+		err = os.WriteFile(filePath, decoderData, 0755)
+		if err != nil {
+			return "", err
+		}
+
+		return filePath, nil
+	} else if err != nil {
+		// an actual error happened, and the file may or may not exist.
+		return "", err
+	}
+
 	return filePath, nil
 }
