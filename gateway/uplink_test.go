@@ -2,16 +2,16 @@ package gateway
 
 import (
 	"context"
-	"gateway/node"
 	"testing"
 
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
 
 // setupTestGateway creates a test gateway with a configured test device.
 func setupUplinkGateway(t *testing.T) *gateway {
-	//Create a temp device data file for testing
+	// Create a temp device data file for testing
 	file := createDataFile(t)
 
 	testDevices := make(map[string]*node.Node)

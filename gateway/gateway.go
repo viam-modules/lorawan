@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
@@ -47,6 +47,9 @@ var (
 	errInvalidMIC         = errors.New("invalid MIC")
 	errSendJoinAccept     = errors.New("failed to send join accept packet")
 )
+
+// Model represents a lorawan gateway model.
+var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start

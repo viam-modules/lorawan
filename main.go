@@ -2,9 +2,9 @@
 package main
 
 import (
-	"gateway/gateway"
-	"gateway/node"
-
+	"github.com/viam-modules/gateway/draginolht65n"
+	"github.com/viam-modules/gateway/gateway"
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"
@@ -15,5 +15,6 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: gateway.ModelHAT},
 		resource.APIModel{API: sensor.API, Model: gateway.ModelUSB},
 		resource.APIModel{API: sensor.API, Model: node.Model},
+		resource.APIModel{API: sensor.API, Model: draginolht65n.Model},
 	)
 }
