@@ -316,7 +316,6 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 		numPackets := int(C.receive(p))
-
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -328,6 +327,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		case -1:
 			g.logger.Errorf("error receiving lora packet")
 		default:
+			g.logger.Infof("packets received: %d", numPackets)
 			// convert from c array to go slice
 			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
 			for i := range numPackets {
@@ -336,6 +336,16 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				if packets[i].size == 0 {
 					continue
 				}
+
+				// dont process duplicates
+				if numPackets > 1 && i > 0 {
+					if packets[i-1].count_us == packets[i].count_us {
+						continue
+					}
+				}
+
+				g.logger.Infof("Received packet: freq=%d, count_us=%d, crc=0x%X",
+					packets[i].freq_hz, packets[i].count_us, packets[i].crc)
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))

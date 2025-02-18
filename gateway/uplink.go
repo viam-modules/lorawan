@@ -34,9 +34,28 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	}
 
 	if phyPayload[0] == 0x80 {
-		g.logger.Warnf("GOT CONFIRMED DATA SENDING DOWNLINK")
-		g.logger.Warnf("nwksKey %x", device.NwkSKey)
-		payload, err := createAckDownlink(devAddr, types.AES128Key(device.NwkSKey))
+		g.logger.Infof("%d", fCntDown)
+		// if fCntDown == 3 {
+		g.logger.Warnf("sending interval change")
+		// } else {
+		// 	g.logger.Warnf("GOT CONFIRMED DATA SENDING DOWNLINK")
+		// 	g.logger.Warnf("nwksKey %x", device.NwkSKey)
+		// 	payload, err := createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
+		// 	if err != nil {
+		// 		return "", map[string]interface{}{}, errors.New("failed to create downlink")
+		// 	}
+
+		// 	err = g.sendDownLink(ctx, payload, false)
+		// 	if err != nil {
+		// 		return "", map[string]interface{}{}, errors.New("failed to send downlink")
+		// 	}
+
+		// }
+	}
+
+	if fCntDown == 4 {
+		g.logger.Warnf("sending interval change")
+		payload, err := createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to create downlink")
 		}

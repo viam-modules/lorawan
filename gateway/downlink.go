@@ -81,8 +81,7 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 	}
 
 	// the payload needs the dev addr to be in LE
-	devAddrLE := reverseByteArray(devAddr)
-	if _, err := phyPayload.Write(devAddrLE); err != nil {
+	if _, err := phyPayload.Write(devAddr); err != nil {
 		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
 	}
 
@@ -97,14 +96,74 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 		return nil, fmt.Errorf("failed to write FCnt: %w", err)
 	}
 
-	// Fport
-	if err := phyPayload.WriteByte(0x00); err != nil { // Change to 0x00 for MAC-only downlink
+	devAddrBE := reverseByteArray(devAddr)
+	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := phyPayload.Write(mic[:]); err != nil {
+		return nil, fmt.Errorf("failed to write mic: %w", err)
+	}
+
+	// increment fCntDown
+	// TODO: write fcntDown to a file to persist across restarts.
+	fCntDown += 1
+
+	return phyPayload.Bytes(), nil
+}
+
+func createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([]byte, error) {
+	phyPayload := new(bytes.Buffer)
+
+	// Mhdr confirmed data down
+	if err := phyPayload.WriteByte(0xA0); err != nil {
+		return nil, fmt.Errorf("failed to write MHDR: %w", err)
+	}
+
+	// the payload needs the dev addr to be in LE
+	if _, err := phyPayload.Write(devAddr); err != nil {
+		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
+	}
+
+	// 3. FCtrl: ADR (1), RFU (0), ACK (0), FPending (0), FOptsLen (0)
+	if err := phyPayload.WriteByte(0x80); err != nil {
+		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
+	}
+
+	fCntBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(fCntBytes, fCntDown)
+	if _, err := phyPayload.Write(fCntBytes); err != nil {
+		return nil, fmt.Errorf("failed to write FCnt: %w", err)
+	}
+
+	// // Fport
+	if err := phyPayload.WriteByte(0x85); err != nil { // Change to 0x00 for MAC-only downlink
 		return nil, fmt.Errorf("failed to write FPort: %w", err)
 	}
 
-	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddr), uint32(fCntDown), phyPayload.Bytes())
+	// 2 mins
+	framePayload := []byte{0xff, 0x8e, 0x00, 0x01, 0x00}
+
+	if _, err := phyPayload.Write(framePayload); err != nil {
+		return nil, fmt.Errorf("failed to write frame payload: %w", err)
+	}
+
+	devAddrBE := reverseByteArray(devAddr)
+	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
 	if err != nil {
 		return nil, err
+	}
+
+	encrypted, err := crypto.EncryptDownlink(appSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), framePayload)
+	if err != nil {
+		return nil, err
+	}
+
+	//Replace the unencrypted payload with the encrypted one
+	phyPayload.Truncate(len(phyPayload.Bytes()) - len(framePayload)) // Remove unencrypted payload
+	if _, err := phyPayload.Write(encrypted); err != nil {
+		return nil, fmt.Errorf("failed to write encrypted frame payload: %w", err)
 	}
 
 	if _, err := phyPayload.Write(mic[:]); err != nil {
