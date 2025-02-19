@@ -18,12 +18,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gateway/node"
 	"io"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -58,6 +58,8 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
+	g.logger.Infof("sending join accept to device %s", device.NodeName)
+
 	return g.sendDownLink(ctx, joinAccept, true)
 }
 
@@ -87,7 +89,7 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	}
 
 	if matched.NodeName == "" {
-		g.logger.Infof("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
+		g.logger.Debugf("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest, nil, errNoDevice
 	}
 
@@ -112,7 +114,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Check if this device is already present in the file.
 	// If it is, remove it since the join procedure is being redone.
 
-	err := g.searchAndRemove(g.dataFile, devEUIBE)
+	err := g.g.searchAndRemove(g.dataFile, devEUIBE)
 	if err != nil {
 		// If this errors, log and continue as we can still complete the join procedure without the file.
 		g.logger.Errorf("failed to search and remove device info from file: %v", err)
@@ -128,8 +130,11 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload := make([]byte, 0)
 	payload = append(payload, 0x20)
+	//nolint:all
 	payload = append(payload, jnLE[:]...)
+	//nolint:all
 	payload = append(payload, netIDLE[:]...)
+	//nolint:all
 	payload = append(payload, dAddrLE[:]...)
 
 	// DLSettings byte:

@@ -4,15 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
 	"time"
 
-	"gateway/node"
-
 	"github.com/robertkrimen/otto"
+	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -29,7 +27,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
-		g.logger.Infof("received packet from unknown device, ignoring")
+		g.logger.Debugf("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, errNoDevice
 	}
 

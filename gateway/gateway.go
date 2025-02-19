@@ -26,8 +26,7 @@ import (
 	"time"
 	"unsafe"
 
-	"gateway/node"
-
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -51,7 +50,7 @@ var (
 )
 
 // Model represents a lorawan gateway model.
-var Model = resource.NewModel("viam", "lorawan", "sx1302-gateway")
+var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
@@ -363,7 +362,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
-			g.logger.Infof("received join request")
+			g.logger.Debugf("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -373,7 +372,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
-			g.logger.Infof("received data uplink")
+			g.logger.Debugf("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -385,7 +384,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 			}
 			g.updateReadings(name, readings)
 		case 0x80:
-			g.logger.Infof("received confirmed data uplink")
+			g.logger.Debugf("received confirmed data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -485,6 +484,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	// read all the saved devices from the file
 	g.dataMu.Lock()
+	defer g.dataMu.Unlock()
 	savedDevices, err := readFromFile(g.dataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
