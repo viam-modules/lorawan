@@ -114,7 +114,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Check if this device is already present in the file.
 	// If it is, remove it since the join procedure is being redone.
 
-	err := g.g.searchAndRemove(g.dataFile, devEUIBE)
+	err := g.searchAndRemove(g.dataFile, devEUIBE)
 	if err != nil {
 		// If this errors, log and continue as we can still complete the join procedure without the file.
 		g.logger.Errorf("failed to search and remove device info from file: %v", err)

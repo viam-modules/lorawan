@@ -489,7 +489,6 @@ func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)
 	}
-	g.dataMu.Unlock()
 	// Check if the dev EUI is in the file.
 	for _, d := range savedDevices {
 		savedEUI, err := hex.DecodeString(d.DevEUI)
