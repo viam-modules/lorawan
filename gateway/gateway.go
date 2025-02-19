@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -51,6 +52,8 @@ var (
 
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
+
+const sendDownlinkKey = "senddown"
 
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
@@ -127,6 +130,8 @@ type gateway struct {
 	logWriter *os.File
 	dataFile  *os.File
 	dataMu    sync.Mutex
+
+	sendNewDownlink atomic.Bool
 }
 
 // NewGateway creates a new gateway
@@ -343,8 +348,8 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					}
 				}
 
-				g.logger.Infof("Received packet: freq=%d, count_us=%d, crc=0x%X",
-					packets[i].freq_hz, packets[i].count_us, packets[i].crc)
+				g.logger.Infof("Received packet: freq=%d, count_us=%d, crc=0x%X, SF=0x%X, bandwidth=0x%X",
+					packets[i].freq_hz, packets[i].count_us, packets[i].crc, packets[i].datarate, packets[i].bandwidth)
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
@@ -475,6 +480,13 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			delete(g.lastReadings, n)
 			g.readingsMu.Unlock()
 		}
+	}
+	if _, ok := cmd[sendDownlinkKey]; ok {
+		if g.sendNewDownlink.Load() {
+			return nil, errors.New("downlink already flagged")
+		}
+		g.sendNewDownlink.Store(true)
+		return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
 	}
 
 	return map[string]interface{}{}, nil

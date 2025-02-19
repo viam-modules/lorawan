@@ -52,7 +52,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 		// }
 	}
 
-	if fCntDown == 4 {
+	if g.sendNewDownlink.Load() {
+		g.sendNewDownlink.Store(false)
 		g.logger.Warnf("sending interval change")
 		payload, err := createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
 		if err != nil {
