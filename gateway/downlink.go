@@ -24,15 +24,19 @@ import (
 	"go.viam.com/utils"
 )
 
-func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) error {
+func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int) error {
+	dataRate := 10
+	if join {
+		dataRate = rx2SF
+	}
 	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:    C.uint32_t(rx2Frequenecy),
+		freq_hz:    C.uint32_t(uplinkFreq),
 		tx_mode:    C.uint8_t(0), // immediate mode
 		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),    // tx power in dbm
-		modulation: C.uint8_t(0x10), // LORA modulation
-		bandwidth:  C.uint8_t(rx2Bandwidth),
-		datarate:   C.uint32_t(rx2SF),
+		rf_power:   C.int8_t(26),            // tx power in dbm
+		modulation: C.uint8_t(0x10),         // LORA modulation
+		bandwidth:  C.uint8_t(rx2Bandwidth), //500k
+		datarate:   C.uint32_t(dataRate),
 		coderate:   C.uint8_t(0x01), // code rate 4/5
 		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
 		size:       C.uint16_t(len(payload)),
@@ -50,7 +54,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool) e
 	case true:
 		waitTime = joinRx2WindowSec
 	default:
-		waitTime = 2
+		waitTime = 1 // 2 for rx2
 	}
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
@@ -116,8 +120,8 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 func createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([]byte, error) {
 	phyPayload := new(bytes.Buffer)
 
-	// Mhdr confirmed data down
-	if err := phyPayload.WriteByte(0xA0); err != nil {
+	// Mhdr unconfirmed data down
+	if err := phyPayload.WriteByte(0x60); err != nil {
 		return nil, fmt.Errorf("failed to write MHDR: %w", err)
 	}
 
@@ -127,7 +131,7 @@ func createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([
 	}
 
 	// 3. FCtrl: ADR (1), RFU (0), ACK (0), FPending (0), FOptsLen (0)
-	if err := phyPayload.WriteByte(0x80); err != nil {
+	if err := phyPayload.WriteByte(0x80); err != nil { //10100000
 		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
 	}
 
@@ -138,33 +142,31 @@ func createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([
 	}
 
 	// // Fport
-	if err := phyPayload.WriteByte(0x85); err != nil { // Change to 0x00 for MAC-only downlink
+	if err := phyPayload.WriteByte(0x01); err != nil { // Change to 0x00 for MAC-only downlink
 		return nil, fmt.Errorf("failed to write FPort: %w", err)
 	}
 
-	// 2 mins
-	framePayload := []byte{0xff, 0x8e, 0x00, 0x01, 0x00}
-
-	if _, err := phyPayload.Write(framePayload); err != nil {
+	// 30 sec
+	framePayload := []byte{0x01, 0x00, 0x00, 0x1E}
+	devAddrBE := reverseByteArray(devAddr)
+	encrypted, err := crypto.EncryptDownlink(appSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), framePayload)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := phyPayload.Write(encrypted); err != nil {
 		return nil, fmt.Errorf("failed to write frame payload: %w", err)
 	}
 
-	devAddrBE := reverseByteArray(devAddr)
 	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
 	if err != nil {
 		return nil, err
 	}
 
-	encrypted, err := crypto.EncryptDownlink(appSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), framePayload)
-	if err != nil {
-		return nil, err
-	}
-
-	//Replace the unencrypted payload with the encrypted one
-	phyPayload.Truncate(len(phyPayload.Bytes()) - len(framePayload)) // Remove unencrypted payload
-	if _, err := phyPayload.Write(encrypted); err != nil {
-		return nil, fmt.Errorf("failed to write encrypted frame payload: %w", err)
-	}
+	// //Replace the unencrypted payload with the encrypted one
+	// phyPayload.Truncate(len(phyPayload.Bytes()) - len(framePayload)) // Remove unencrypted payload
+	// if _, err := phyPayload.Write(encrypted); err != nil {
+	// 	return nil, fmt.Errorf("failed to write encrypted frame payload: %w", err)
+	// }
 
 	if _, err := phyPayload.Write(mic[:]); err != nil {
 		return nil, fmt.Errorf("failed to write mic: %w", err)
