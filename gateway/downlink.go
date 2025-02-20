@@ -24,13 +24,27 @@ import (
 	"go.viam.com/utils"
 )
 
+func findDownLinkChannel(uplinkFreq int) int {
+	// channel number between 0-64
+	upLinkFreqNum := (uplinkFreq - 902300000) / 200000
+	downLinkChan := upLinkFreqNum % 8
+	downLinkFreq := downLinkChan*600000 + 923300000
+	return downLinkFreq
+
+}
+
 func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int) error {
 	dataRate := 10
+	// freq := findDownLinkChannel(uplinkFreq)
+	// g.logger.Infof("freq: %d", freq)
+	freq := uplinkFreq
 	if join {
+		freq = rx2Frequenecy
 		dataRate = rx2SF
 	}
+
 	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:    C.uint32_t(uplinkFreq),
+		freq_hz:    C.uint32_t(freq),
 		tx_mode:    C.uint8_t(0), // immediate mode
 		rf_chain:   C.uint8_t(0),
 		rf_power:   C.int8_t(26),            // tx power in dbm
@@ -54,7 +68,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	case true:
 		waitTime = joinRx2WindowSec
 	default:
-		waitTime = 1 // 2 for rx2
+		waitTime = 1 // 1 for rx1
 	}
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
@@ -74,7 +88,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	return nil
 }
 
-var fCntDown uint16 = 0
+var fCntDown uint16 = 1
 
 func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) {
 	phyPayload := new(bytes.Buffer)
@@ -117,65 +131,54 @@ func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) 
 	return phyPayload.Bytes(), nil
 }
 
-func createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([]byte, error) {
-	phyPayload := new(bytes.Buffer)
+func (g *gateway) createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([]byte, error) {
+	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
-	if err := phyPayload.WriteByte(0x60); err != nil {
-		return nil, fmt.Errorf("failed to write MHDR: %w", err)
-	}
+	payload = append(payload, 0x60)
 
-	// the payload needs the dev addr to be in LE
-	if _, err := phyPayload.Write(devAddr); err != nil {
-		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
-	}
+	payload = append(payload, devAddr...)
 
-	// 3. FCtrl: ADR (1), RFU (0), ACK (0), FPending (0), FOptsLen (0)
-	if err := phyPayload.WriteByte(0x80); err != nil { //10100000
-		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
-	}
+	// 3. FCtrl: ADR (1), RFU (0), ACK (0), FPending (0), FOptsLen (4)
+	payload = append(payload, 0x84)
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, fCntDown)
-	if _, err := phyPayload.Write(fCntBytes); err != nil {
-		return nil, fmt.Errorf("failed to write FCnt: %w", err)
-	}
+	payload = append(payload, fCntBytes...)
+
+	fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
+
+	payload = append(payload, fopts...)
 
 	// // Fport
-	if err := phyPayload.WriteByte(0x01); err != nil { // Change to 0x00 for MAC-only downlink
-		return nil, fmt.Errorf("failed to write FPort: %w", err)
-	}
+	// Change to 0x00 for MAC-only downlink
+	payload = append(payload, 0x01)
 
 	// 30 sec
 	framePayload := []byte{0x01, 0x00, 0x00, 0x1E}
+
 	devAddrBE := reverseByteArray(devAddr)
+
 	encrypted, err := crypto.EncryptDownlink(appSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), framePayload)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := phyPayload.Write(encrypted); err != nil {
-		return nil, fmt.Errorf("failed to write frame payload: %w", err)
-	}
 
-	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
+	payload = append(payload, encrypted...)
+
+	mic, err := crypto.ComputeLegacyDownlinkMIC(nwkSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), payload)
 	if err != nil {
 		return nil, err
 	}
 
-	// //Replace the unencrypted payload with the encrypted one
-	// phyPayload.Truncate(len(phyPayload.Bytes()) - len(framePayload)) // Remove unencrypted payload
-	// if _, err := phyPayload.Write(encrypted); err != nil {
-	// 	return nil, fmt.Errorf("failed to write encrypted frame payload: %w", err)
-	// }
-
-	if _, err := phyPayload.Write(mic[:]); err != nil {
-		return nil, fmt.Errorf("failed to write mic: %w", err)
-	}
+	payload = append(payload, mic[:]...)
 
 	// increment fCntDown
 	// TODO: write fcntDown to a file to persist across restarts.
 	fCntDown += 1
 
-	return phyPayload.Bytes(), nil
+	return payload, nil
 
 }
+
+// 60 54ea0201 80 0100 01 fb18282b 78d0fa1b

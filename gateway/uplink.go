@@ -55,7 +55,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 	if g.sendNewDownlink.Load() {
 		g.sendNewDownlink.Store(false)
 		g.logger.Warnf("sending interval change")
-		payload, err := createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
+		payload, err := g.createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to create downlink")
 		}
