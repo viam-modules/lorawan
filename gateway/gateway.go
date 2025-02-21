@@ -355,20 +355,21 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
-					g.handlePacket(ctx, payload, int(packets[i].freq_hz))
+					time := time.Now()
+					g.handlePacket(ctx, payload, int(packets[i].freq_hz), time)
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq int) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq int, t time.Time) {
 	g.receivingWorker.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
 			g.logger.Debugf("received join request")
-			err := g.handleJoin(ctx, payload)
+			err := g.handleJoin(ctx, payload, t)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -378,7 +379,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq i
 			}
 		case 0x40:
 			g.logger.Debugf("received data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq)
+			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -390,7 +391,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq i
 			g.updateReadings(name, readings)
 		case 0x80:
 			g.logger.Debugf("received confirmed data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq)
+			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {

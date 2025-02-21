@@ -33,11 +33,10 @@ func findDownLinkChannel(uplinkFreq int) int {
 
 }
 
-func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int) error {
-	dataRate := 10
-	// freq := findDownLinkChannel(uplinkFreq)
-	// g.logger.Infof("freq: %d", freq)
-	freq := uplinkFreq
+func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int, t time.Time) error {
+	dataRate := 7
+	freq := findDownLinkChannel(uplinkFreq)
+	g.logger.Infof("freq: %d", freq)
 	if join {
 		freq = rx2Frequenecy
 		dataRate = rx2SF
@@ -63,13 +62,17 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	txPkt.payload = cPayload
 
 	// join request and other downlinks have different windows for class A devices.
-	var waitTime int
+	var waitTime float64
 	switch join {
 	case true:
-		waitTime = joinRx2WindowSec
+		waitTime = joinRx2WindowSec - time.Since(t).Seconds()
 	default:
-		waitTime = 1 // 1 for rx1
+		waitTime = 1 - time.Since(t).Seconds()
+		// waitTime = 1 // 1 for rx1
 	}
+
+	g.logger.Infof("wait time: %v", waitTime)
+	g.logger.Infof("time since: %v ", time.Since(t).Seconds())
 
 	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
 		return errors.New("context canceled")

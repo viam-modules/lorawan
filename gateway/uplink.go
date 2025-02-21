@@ -20,7 +20,7 @@ import (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplinkFreq int) (string, map[string]interface{}, error) {
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplinkFreq int, t time.Time) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -60,7 +60,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 			return "", map[string]interface{}{}, errors.New("failed to create downlink")
 		}
 
-		err = g.sendDownLink(ctx, payload, false, uplinkFreq)
+		err = g.sendDownLink(ctx, payload, false, uplinkFreq, t)
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to send downlink")
 		}
@@ -119,7 +119,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 	// Note that this won't precisely reflect when the uplink was sent, but since lorawan uplinks are sent infrequently
 	// (once per minute max),it will be accurate enough.
 	unix := int(time.Now().Unix())
-	t := time.Unix(int64(unix), 0)
+	t = time.Unix(int64(unix), 0)
 	timestamp := t.Format(time.RFC3339)
 	readings["time"] = timestamp
 

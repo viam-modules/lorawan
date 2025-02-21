@@ -47,7 +47,7 @@ const (
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 
 	g.logger.Infof("sending join accept to device %s", device.NodeName)
 
-	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy)
+	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t)
 }
 
 // payload of join request consists of
