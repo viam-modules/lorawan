@@ -61,20 +61,26 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	}
 	txPkt.payload = cPayload
 
+	g.logger.Infof("time since: %v ", time.Since(t).Seconds())
+
 	// join request and other downlinks have different windows for class A devices.
 	var waitTime float64
 	switch join {
 	case true:
-		waitTime = joinRx2WindowSec - time.Since(t).Seconds()
+		waitTime = float64(joinRx2WindowSec*time.Second) - time.Since(t).Seconds()
 	default:
 		waitTime = 1 - time.Since(t).Seconds()
 		// waitTime = 1 // 1 for rx1
 	}
 
-	g.logger.Infof("wait time: %v", waitTime)
-	g.logger.Infof("time since: %v ", time.Since(t).Seconds())
+	defer g.logger.Infof("time since: %v ", time.Since(t).Seconds())
+	defer g.logger.Infof("time in accurate sleep: %v", time.Duration(waitTime))
+	defer g.logger.Infof("wait time %v", waitTime)
+	// if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
+	// 	return errors.New("context canceled")
+	// }
 
-	if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
+	if !accurateSleep(ctx, time.Duration(waitTime)) {
 		return errors.New("context canceled")
 	}
 
@@ -86,9 +92,37 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 		return errors.New("failed to send downlink packet")
 	}
 
-	g.logger.Infof("sent the downolink packet")
+	g.logger.Infof("sent the downlink packet")
 
 	return nil
+}
+
+func accurateSleep(ctx context.Context, duration time.Duration) bool {
+	// If we use utils.SelectContextOrWait(), we will wake up sometime after when we're supposed
+	// to, which can be hundreds of microseconds later (because the process scheduler in the OS only
+	// schedules things every millisecond or two). For use cases like a web server responding to a
+	// query, that's fine. but when outputting a PWM signal, hundreds of microseconds can be a big
+	// deal. To avoid this, we sleep for less time than we're supposed to, and then busy-wait until
+	// the right time. Inspiration for this approach was taken from
+	// https://blog.bearcats.nl/accurate-sleep-function/
+	// On a raspberry pi 4, naively calling utils.SelectContextOrWait tended to have an error of
+	// about 140-300 microseconds, while this version had an error of 0.3-0.6 microseconds.
+	startTime := time.Now()
+	maxBusyWaitTime := 1500 * time.Microsecond
+	if duration > maxBusyWaitTime {
+		shorterDuration := duration - maxBusyWaitTime
+		if !utils.SelectContextOrWait(ctx, shorterDuration) {
+			return false
+		}
+	}
+
+	for time.Since(startTime) < duration {
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		// Otherwise, busy-wait some more
+	}
+	return true
 }
 
 var fCntDown uint16 = 1
