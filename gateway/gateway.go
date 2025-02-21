@@ -319,7 +319,9 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
+		g.mu.Lock()
 		numPackets := int(C.receive(p))
+		g.mu.Unlock()
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -341,9 +343,10 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					continue
 				}
 
-				// dont process duplicates
+				// // dont process duplicates
 				if numPackets > 1 && i > 0 {
 					if packets[i-1].count_us == packets[i].count_us {
+						g.logger.Debug("skipped packet")
 						continue
 					}
 				}

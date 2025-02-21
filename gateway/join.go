@@ -283,7 +283,7 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 
 	// TTN expects big endian dev nonce
 	devNonceBE := reverseByteArray(devNonce)
-	applicationCryptoService := cryptoservices.NewMemory(&appKey, &appKey)
+	applicationCryptoService := cryptoservices.NewMemory(nil, &appKey)
 
 	var keys sessionKeys
 
