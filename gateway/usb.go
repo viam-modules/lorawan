@@ -81,11 +81,11 @@ func newUSBGateway(
 	return g, nil
 }
 
-// called in gateway reconigure to find the serial path of USB gateway.
+// finds the serial path of USB gateway.
 func getSerialPath(path string) (string, error) {
 	osType := runtime.GOOS
 	if osType != "linux" {
-		return "", errors.New("only linux is supported")
+		return "", errors.New("the lorawan gateway only supports linux OS")
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -100,7 +100,18 @@ func getSerialPath(path string) (string, error) {
 
 	if len(entries) > 1 {
 		return "", fmt.Errorf(
-			"more than one serial device connected -unable to determine serial path. Please provide serial_path in the config.")
+			"more than one serial device connected, unable to determine the serial path. Please provide serial_path in the config.")
 	}
-	return filepath.Join(path, entries[0].Name()), nil
+
+	entry := entries[0]
+	fullPath := filepath.Join(path, entry.Name())
+	target, err := os.Readlink(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get serial path from symbolic link")
+	}
+
+	// Resolve relative path to absolute /dev path
+	resolvedTarget := filepath.Join("/dev", filepath.Base(target))
+
+	return resolvedTarget, nil
 }

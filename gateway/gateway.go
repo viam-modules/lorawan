@@ -89,6 +89,7 @@ type gateway struct {
 	logReader *os.File
 	logWriter *os.File
 	dataFile  *os.File
+	dataMu    sync.Mutex
 
 	// bool to determine if gateway is SPI or USB
 	spi bool
@@ -111,12 +112,12 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// If the gateway hardware was already started, stop gateway and the background worker.
-	// Make sure to always call stopGateway() before making any changes to the c config or
-	// errors will occur.
-	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
-	// started, so only call stopGateway if this module already started the gateway.
 	if g.spi {
+		// If the gateway hardware was already started, stop gateway and the background worker.
+		// Make sure to always call stopGateway() before making any changes to the c config or
+		// errors will occur.
+		// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
+		// started, so only call stopGateway if this module already started the gateway.
 		if g.started {
 			err := g.reset(ctx)
 			if err != nil {
@@ -178,6 +179,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		if serialPath == "" {
 			var err error
 			serialPath, err = getSerialPath("/dev/serial/by-path")
+			g.logger.Infof("SERIAL PATH: %s", serialPath)
 			if err != nil {
 				return err
 			}
@@ -327,7 +329,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
-			g.logger.Infof("received join request")
+			g.logger.Debugf("received join request")
 			err := g.handleJoin(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -337,7 +339,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
-			g.logger.Infof("received data uplink")
+			g.logger.Debugf("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -348,8 +350,21 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 				return
 			}
 			g.updateReadings(name, readings)
+		case 0x80:
+			g.logger.Debugf("received confirmed data uplink")
+			name, readings, err := g.parseDataUplink(ctx, payload)
+			if err != nil {
+				// don't log as error if it was a request from unknown device.
+				if errors.Is(errNoDevice, err) {
+					return
+				}
+				g.logger.Errorf("error parsing uplink message: %s", err)
+				return
+			}
+			g.updateReadings(name, readings)
+
 		default:
-			g.logger.Warnf("received unsupported packet type")
+			g.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
 		}
 	})
 }
@@ -435,6 +450,8 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 // searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
 func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
 	// read all the saved devices from the file
+	g.dataMu.Lock()
+	defer g.dataMu.Unlock()
 	savedDevices, err := readFromFile(g.dataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read device info from file: %w", err)

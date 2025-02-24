@@ -64,7 +64,7 @@ int setUpGateway(int type, char* path) {
     boardconf.lorawan_public = true;
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
-    boardconf.com_type =  LGW_COM_SPI; // spi
+    boardconf.com_type =  type;
 
 
 

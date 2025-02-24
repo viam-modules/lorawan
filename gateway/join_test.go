@@ -317,12 +317,14 @@ func TestSearchAndRemove(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			file := createDataFile(t)
 
+			g := gateway{}
+
 			// Initialize file with test data
 			err := writeToFile(file, tt.initialData)
 			test.That(t, err, test.ShouldBeNil)
 
 			// Test searchAndRemove
-			err = searchAndRemove(file, tt.devEUIToFind)
+			err = g.searchAndRemove(file, tt.devEUIToFind)
 			if tt.expectError {
 				test.That(t, err, test.ShouldNotBeNil)
 			} else {
@@ -346,9 +348,10 @@ func TestSearchAndRemove(t *testing.T) {
 }
 
 func TestAddAndRemoveDeviceInfoToFile(t *testing.T) {
+	g := gateway{}
 	file := createDataFile(t)
 	info := deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}
-	err := addDeviceInfoToFile(file, info)
+	err := g.addDeviceInfoToFile(file, info)
 	test.That(t, err, test.ShouldBeNil)
 
 	deviceInfo, err := readFromFile(file)
