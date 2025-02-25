@@ -26,7 +26,7 @@ const (
 var defaultIntervalMin = 10. // minutes
 
 // Model represents a Milesight-CT101 lorawan node model.
-var Model = node.LorawanFamily.WithModel("Milesight-CT101")
+var Model = node.LorawanFamily.WithModel("milesight-ct101")
 
 // Config defines the Milesight-CT101's config.
 type Config struct {

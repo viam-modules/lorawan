@@ -25,7 +25,7 @@
      },
      {
       "api": "rdk:component:sensor",
-      "model": "viam:lorawan:Milesight-CT101",
+      "model": "viam:lorawan:milesight-ct101",
       "markdown_link": "README.md#configure-the-viamlorawanmilesightct101",
       "short_description": "A sensor component for a Milesight CT101 LoRaWAN node."
    }
