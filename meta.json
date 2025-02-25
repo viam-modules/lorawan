@@ -25,9 +25,9 @@
      },
      {
       "api": "rdk:component:sensor",
-      "model": "viam:lorawan:dragino-LHT65N",
-      "markdown_link": "README.md#configure-the-viamsensornode",
-      "short_description": "A sensor component for a dragino LHT65N LoRaWAN node."
+      "model": "viam:lorawan:milesight-em310-tilt",
+      "markdown_link": "README.md#configure-the-viamlorawanmilesightem310tilt",
+      "short_description": "A sensor component for a milesight em310 tilt node."
    }
   ],
   "build": {
