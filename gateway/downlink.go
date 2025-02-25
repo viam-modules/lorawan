@@ -22,6 +22,8 @@ import (
 	"go.viam.com/utils"
 )
 
+var fCntDown uint16 = 0
+
 func findDownLinkChannel(uplinkFreq int) int {
 	// channel number between 0-64
 	upLinkFreqNum := (uplinkFreq - 902300000) / 200000
@@ -32,13 +34,13 @@ func findDownLinkChannel(uplinkFreq int) int {
 }
 
 func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int, t time.Time) error {
-	//dataRate := 7
-	// freq := findDownLinkChannel(uplinkFreq)
+	dataRate := 7
+	freq := findDownLinkChannel(uplinkFreq)
 	// g.logger.Infof("freq: %d", freq)
-	freq := rx2Frequenecy
+	// freq := rx2Frequenecy
 	if join {
 		freq = rx2Frequenecy
-		//	dataRate = rx2SF
+		dataRate = rx2SF
 	}
 
 	txPkt := C.struct_lgw_pkt_tx_s{
@@ -48,7 +50,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 		rf_power:   C.int8_t(26),            // tx power in dbm
 		modulation: C.uint8_t(0x10),         // LORA modulation
 		bandwidth:  C.uint8_t(rx2Bandwidth), //500k
-		datarate:   C.uint32_t(rx2SF),
+		datarate:   C.uint32_t(dataRate),
 		coderate:   C.uint8_t(0x01), // code rate 4/5
 		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
 		size:       C.uint16_t(len(payload)),
@@ -66,15 +68,15 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	g.logger.Infof("time since: %v ", time.Since(t).Seconds())
 
 	// join request and other downlinks have different windows for class A devices.
-	var waitTime float64
+	// var waitTime float64
 	var waitDuration time.Duration
 	switch join {
 	case true:
 		waitDuration = (joinRx2WindowSec * time.Second) - (time.Since(t))
-		waitTime = (joinRx2WindowSec) - (time.Since(t).Seconds()) // only for debugging
+		// waitTime = (joinRx2WindowSec) - (time.Since(t).Seconds()) // only for debugging
 	default:
-		waitDuration = (2 * time.Second) - (time.Since(t)) // 1 for rx1
-		waitTime = 2 - (time.Since(t).Seconds())           // only for debugging
+		waitDuration = (1 * time.Second) - (time.Since(t)) // 1 for rx1
+		// waitTime = 2 - (time.Since(t).Seconds())           // only for debugging
 	}
 
 	// if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
@@ -92,7 +94,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	errCode := int(C.send(&txPkt))
 	defer g.logger.Infof("time since: %v ", time.Since(t).Seconds())
 	defer g.logger.Infof("time in accurate sleep: %v", waitDuration)
-	defer g.logger.Infof("wait time %v", waitTime)
+	// defer g.logger.Infof("wait time %v", waitTime)
 
 	if errCode != 0 {
 		return errors.New("failed to send downlink packet")
@@ -148,8 +150,6 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 	}
 	return true
 }
-
-var fCntDown uint16 = 0
 
 // func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) {
 // 	phyPayload := new(bytes.Buffer)
