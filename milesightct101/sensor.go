@@ -15,10 +15,15 @@ import (
 const (
 	decoderFilename = "CT101_Decoder.js"
 	decoderURL      = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/CT_Series/CT101/CT101_Decoder.js"
-	defaultAppKey   = "5572404C696E6B4C6F52613230313823"
-	defaultNwkSKey  = "5572404C696E6B4C6F52613230313823"
-	defaultAppSKey  = "5572404C696E6B4C6F52613230313823"
+	// OTAA defaults
+	defaultAppKey = "5572404C696E6B4C6F52613230313823"
+	//ABP defaults
+	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
+	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
 )
+
+// defaultIntervalMin is how often the CT101 will send an uplink
+var defaultIntervalMin = 10. // minutes
 
 // Model represents a Milesight-CT101 lorawan node model.
 var Model = node.LorawanFamily.WithModel("Milesight-CT101")
@@ -57,10 +62,14 @@ func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 	if conf.AppSKey == "" {
 		appSKey = conf.AppSKey
 	}
+	intervalMin := &defaultIntervalMin
+	if conf.Interval != nil {
+		intervalMin = conf.Interval
+	}
 	return node.Config{
 		JoinType:    conf.JoinType,
 		DecoderPath: decoderFilePath,
-		Interval:    conf.Interval,
+		Interval:    intervalMin,
 		DevEUI:      conf.DevEUI,
 		AppKey:      appKey,
 		AppSKey:     appSKey,
