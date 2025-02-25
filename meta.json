@@ -22,7 +22,13 @@
         "model": "viam:lorawan:dragino-LHT65N",
         "markdown_link": "README.md#configure-the-viamsensornode",
         "short_description": "A sensor component for a dragino LHT65N LoRaWAN node."
-     }
+     },
+     {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:Milesight-CT101",
+      "markdown_link": "README.md#configure-the-viamsensornode",
+      "short_description": "A sensor component for a Milesight CT101 LoRaWAN node."
+   }
   ],
   "build": {
       "path": "module.tar.gz",

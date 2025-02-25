@@ -110,6 +110,53 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
+## Configure the `viam:lorawan:Milesight-CT101`
+
+Example OTAA node configuration:
+
+```json
+{
+  "join_type": "OTAA",
+  "dev_eui": "0123456789ABCDEF",
+  "uplink_interval_mins": 10
+}
+```
+
+Example ABP node configuration:
+
+```json
+{
+  "join_type": "ABP",
+  "dev_addr": "01234567",
+  "uplink_interval_mins": 10
+}
+```
+
+### Common Attributes
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
+| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software.
+
+The gateway component must be added as a dependency in the `Depends on` drop down.
+The node registers itself with the gateway so the gateway will recognize messages from the node.
+
+### OTAA Attributes
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | no | Application Key (16 bytes in hex). Used to securely join the network. The default is **5572404C696E6B4C6F52613230313823**. |
+
+### ABP Attributes
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+
 ## Troubleshooting Notes
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.
 
