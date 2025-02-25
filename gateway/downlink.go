@@ -12,11 +12,9 @@ package gateway
 import "C"
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -54,6 +52,9 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 		coderate:   C.uint8_t(0x01), // code rate 4/5
 		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
 		size:       C.uint16_t(len(payload)),
+		preamble:   C.uint16_t(0),
+		no_crc:     C.bool(false),
+		no_header:  C.bool(false),
 	}
 
 	var cPayload [256]C.uchar
@@ -66,22 +67,22 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 
 	// join request and other downlinks have different windows for class A devices.
 	var waitTime float64
+	var waitDuration time.Duration
 	switch join {
 	case true:
-		waitTime = float64(joinRx2WindowSec*time.Second) - time.Since(t).Seconds()
+		waitDuration = (joinRx2WindowSec * time.Second) - (time.Since(t))
+		waitTime = (joinRx2WindowSec) - (time.Since(t).Seconds()) // only for debugging
 	default:
-		waitTime = float64(2*time.Second) - time.Since(t).Seconds()
-		// waitTime = 1 // 1 for rx1
+		waitDuration = (2 * time.Second) - (time.Since(t)) // 1 for rx1
+		waitTime = 2 - (time.Since(t).Seconds())           // only for debugging
 	}
 
-	defer g.logger.Infof("time since: %v ", time.Since(t).Seconds())
-	defer g.logger.Infof("time in accurate sleep: %v", time.Duration(waitTime))
-	defer g.logger.Infof("wait time %v", waitTime)
 	// if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
 	// 	return errors.New("context canceled")
 	// }
+	// waitDuration := time.Duration(waitTime * 10e9)
 
-	if !accurateSleep(ctx, time.Duration(waitTime)) {
+	if !accurateSleep(ctx, waitDuration) {
 		return errors.New("context canceled")
 	}
 
@@ -89,6 +90,10 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	errCode := int(C.send(&txPkt))
+	defer g.logger.Infof("time since: %v ", time.Since(t).Seconds())
+	defer g.logger.Infof("time in accurate sleep: %v", waitDuration)
+	defer g.logger.Infof("wait time %v", waitTime)
+
 	if errCode != 0 {
 		return errors.New("failed to send downlink packet")
 	}
@@ -146,46 +151,46 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 
 var fCntDown uint16 = 0
 
-func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) {
-	phyPayload := new(bytes.Buffer)
+// func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) {
+// 	phyPayload := new(bytes.Buffer)
 
-	// Mhdr confirmed data down
-	if err := phyPayload.WriteByte(0xA0); err != nil {
-		return nil, fmt.Errorf("failed to write MHDR: %w", err)
-	}
+// 	// Mhdr confirmed data down
+// 	if err := phyPayload.WriteByte(0xA0); err != nil {
+// 		return nil, fmt.Errorf("failed to write MHDR: %w", err)
+// 	}
 
-	// the payload needs the dev addr to be in LE
-	if _, err := phyPayload.Write(devAddr); err != nil {
-		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
-	}
+// 	// the payload needs the dev addr to be in LE
+// 	if _, err := phyPayload.Write(devAddr); err != nil {
+// 		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
+// 	}
 
-	// 3. FCtrl: ADR (1), RFU (0), ACK (1), FPending (0), FOptsLen (0)
-	if err := phyPayload.WriteByte(0xA0); err != nil {
-		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
-	}
+// 	// 3. FCtrl: ADR (1), RFU (0), ACK (1), FPending (0), FOptsLen (0)
+// 	if err := phyPayload.WriteByte(0xA0); err != nil {
+// 		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
+// 	}
 
-	fCntBytes := make([]byte, 2)
-	binary.LittleEndian.PutUint16(fCntBytes, fCntDown)
-	if _, err := phyPayload.Write(fCntBytes); err != nil {
-		return nil, fmt.Errorf("failed to write FCnt: %w", err)
-	}
+// 	fCntBytes := make([]byte, 2)
+// 	binary.LittleEndian.PutUint16(fCntBytes, fCntDown)
+// 	if _, err := phyPayload.Write(fCntBytes); err != nil {
+// 		return nil, fmt.Errorf("failed to write FCnt: %w", err)
+// 	}
 
-	devAddrBE := reverseByteArray(devAddr)
-	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
-	if err != nil {
-		return nil, err
-	}
+// 	devAddrBE := reverseByteArray(devAddr)
+// 	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	if _, err := phyPayload.Write(mic[:]); err != nil {
-		return nil, fmt.Errorf("failed to write mic: %w", err)
-	}
+// 	if _, err := phyPayload.Write(mic[:]); err != nil {
+// 		return nil, fmt.Errorf("failed to write mic: %w", err)
+// 	}
 
-	// increment fCntDown
-	// TODO: write fcntDown to a file to persist across restarts.
-	fCntDown += 1
+// 	// increment fCntDown
+// 	// TODO: write fcntDown to a file to persist across restarts.
+// 	fCntDown += 1
 
-	return phyPayload.Bytes(), nil
-}
+// 	return phyPayload.Bytes(), nil
+// }
 
 func (g *gateway) createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.AES128Key) ([]byte, error) {
 	payload := make([]byte, 0)
@@ -208,11 +213,11 @@ func (g *gateway) createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.
 
 	// // Fport
 	// Change to 0x00 for MAC-only downlink
-	payload = append(payload, 85)
+	payload = append(payload, 0x85)
 
 	// 30 sec
-	//framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	framePayload := []byte{0xff, 0x10, 0xff}
+	framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
+	// framePayload := []byte{0xff, 0x10, 0xff}
 
 	devAddrBE := reverseByteArray(devAddr)
 	encrypted, err := crypto.EncryptDownlink(appSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), framePayload)
