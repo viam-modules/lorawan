@@ -51,15 +51,15 @@ func init() {
 
 func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 	appKey := defaultAppKey
-	if conf.AppKey == "" {
+	if conf.AppKey != "" {
 		appKey = conf.AppKey
 	}
 	nwkSKey := defaultNwkSKey
-	if conf.NwkSKey == "" {
+	if conf.NwkSKey != "" {
 		appKey = conf.NwkSKey
 	}
 	appSKey := defaultAppSKey
-	if conf.AppSKey == "" {
+	if conf.AppSKey != "" {
 		appSKey = conf.AppSKey
 	}
 	intervalMin := &defaultIntervalMin
