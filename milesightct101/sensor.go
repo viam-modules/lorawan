@@ -17,7 +17,7 @@ const (
 	decoderURL      = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/CT_Series/CT101/CT101_Decoder.js"
 	// OTAA defaults.
 	defaultAppKey = "5572404C696E6B4C6F52613230313823"
-	//ABP defaults.
+	// ABP defaults.
 	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
 	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
 )

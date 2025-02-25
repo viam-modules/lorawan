@@ -69,7 +69,8 @@ Example OTAA node configuration:
   "decoder_path": "/path/to/decoder.js",
   "dev_eui": "0123456789ABCDEF",
   "app_key": "0123456789ABCDEF0123456789ABCDEF",
-  "uplink_interval_mins": 10
+  "uplink_interval_mins": 10,
+  "gateways": ["gateway-1"]
 }
 ```
 
@@ -81,7 +82,8 @@ Example ABP node configuration:
   "dev_addr": "01234567",
   "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
   "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
-  "uplink_interval_mins": 10
+  "uplink_interval_mins": 10,
+  "gateways": ["gateway-1"]
 }
 ```
 ### Common Attributes
@@ -90,9 +92,9 @@ Example ABP node configuration:
 |------|------|----------|-------------|
 | decoder_path | string | yes | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software.
+| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
+| gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
-The gateway component must be added as a dependency in the `Depends on` drop down.
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
@@ -110,14 +112,15 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
-## Configure the `viam:lorawan:Milesight-CT101`
+## Configure the `viam:lorawan:milesight-ct101`
 
 Example OTAA node configuration:
 
 ```json
 {
   "join_type": "OTAA",
-  "dev_eui": "0123456789ABCDEF"
+  "dev_eui": "0123456789ABCDEF",
+  "gateways": ["gateway-1"]
 }
 ```
 
@@ -126,7 +129,8 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "dev_addr": "01234567"
+  "dev_addr": "01234567",
+  "gateways": ["gateway-1"]
 }
 ```
 
@@ -135,9 +139,9 @@ Example ABP node configuration:
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **10** minutes.
+| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **10** minutes. |
+| gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
-The gateway component must be added as a dependency in the `Depends on` drop down.
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
@@ -155,14 +159,15 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
 
-## Configure the `viam:lorawan:Milesight-EM310-tilt`
+## Configure the `viam:lorawan:milesight-em10-tilt`
 
 Example OTAA node configuration:
 
 ```json
 {
   "join_type": "OTAA",
-  "dev_eui": "0123456789ABCDEF"
+  "dev_eui": "0123456789ABCDEF",
+  "gateways": ["gateway-1"]
 }
 ```
 
@@ -171,7 +176,8 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "dev_addr": "01234567"
+  "dev_addr": "01234567",
+  "gateways": ["gateway-1"]
 }
 ```
 
@@ -180,7 +186,8 @@ Example ABP node configuration:
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **10** minutes.
+| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **1080** minutes. |
+| gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
 The gateway component must be added as a dependency in the `Depends on` drop down.
 The node registers itself with the gateway so the gateway will recognize messages from the node.

@@ -1,3 +1,4 @@
+// package milesightem310 implements em310 node
 package milesightem310
 
 import (
@@ -13,10 +14,11 @@ import (
 
 const (
 	decoderFilename = "LHT65NChirpstack4decoder.js"
-	decoderURL      = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/EM_Series/EM300_Series/EM310-TILT/EM310-TILT_Decoder.js"
-	defaultAppKey   = "5572404C696E6B4C6F52613230313823"
-	defaultNwkSKey  = "5572404C696E6B4C6F52613230313823"
-	defaultAppSKey  = "5572404C696E6B4C6F52613230313823"
+	decoderURL      = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/EM_Series/" +
+		"EM300_Series/EM310-TILT/EM310-TILT_Decoder.js"
+	defaultAppKey  = "5572404C696E6B4C6F52613230313823"
+	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
+	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
 )
 
 var defaultIntervalMin = 1080.
