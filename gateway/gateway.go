@@ -479,7 +479,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// Criterias to determine if packets are identical:
+// Criteria to determine if packets are identical:
 //
 //	-- count_us should be equal or can have up to 24µs of difference (3 samples)
 //	-- freq should be same
@@ -489,11 +489,11 @@ func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
 	if math.Abs(float64(p1.count_us-p2.count_us)) <= 24 &&
 		p1.freq_hz == p2.freq_hz &&
 		p1.datarate == p2.datarate &&
+		//nolint:gocritic
 		C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
 		return true
 	}
 	return false
-
 }
 
 // searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
