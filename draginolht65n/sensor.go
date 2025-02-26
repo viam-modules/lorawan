@@ -3,8 +3,6 @@ package draginolht65n
 
 import (
 	"context"
-	"net/http"
-	"time"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -45,7 +43,7 @@ func init() {
 func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 	return node.Config{
 		JoinType:    conf.JoinType,
-		DecoderPath: decoderFilePath,
+		DecoderPath: decoderURL,
 		Interval:    conf.Interval,
 		DevEUI:      conf.DevEUI,
 		AppKey:      conf.AppKey,
@@ -81,22 +79,13 @@ func newLHT65N(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	httpClient := &http.Client{
-		Timeout: time.Second * 25,
-	}
-	decoderFilePath, err := node.WriteDecoderFileFromURL(ctx, decoderFilename, decoderURL, httpClient, logger)
-	if err != nil {
-		return nil, err
-	}
-
 	n := &LHT65N{
-		Named:       conf.ResourceName().AsNamed(),
-		logger:      logger,
-		node:        node.NewSensor(conf, logger),
-		decoderPath: decoderFilePath,
+		Named:  conf.ResourceName().AsNamed(),
+		logger: logger,
+		node:   node.NewSensor(conf, logger),
 	}
 
-	err = n.Reconfigure(ctx, deps, conf)
+	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}

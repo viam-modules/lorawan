@@ -4,6 +4,9 @@ package node
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/url"
+	"time"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -176,6 +179,13 @@ func newNode(
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
 
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return err
+	}
+
+
+
 	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
@@ -269,4 +279,12 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		return reading.(map[string]interface{}), nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
+}
+
+func isValidURL(str string) bool {
+	parsedURL, err := url.ParseRequestURI(str)
+	if err != nil {
+		return false
+	}
+	return parsedURL.Scheme != "" && parsedURL.Host != ""
 }

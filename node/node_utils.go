@@ -59,6 +59,19 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	}
 
 	n.DecoderPath = cfg.DecoderPath
+	// if the decoder path is a url, save the file
+	if isValidURL(n.DecoderPath) {
+		decoderFilename := n.NodeName + "decoder.js"
+		httpClient := &http.Client{
+			Timeout: time.Second * 25,
+		}
+		decoderFilePath, err := WriteDecoderFileFromURL(ctx, decoderFilename, cfg.DecoderPath, httpClient, n.logger)
+		if err != nil {
+			return err
+		}
+		n.DecoderPath = decoderFilePath
+	}
+
 	n.JoinType = cfg.JoinType
 
 	if n.JoinType == "" {
