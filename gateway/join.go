@@ -48,7 +48,7 @@ const (
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	g.logger.Infof("sending join accept to device %s", device.NodeName)
+	g.logger.Infof("sending join accept to %s", device.NodeName)
 
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:    C.uint32_t(rx2Frequenecy),
@@ -81,9 +81,8 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 	txPkt.payload = cPayload
 
 	// send on rx2 window - opens 6 seconds after join request.
-	if !utils.SelectContextOrWait(ctx, time.Second*joinRx2WindowSec) {
-		return nil
-	}
+	waitDuration := (joinRx2WindowSec * time.Second) - (time.Since(t))
+	accurateSleep(ctx, waitDuration)
 
 	// lock so there is not two sends at the same time.
 	g.mu.Lock()
@@ -94,6 +93,36 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 	}
 
 	return nil
+}
+
+// According to lorawan docs, the rx windows have an error range of 20 microseconds, so
+// we need to sleep for a more accurate amount of time.
+func accurateSleep(ctx context.Context, duration time.Duration) bool {
+	// If we use utils.SelectContextOrWait(), we will wake up sometime after when we're supposed
+	// to, which can be hundreds of microseconds later (because the process scheduler in the OS only
+	// schedules things every millisecond or two). For use cases like a web server responding to a
+	// query, that's fine. but when outputting a PWM signal, hundreds of microseconds can be a big
+	// deal. To avoid this, we sleep for less time than we're supposed to, and then busy-wait until
+	// the right time. Inspiration for this approach was taken from
+	// https://blog.bearcats.nl/accurate-sleep-function/
+	// On a raspberry pi 4, naively calling utils.SelectContextOrWait tended to have an error of
+	// about 140-300 microseconds, while this version had an error of 0.3-0.6 microseconds.
+	startTime := time.Now()
+	maxBusyWaitTime := 1500 * time.Microsecond
+	if duration > maxBusyWaitTime {
+		shorterDuration := duration - maxBusyWaitTime
+		if !utils.SelectContextOrWait(ctx, shorterDuration) {
+			return false
+		}
+	}
+
+	for time.Since(startTime) < duration {
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		// Otherwise, busy-wait some more
+	}
+	return true
 }
 
 // payload of join request consists of

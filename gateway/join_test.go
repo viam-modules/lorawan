@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -391,7 +392,7 @@ func TestHandleJoin(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 
-	err = g.handleJoin(ctx, payload)
+	err = g.handleJoin(ctx, payload, time.Now())
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test with unknown device
@@ -401,7 +402,7 @@ func TestHandleJoin(t *testing.T) {
 	unknownPayload = append(unknownPayload, testDevNonce...)
 	unknownPayload = append(unknownPayload, mic[:]...)
 
-	err = g.handleJoin(ctx, unknownPayload)
+	err = g.handleJoin(ctx, unknownPayload, time.Now())
 	test.That(t, err, test.ShouldEqual, errNoDevice)
 
 	err = g.Close(ctx)
