@@ -84,7 +84,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 	// send on rx2 window - opens 6 seconds after join request.
 	waitDuration := (joinRx2WindowSec * time.Second) - (time.Since(t))
 	if !accurateSleep(ctx, waitDuration) {
-		return fmt.Errorf("failed to send join accept: %w:", ctx.Err())
+		return fmt.Errorf("failed to send join accept: %w", ctx.Err())
 	}
 
 	// lock so there is not two sends at the same time.
