@@ -1,4 +1,4 @@
-// package milesightem310 implements em310 node
+// Package milesightem310 implements em310 node
 package milesightem310
 
 import (
