@@ -388,12 +388,12 @@ func TestHandleJoin(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	payload = append(payload, mic[:]...)
 
-	// Test with context that will timeout before rx2 window
-	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	// Test with context that will timeout before interacting with the hardware.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	err = g.handleJoin(ctx, payload, time.Now())
-	test.That(t, err, test.ShouldBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "context deadline exceeded")
 
 	// Test with unknown device
 	unknownPayload := []byte{0x00} // MHDR

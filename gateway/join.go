@@ -61,6 +61,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
+	// TODO: Move this to generic downlink function
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:    C.uint32_t(rx2Frequenecy),
 		tx_mode:    C.uint8_t(0), // immediate mode
@@ -82,7 +83,9 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 
 	// send on rx2 window - opens 6 seconds after join request.
 	waitDuration := (joinRx2WindowSec * time.Second) - (time.Since(t))
-	accurateSleep(ctx, waitDuration)
+	if !accurateSleep(ctx, waitDuration) {
+		return fmt.Errorf("failed to send join accept: %w:", ctx.Err())
+	}
 
 	// lock so there is not two sends at the same time.
 	g.mu.Lock()
