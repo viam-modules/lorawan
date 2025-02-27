@@ -59,7 +59,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte) error {
 		return err
 	}
 
-	g.logger.Infof("sending join accept to device %s", device.NodeName)
+	g.logger.Infof("sending join accept to %s", device.NodeName)
 
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:    C.uint32_t(rx2Frequenecy),

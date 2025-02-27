@@ -40,7 +40,7 @@ func init() {
 		})
 }
 
-func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
+func (conf *Config) getNodeConfig() node.Config {
 	return node.Config{
 		JoinType:    conf.JoinType,
 		DecoderPath: decoderURL,
@@ -56,7 +56,7 @@ func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	nodeConf := conf.getNodeConfig("fixed")
+	nodeConf := conf.getNodeConfig()
 	deps, err := nodeConf.Validate(path)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 		return err
 	}
 
-	nodeCfg := cfg.getNodeConfig(n.decoderPath)
+	nodeCfg := cfg.getNodeConfig()
 
 	err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg)
 	if err != nil {

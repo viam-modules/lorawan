@@ -10,7 +10,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.viam.com/rdk/logging"
@@ -61,7 +63,13 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	n.DecoderPath = cfg.DecoderPath
 	// if the decoder path is a url, save the file
 	if isValidURL(n.DecoderPath) {
-		decoderFilename := n.NodeName + "decoder.js"
+		decoderFilename := path.Base(n.DecoderPath)
+		// Check if the extension is .js
+		if !strings.HasSuffix(decoderFilename, ".js") {
+			// Change extension to .js
+			decoderFilename = strings.TrimSuffix(decoderFilename, path.Ext(decoderFilename)) + ".js"
+		}
+
 		httpClient := &http.Client{
 			Timeout: time.Second * 25,
 		}

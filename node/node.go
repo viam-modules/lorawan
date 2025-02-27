@@ -4,9 +4,7 @@ package node
 import (
 	"context"
 	"errors"
-	"net/http"
 	"net/url"
-	"time"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -178,13 +176,6 @@ func newNode(
 		// may be different if using remotes
 		NodeName: conf.ResourceName().AsNamed().Name().Name,
 	}
-
-	cfg, err := resource.NativeConfig[*Config](conf)
-	if err != nil {
-		return err
-	}
-
-
 
 	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
