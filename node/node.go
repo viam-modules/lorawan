@@ -151,6 +151,7 @@ type Node struct {
 	logger logging.Logger
 
 	AppSKey []byte
+	NwkSKey []byte
 	AppKey  []byte
 
 	Addr   []byte

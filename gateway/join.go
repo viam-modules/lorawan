@@ -28,7 +28,6 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
-	"go.viam.com/utils"
 )
 
 type joinRequest struct {
@@ -61,71 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	// TODO: Move this to generic downlink function
-	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:    C.uint32_t(rx2Frequenecy),
-		tx_mode:    C.uint8_t(0), // immediate mode
-		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),    // tx power in dbm
-		modulation: C.uint8_t(0x10), // LORA modulation
-		bandwidth:  C.uint8_t(rx2Bandwidth),
-		datarate:   C.uint32_t(rx2SF),
-		coderate:   C.uint8_t(0x01), // code rate 4/5
-		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
-		size:       C.uint16_t(len(joinAccept)),
-	}
-
-	var cPayload [256]C.uchar
-	for i, b := range joinAccept {
-		cPayload[i] = C.uchar(b)
-	}
-	txPkt.payload = cPayload
-
-	// send on rx2 window - opens 6 seconds after join request.
-	waitDuration := (joinRx2WindowSec * time.Second) - (time.Since(t))
-	if !accurateSleep(ctx, waitDuration) {
-		return fmt.Errorf("failed to send join accept: %w", ctx.Err())
-	}
-
-	// lock so there is not two sends at the same time.
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	errCode := int(C.send(&txPkt))
-	if errCode != 0 {
-		return errSendJoinAccept
-	}
-
-	return nil
-}
-
-// According to lorawan docs, the rx windows have an error range of 20 microseconds, so
-// we need to sleep for a more accurate amount of time.
-func accurateSleep(ctx context.Context, duration time.Duration) bool {
-	// If we use utils.SelectContextOrWait(), we will wake up sometime after when we're supposed
-	// to, which can be hundreds of microseconds later (because the process scheduler in the OS only
-	// schedules things every millisecond or two). For use cases like a web server responding to a
-	// query, that's fine. but when outputting a PWM signal, hundreds of microseconds can be a big
-	// deal. To avoid this, we sleep for less time than we're supposed to, and then busy-wait until
-	// the right time. Inspiration for this approach was taken from
-	// https://blog.bearcats.nl/accurate-sleep-function/
-	// On a raspberry pi 4, naively calling utils.SelectContextOrWait tended to have an error of
-	// about 140-300 microseconds, while this version had an error of 0.3-0.6 microseconds.
-	startTime := time.Now()
-	maxBusyWaitTime := 1500 * time.Microsecond
-	if duration > maxBusyWaitTime {
-		shorterDuration := duration - maxBusyWaitTime
-		if !utils.SelectContextOrWait(ctx, shorterDuration) {
-			return false
-		}
-	}
-
-	for time.Since(startTime) < duration {
-		if err := ctx.Err(); err != nil {
-			return false
-		}
-		// Otherwise, busy-wait some more
-	}
-	return true
+	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t)
 }
 
 // payload of join request consists of
@@ -254,18 +189,20 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	ja = append(ja, enc...)
 
 	// generate the session keys
-	appsKey, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
+	keys, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
 	if err != nil {
 		return nil, err
 	}
 
-	d.AppSKey = appsKey[:]
+	d.AppSKey = keys.appSKey
+	d.NwkSKey = keys.nwkSKey
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
 		DevEUI:  fmt.Sprintf("%X", devEUIBE),
 		DevAddr: fmt.Sprintf("%X", d.Addr),
 		AppSKey: fmt.Sprintf("%X", d.AppSKey),
+		NwkSKey: fmt.Sprintf("%X", d.NwkSKey),
 	}
 
 	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
@@ -334,7 +271,12 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 	return nil
 }
 
-func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (types.AES128Key, error) {
+type sessionKeys struct {
+	appSKey []byte
+	nwkSKey []byte
+}
+
+func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (sessionKeys, error) {
 	cryptoDev := &ttnpb.EndDevice{
 		Ids: &ttnpb.EndDeviceIdentifiers{JoinEui: joinEUI, DevEui: devEUI},
 	}
@@ -342,6 +284,8 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 	// TTN expects big endian dev nonce
 	devNonceBE := reverseByteArray(devNonce)
 	applicationCryptoService := cryptoservices.NewMemory(nil, &appKey)
+
+	var keys sessionKeys
 
 	// generate the appSKey!
 	// all inputs here are big endian.
@@ -354,10 +298,20 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 		types.NetID(networkID),
 	)
 	if err != nil {
-		return types.AES128Key{}, fmt.Errorf("failed to generate AppSKey: %w", err)
+		return sessionKeys{}, fmt.Errorf("failed to generate AppSKey: %s", err)
 	}
 
-	return appsKey, nil
+	keys.appSKey = appsKey[:]
+
+	nwkSKey := crypto.DeriveLegacyNwkSKey(
+		appKey,
+		types.JoinNonce(jn),
+		types.NetID(networkID),
+		types.DevNonce(devNonceBE))
+
+	keys.nwkSKey = nwkSKey[:]
+
+	return keys, nil
 }
 
 // generates random 3 byte join nonce
