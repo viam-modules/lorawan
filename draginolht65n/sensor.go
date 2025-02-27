@@ -3,8 +3,7 @@ package draginolht65n
 
 import (
 	"context"
-	"net/http"
-	"time"
+	"embed"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -20,6 +19,9 @@ const (
 
 // Model represents a dragino-LHT65N lorawan node model.
 var Model = node.LorawanFamily.WithModel("dragino-LHT65N")
+
+//go:embed LHT65NChirpstack4decoder.js
+var decoderFile embed.FS
 
 // Config defines the dragino-LHT65N's config.
 type Config struct {
@@ -81,10 +83,7 @@ func newLHT65N(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	httpClient := &http.Client{
-		Timeout: time.Second * 25,
-	}
-	decoderFilePath, err := node.WriteDecoderFileFromURL(ctx, decoderFilename, decoderURL, httpClient, logger)
+	decoderFilePath, err := node.WriteDecoderFile(decoderFilename, decoderFile)
 	if err != nil {
 		return nil, err
 	}
