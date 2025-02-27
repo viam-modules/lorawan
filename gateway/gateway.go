@@ -8,6 +8,7 @@ package gateway
 #include "../sx1302/libloragw/inc/loragw_hal.h"
 #include "gateway.h"
 #include <stdlib.h>
+#include <string.h>
 */
 import "C"
 
@@ -18,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -343,16 +345,17 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					continue
 				}
 
-				// // dont process duplicates
+				// don't process duplicates
 				if numPackets > 1 && i > 0 {
-					if packets[i-1].count_us == packets[i].count_us {
-						g.logger.Debug("skipped packet")
+					if isSamePacket(packets[i-1], packets[i]) {
+						g.logger.Debugf("skipped duplicate packet")
 						continue
 					}
 				}
 
 				g.logger.Infof("Received packet: freq=%d, count_us=%d, crc=0x%X, SF=0x%X, bandwidth=0x%X",
 					packets[i].freq_hz, packets[i].count_us, packets[i].crc, packets[i].datarate, packets[i].bandwidth)
+
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
@@ -494,6 +497,23 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+}
+
+// Criteria to determine if packets are identical:
+//
+//	-- count_us should be equal or can have up to 24µs of difference (3 samples)
+//	-- freq should be same
+//	-- datarate should be same
+//	-- payload should be same
+func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
+	if math.Abs(float64(p1.count_us-p2.count_us)) <= 24 &&
+		p1.freq_hz == p2.freq_hz &&
+		p1.datarate == p2.datarate &&
+		//nolint:gocritic
+		C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
+		return true
+	}
+	return false
 }
 
 // searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.

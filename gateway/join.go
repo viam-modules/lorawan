@@ -58,7 +58,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 		return err
 	}
 
-	g.logger.Infof("sending join accept to device %s", device.NodeName)
+	g.logger.Infof("sending join accept to %s", device.NodeName)
 
 	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t)
 }
