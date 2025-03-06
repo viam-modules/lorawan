@@ -332,7 +332,7 @@ func TestNewNode(t *testing.T) {
 	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, node.DecoderPath, test.ShouldEqual, expectedPath)
-
+	n.Close(ctx)
 }
 
 func TestReadings(t *testing.T) {
