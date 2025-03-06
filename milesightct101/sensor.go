@@ -1,11 +1,8 @@
-// Package draginolht65n implements the dragino_lth65n model
-package draginolht65n
+// Package milesightct101 implements the Milesight-CT101 model
+package milesightct101
 
 import (
 	"context"
-	"embed"
-	"os"
-	"path/filepath"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -14,16 +11,21 @@ import (
 )
 
 const (
-	decoderFilename = "LHT65NChirpstack4decoder.js"
+	decoderURL = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/CT_Series/CT101/CT101_Decoder.js"
+	// OTAA defaults.
+	defaultAppKey = "5572404C696E6B4C6F52613230313823"
+	// ABP defaults.
+	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
+	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
 )
 
-// Model represents a dragino-LHT65N lorawan node model.
-var Model = node.LorawanFamily.WithModel("dragino-LHT65N")
+// defaultIntervalMin is how often the CT101 will send an uplink.
+var defaultIntervalMin = 10. // minutes
 
-//go:embed LHT65NChirpstack4decoder.js
-var decoderFile embed.FS
+// Model represents a Milesight-CT101 lorawan node model.
+var Model = node.LorawanFamily.WithModel("milesight-ct101")
 
-// Config defines the dragino-LHT65N's config.
+// Config defines the Milesight-CT101's config.
 type Config struct {
 	JoinType string   `json:"join_type,omitempty"`
 	Interval *float64 `json:"uplink_interval_mins"`
@@ -40,26 +42,38 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: newLHT65N,
+			Constructor: newCT101,
 		})
 }
 
 func (conf *Config) getNodeConfig() node.Config {
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, decoderFilename)
-
+	appKey := defaultAppKey
+	if conf.AppKey != "" {
+		appKey = conf.AppKey
+	}
+	nwkSKey := defaultNwkSKey
+	if conf.NwkSKey != "" {
+		appKey = conf.NwkSKey
+	}
+	appSKey := defaultAppSKey
+	if conf.AppSKey != "" {
+		appSKey = conf.AppSKey
+	}
+	intervalMin := &defaultIntervalMin
+	if conf.Interval != nil {
+		intervalMin = conf.Interval
+	}
 	return node.Config{
 		JoinType:    conf.JoinType,
-		Interval:    conf.Interval,
-		DecoderPath: filePath,
+		DecoderPath: decoderURL,
+		Interval:    intervalMin,
 		DevEUI:      conf.DevEUI,
-		AppKey:      conf.AppKey,
-		AppSKey:     conf.AppSKey,
-		NwkSKey:     conf.NwkSKey,
+		AppKey:      appKey,
+		AppSKey:     appSKey,
+		NwkSKey:     nwkSKey,
 		DevAddr:     conf.DevAddr,
 		Gateways:    conf.Gateways,
 	}
-
 }
 
 // Validate ensures all parts of the config are valid.
@@ -72,33 +86,27 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return deps, nil
 }
 
-// LHT65N defines a lorawan node device.
-type LHT65N struct {
+// CT101 defines a lorawan node device.
+type CT101 struct {
 	resource.Named
 	logger logging.Logger
 
-	node        node.Node
-	decoderPath string
+	node node.Node
 }
 
-func newLHT65N(
+func newCT101(
 	ctx context.Context,
 	deps resource.Dependencies,
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	_, err := node.WriteDecoderFile(decoderFilename, decoderFile)
-	if err != nil {
-		return nil, err
-	}
-
-	n := &LHT65N{
+	n := &CT101{
 		Named:  conf.ResourceName().AsNamed(),
 		logger: logger,
 		node:   node.NewSensor(conf, logger),
 	}
 
-	err = n.Reconfigure(ctx, deps, conf)
+	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +115,7 @@ func newLHT65N(
 }
 
 // Reconfigure reconfigure's the node.
-func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+func (n *CT101) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -129,11 +137,11 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 }
 
 // Close removes the device from the gateway.
-func (n *LHT65N) Close(ctx context.Context) error {
+func (n *CT101) Close(ctx context.Context) error {
 	return n.node.Close(ctx)
 }
 
 // Readings returns the node's readings.
-func (n *LHT65N) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (n *CT101) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	return n.node.Readings(ctx, extra)
 }

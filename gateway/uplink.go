@@ -66,7 +66,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload: %w", err)
+		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload of device %s: %w", device.NodeName, err)
 	}
 
 	// payload was empty or unparsable
