@@ -4,8 +4,6 @@ package draginolht65n
 import (
 	"context"
 	"embed"
-	"os"
-	"path/filepath"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -44,14 +42,11 @@ func init() {
 		})
 }
 
-func (conf *Config) getNodeConfig() node.Config {
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, decoderFilename)
-
+func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 	return node.Config{
 		JoinType: conf.JoinType,
 		Interval: conf.Interval,
-		Decoder:  filePath,
+		Decoder:  decoderFilePath,
 		DevEUI:   conf.DevEUI,
 		AppKey:   conf.AppKey,
 		AppSKey:  conf.AppSKey,
@@ -63,7 +58,7 @@ func (conf *Config) getNodeConfig() node.Config {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	nodeConf := conf.getNodeConfig()
+	nodeConf := conf.getNodeConfig("fixed")
 	deps, err := nodeConf.Validate(path)
 	if err != nil {
 		return nil, err
@@ -74,8 +69,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 // LHT65N defines a lorawan node device.
 type LHT65N struct {
 	resource.Named
-	logger logging.Logger
-	node   node.Node
+	logger      logging.Logger
+	decoderPath string
+	node        node.Node
 }
 
 func newLHT65N(
@@ -84,15 +80,16 @@ func newLHT65N(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	_, err := node.WriteDecoderFile(decoderFilename, decoderFile)
+	decoderFilePath, err := node.WriteDecoderFile(decoderFilename, decoderFile)
 	if err != nil {
 		return nil, err
 	}
 
 	n := &LHT65N{
-		Named:  conf.ResourceName().AsNamed(),
-		logger: logger,
-		node:   node.NewSensor(conf, logger),
+		Named:       conf.ResourceName().AsNamed(),
+		logger:      logger,
+		node:        node.NewSensor(conf, logger),
+		decoderPath: decoderFilePath,
 	}
 
 	err = n.Reconfigure(ctx, deps, conf)
@@ -110,7 +107,7 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 		return err
 	}
 
-	nodeCfg := cfg.getNodeConfig()
+	nodeCfg := cfg.getNodeConfig(n.decoderPath)
 
 	err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg)
 	if err != nil {

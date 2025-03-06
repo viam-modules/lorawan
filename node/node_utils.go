@@ -62,6 +62,9 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	}
 
 	n.DecoderPath = cfg.Decoder
+
+	n.logger.Infof("HERE")
+	n.logger.Infof(n.DecoderPath)
 	// if the decoder path is a url, save the file
 	if isValidURL(n.DecoderPath) {
 		decoderFilename := path.Base(n.DecoderPath)
@@ -79,8 +82,9 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 			return err
 		}
 		n.DecoderPath = decoderFilePath
+	} else if err := isValidFilePath(n.DecoderPath); err != nil {
+		return fmt.Errorf("provided decoder file path is not valid: %v", err)
 	}
-
 	n.JoinType = cfg.JoinType
 
 	if n.JoinType == "" {
@@ -235,4 +239,21 @@ func isValidURL(str string) bool {
 		return false
 	}
 	return parsedURL.Scheme != "" && parsedURL.Host != ""
+}
+
+func isValidFilePath(path string) error {
+	// Get file info
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("error checking file: %v", err)
+	}
+
+	if info.IsDir() {
+		return errors.New("path is a directory, not a file")
+	}
+
+	if filepath.Ext(path) != ".js" {
+		return errors.New("decoder must be a .js file")
+	}
+	return nil
 }
