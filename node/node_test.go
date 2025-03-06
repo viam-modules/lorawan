@@ -40,7 +40,8 @@ const (
 var (
 	testInterval     = 5.0
 	testNodeReadings = map[string]interface{}{"reading": 1}
-	testDecoderURL   = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/CT_Series/CT101/CT101_Decoder.js"
+	testDecoderURL   = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/40e844fedbcf9a8c3b279142672fab1c89bee2e0/" +
+		"CT_Series/CT101/CT101_Decoder.js"
 )
 
 func createMockGateway() *inject.Sensor {

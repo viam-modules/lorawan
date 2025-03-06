@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	decoderURL = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/EM_Series/" +
-		"EM300_Series/EM310-TILT/EM310-TILT_Decoder.js"
+	decoderURL = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/fddc96c379ae0999d0fa2baef616b7856010cf14/" +
+		"EM_Series/EM300_Series/EM310-TILT/EM310-TILT_Decoder.js"
 	defaultAppKey  = "5572404C696E6B4C6F52613230313823"
 	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
 	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
