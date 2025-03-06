@@ -20,7 +20,6 @@ import (
 )
 
 const (
-
 	// Common test values.
 	testDecoderPath = "/path/to/decoder"
 
@@ -254,6 +253,14 @@ func TestNewNode(t *testing.T) {
 	deps := make(resource.Dependencies)
 	deps[encoder.Named(testGatewayName)] = mockGateway
 
+	tmpDir := t.TempDir()
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	// Create the file
+	file, err := os.Create(testDecoderPath)
+	test.That(t, err, test.ShouldBeNil)
+	defer file.Close()
+
 	// Test OTAA config
 	validConf := resource.Config{
 		Name: "test-node",
@@ -319,7 +326,6 @@ func TestNewNode(t *testing.T) {
 		},
 	}
 
-	tmpDir := t.TempDir()
 	t.Setenv("VIAM_MODULE_DATA", tmpDir)
 
 	n, err = newNode(ctx, deps, validConf, logger)
@@ -341,6 +347,14 @@ func TestReadings(t *testing.T) {
 	mockGateway := createMockGateway()
 	deps := make(resource.Dependencies)
 	deps[encoder.Named(testGatewayName)] = mockGateway
+
+	tmpDir := t.TempDir()
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	// Create the file
+	file, err := os.Create(testDecoderPath)
+	test.That(t, err, test.ShouldBeNil)
+	defer file.Close()
 
 	validConf := resource.Config{
 		Name: "test-node",
