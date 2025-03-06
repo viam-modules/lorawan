@@ -318,10 +318,8 @@ func TestNewNode(t *testing.T) {
 		},
 	}
 
-	oldEnvVarValue := os.Getenv("VIAM_MODULE_DATA")
-	defer os.Setenv("VIAM_MODULE_DATA", oldEnvVarValue)
 	tmpDir := t.TempDir()
-	os.Setenv("VIAM_MODULE_DATA", tmpDir)
+	t.Setenv("VIAM_MODULE_DATA", tmpDir)
 
 	n, err = newNode(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
