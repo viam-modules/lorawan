@@ -22,7 +22,7 @@ import (
 	"go.viam.com/utils"
 )
 
-var fCntDown uint16 = 0
+var fCntDown uint16 = 1
 
 func findDownLinkChannel(uplinkFreq int) int {
 	// channel number between 0-64
@@ -33,30 +33,37 @@ func findDownLinkChannel(uplinkFreq int) int {
 
 }
 
-func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int, t time.Time) error {
-	dataRate := 7
-	freq := findDownLinkChannel(uplinkFreq)
+func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int, t time.Time, count int) error {
+	// dataRate := 7
+	//	freq := findDownLinkChannel(uplinkFreq)
 	// g.logger.Infof("freq: %d", freq)
 	// freq := rx2Frequenecy
+	freq := rx2Frequenecy
+	dataRate := rx2SF
+
+	waitTime := 2 * 10e5
 	if join {
-		freq = rx2Frequenecy
-		dataRate = rx2SF
+		waitTime = 6 * 10e5
 	}
 
+	g.logger.Infof("count time: %d", count)
+	g.logger.Infof("total wait time: %d", count+int(waitTime))
 	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:    C.uint32_t(freq),
-		tx_mode:    C.uint8_t(0), // immediate
-		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),            // tx power in dbm
-		modulation: C.uint8_t(0x10),         // LORA modulation
-		bandwidth:  C.uint8_t(rx2Bandwidth), //500k
-		datarate:   C.uint32_t(dataRate),
-		coderate:   C.uint8_t(0x01), // code rate 4/5
-		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
-		size:       C.uint16_t(len(payload)),
-		preamble:   C.uint16_t(0),
-		no_crc:     C.bool(false),
-		no_header:  C.bool(false),
+		freq_hz:     C.uint32_t(freq),
+		freq_offset: C.int8_t(0),
+		tx_mode:     C.uint8_t(1), // time stamp
+		count_us:    C.uint32_t(count + int(waitTime)),
+		rf_chain:    C.uint8_t(0),
+		rf_power:    C.int8_t(26),    // tx power in dbm
+		modulation:  C.uint8_t(0x10), // LORA modulation
+		bandwidth:   C.uint8_t(0x06), //500k
+		datarate:    C.uint32_t(dataRate),
+		coderate:    C.uint8_t(0x01), // code rate 4/5
+		invert_pol:  C.bool(true),    // Downlinks are always reverse polarity.
+		size:        C.uint16_t(len(payload)),
+		preamble:    C.uint16_t(8),
+		no_crc:      C.bool(true), // CRCs in uplinks only
+		no_header:   C.bool(false),
 	}
 
 	var cPayload [256]C.uchar
@@ -68,25 +75,25 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	g.logger.Infof("time since: %v ", time.Since(t).Seconds())
 
 	// join request and other downlinks have different windows for class A devices.
-	// var waitTime float64
+	//var waitTime float64
 	var waitDuration time.Duration
 	switch join {
 	case true:
-		waitDuration = (joinRx2WindowSec * time.Second) - (time.Since(t))
+		waitDuration = (6 * time.Second) - (time.Since(t)) - 47709/32*time.Microsecond
 		// waitTime = (joinRx2WindowSec) - (time.Since(t).Seconds()) // only for debugging
 	default:
-		waitDuration = (1 * time.Second) - (time.Since(t)) // 1 for rx1
+		waitDuration = (2 * time.Second) - (time.Since(t)) - 47709/32*time.Microsecond
 		// waitTime = 2 - (time.Since(t).Seconds())           // only for debugging
 	}
 
-	// if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
+	// // if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
+	// // 	return errors.New("context canceled")
+	// // }
+	// // waitDuration := time.Duration(waitTime * 10e9)
+
+	// if !accurateSleep(ctx, waitDuration) {
 	// 	return errors.New("context canceled")
 	// }
-	// waitDuration := time.Duration(waitTime * 10e9)
-
-	if !accurateSleep(ctx, waitDuration) {
-		return errors.New("context canceled")
-	}
 
 	// lock the mutex to prevent two sends at the same time.
 	g.mu.Lock()
@@ -95,12 +102,10 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	defer g.logger.Infof("time since: %v ", time.Since(t).Seconds())
 	defer g.logger.Infof("time in accurate sleep: %v", waitDuration)
 	// defer g.logger.Infof("wait time %v", waitTime)
-
 	if errCode != 0 {
 		return errors.New("failed to send downlink packet")
 	}
 	var status C.uint8_t
-	g.logger.Info("here sending")
 	for {
 		C.lgw_status(txPkt.rf_chain, 1, &status)
 		if err := ctx.Err(); err != nil {
@@ -200,12 +205,19 @@ func (g *gateway) createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.
 
 	payload = append(payload, devAddr...)
 
-	// 3. FCtrl: ADR (1), RFU (0), ACK (0), FPending (0), FOptsLen (4)
-	payload = append(payload, 0x80)
+	// 3. FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0)
+	payload = append(payload, 0x00)
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, fCntDown)
 	payload = append(payload, fCntBytes...)
+
+	// fopts := []byte{
+	// 	0b00111001, // data rate and tx power
+	// 	0xFF,
+	// 	0x00,
+	// 	0x01,
+	// }
 
 	// fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
 
@@ -213,11 +225,11 @@ func (g *gateway) createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.
 
 	// // Fport
 	// Change to 0x00 for MAC-only downlink
-	payload = append(payload, 0x85)
+	payload = append(payload, 0x01) // 0x85 for tilt
 
-	// 30 sec
-	framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	// framePayload := []byte{0xff, 0x10, 0xff}
+	// 1 min
+	framePayload := []byte{0x01, 0x00, 0x02, 0x58} //  dragino
+	//framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
 	devAddrBE := reverseByteArray(devAddr)
 	encrypted, err := crypto.EncryptDownlink(appSKey, *types.MustDevAddr(devAddrBE), uint32(fCntDown), framePayload)
@@ -234,6 +246,11 @@ func (g *gateway) createIntervalDownlink(devAddr []byte, nwkSKey, appSKey types.
 	}
 
 	payload = append(payload, mic[:]...)
+
+	g.logger.Infof("full payload: %x", payload)
+	g.logger.Infof("frame payload: %x", encrypted)
+	g.logger.Infof("mic  %v", mic)
+	g.logger.Infof("fcnt %v", fCntDown)
 
 	// increment fCntDown
 	// TODO: write fcntDown to a file to persist across restarts.

@@ -335,7 +335,6 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		case -1:
 			g.logger.Errorf("error receiving lora packet")
 		default:
-			g.logger.Infof("packets received: %d", numPackets)
 			// convert from c array to go slice
 			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
 			for i := range numPackets {
@@ -352,30 +351,26 @@ func (g *gateway) receivePackets(ctx context.Context) {
 						continue
 					}
 				}
-
-				g.logger.Infof("Received packet: freq=%d, count_us=%d, crc=0x%X, SF=0x%X, bandwidth=0x%X",
-					packets[i].freq_hz, packets[i].count_us, packets[i].crc, packets[i].datarate, packets[i].bandwidth)
-
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
 					time := time.Now()
-					g.handlePacket(ctx, payload, int(packets[i].freq_hz), time)
+					g.handlePacket(ctx, payload, int(packets[i].freq_hz), time, int(packets[i].count_us))
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq int, t time.Time) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq int, t time.Time, count int) {
 	g.receivingWorker.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
 			g.logger.Debugf("received join request")
-			err := g.handleJoin(ctx, payload, t)
+			err := g.handleJoin(ctx, payload, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -385,7 +380,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq i
 			}
 		case 0x40:
 			g.logger.Debugf("received data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t)
+			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -397,7 +392,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq i
 			g.updateReadings(name, readings)
 		case 0x80:
 			g.logger.Debugf("received confirmed data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t)
+			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -495,6 +490,10 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		g.sendNewDownlink.Store(true)
 		return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
 	}
+	// if _, ok := cmd[setFCntKey]; ok {
+	// 	fCntDown =
+	// 	return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
+	// }
 
 	return map[string]interface{}{}, nil
 }

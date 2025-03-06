@@ -61,14 +61,22 @@ int setUpGateway(int bus) {
     rfconf.enable = true;
     rfconf.freq_hz = RADIO_0_FREQ;
     rfconf.radio_type = LGW_RADIO_TYPE_SX1250;
-    rfconf.rssi_offset = -215;
+    rfconf.rssi_offset = -215.4;
     rfconf.tx_enable = true;
+    struct lgw_rssi_tcomp_s tcomp;
+    tcomp.coeff_a = 0;
+    tcomp.coeff_b = 0;
+    tcomp.coeff_c = 21.41;
+    tcomp.coeff_d = 2162.56;
+    tcomp.coeff_e = 0;
+    rfconf.rssi_tcomp = tcomp;
 
     if (lgw_rxrf_setconf(0, &rfconf) != LGW_HAL_SUCCESS) {
         return 2;
     }
 
     rfconf.freq_hz = RADIO_1_FREQ;
+   // rfconf.tx_enable = false;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
         return 3;
 
@@ -81,7 +89,7 @@ int setUpGateway(int bus) {
     struct lgw_conf_rxif_s ifconf;
     memset(&ifconf, 0, sizeof(ifconf));
     ifconf.enable = true;
-    ifconf.datarate = DR_LORA_SF7;
+    ifconf.datarate = DR_LORA_SF10;
     ifconf.bandwidth = 0x04; //125k
     for (int i = 0; i < 8; i++) {
         ifconf.rf_chain = rfChains[i];
@@ -89,6 +97,40 @@ int setUpGateway(int bus) {
         if (lgw_rxif_setconf(i, &ifconf) != LGW_HAL_SUCCESS) {
             return 4;
         }
+    }
+
+
+//     2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   0:    902.3MHz rf=0 freq=-400.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   1:    902.5MHz rf=0 freq=-200.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   2:    902.7MHz rf=0 freq=  +0.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   3:    902.9MHz rf=0 freq=+200.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   4:    903.1MHz rf=0 freq=+400.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   5:    903.3MHz rf=1 freq=-400.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   6:    903.5MHz rf=1 freq=-200.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   7:    903.7MHz rf=1 freq=  +0.0 datarate=0
+// 2025-03-05 18:34:30.643 [RAL:INFO]  [STD]   8:    903.0MHz rf=0 freq=+300.0 datarate=8 bw=6
+
+    struct lgw_tx_gain_lut_s lut;
+    struct lgw_tx_gain_s txGain[16];
+
+    uint8_t paGain [16] =  {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1};
+    int8_t rf_power [16] = {12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27};
+    uint8_t pwr_idx [16] = {15,16,17,19,20,22,1,2,3,4,5,6,7,9,11,14};
+
+    for(int i = 0; i<16; i++) {
+        txGain[i].pa_gain = paGain[i];
+        txGain[i].rf_power = rf_power[i];
+        txGain[i].pwr_idx = pwr_idx[i];
+        txGain[i].dig_gain = 0;
+        txGain[i].dac_gain = 3;
+        txGain[i].mix_gain = 5;
+    }
+
+    memcpy(lut.lut, txGain, sizeof(txGain));
+    lut.size = 16;
+
+    if(lgw_txgain_setconf(0, &lut) != LGW_HAL_SUCCESS) {
+        return 4;
     }
 
     // start the gateway.
@@ -118,6 +160,8 @@ int send(struct lgw_pkt_tx_s* packet) {
 void disableBuffering() {
     setbuf(stdout, NULL);
 }
+
+
 
 
 #ifdef TESTING

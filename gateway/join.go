@@ -47,7 +47,7 @@ const (
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, count int) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t)
+	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t, count)
 }
 
 // payload of join request consists of
@@ -155,8 +155,8 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		0x00, // Disable channels 40-47
 		0x00, // Disable channels 48-55
 		0x00, // Disable channels 56-63
-		0x00, // Disable channels 64-71
-		0x00, // Disable channels 72-79
+		0x01, // Disable channels 64-71
+		0xff, // Disable channels 72-79
 		0x00, // RFU (reserved for future use)
 		0x00, // RFU
 		0x00, // RFU
@@ -178,15 +178,21 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload = append(payload, resMIC[:]...)
 
+	g.logger.Infof("before length: %d", len(payload))
+
 	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
 
+	g.logger.Infof("encrypted length: %d", len(enc))
+
 	ja := make([]byte, 0)
 	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
+
+	g.logger.Infof("ja length %d", len(ja))
 
 	// generate the session keys
 	keys, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
@@ -211,7 +217,30 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		g.logger.Errorf("failed to write device info to file: %v", err)
 	}
 
-	// return the encrypted join accept message
+	// joinAcceptBytes := []byte{0x20}
+
+	// // return the encrypted join accept message
+	// ja2, err := hex.DecodeString("96ab2576dca7eab27de3e8f400ccb0bd021288d99200b1cd3160437e")
+	// if err != nil {
+	// 	fmt.Println("Error decoding hex string:", err)
+	// }
+
+	// joinAcceptBytes = append(joinAcceptBytes, ja2...)
+	// mic := []byte{25, 57, 139, 84}
+	// nwkSKey, _ := hex.DecodeString("c6cd9837b153d3d1ba8ebb0fa7a5ea38")
+	// d.NwkSKey = nwkSKey
+	// appSKey, _ := hex.DecodeString("03cd0b2c09d2832a267a69266b71dcd6")
+	// d.AppSKey = appSKey
+
+	// devAddrBE := []byte{0x01, 0xa3, 0x6a, 0xc0}
+	// d.Addr = devAddrBE
+	// //devAddrLE := reverseByteArray(devAddrBE)
+
+	// joinAcceptBytes = append(joinAcceptBytes, mic...)
+
+	// g.logger.Infof("length: %d", len(joinAcceptBytes))
+
+	//return joinAcceptBytes, nil
 	return ja, nil
 }
 
@@ -437,3 +466,9 @@ func readFromFile(file *os.File) ([]deviceInfo, error) {
 
 	return devices, nil
 }
+
+// 96 157 235 5 0 128 2 0 57 255 0 1 1 61 239 231 4 162 91 218 82
+
+// frame payload 61 239 231 4
+
+// mic  162 91 218 82
