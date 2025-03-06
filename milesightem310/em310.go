@@ -63,15 +63,15 @@ func (conf *Config) getNodeConfig() node.Config {
 	}
 
 	return node.Config{
-		JoinType:    conf.JoinType,
-		DecoderPath: decoderURL,
-		Interval:    intervalMin,
-		DevEUI:      conf.DevEUI,
-		AppKey:      appKey,
-		AppSKey:     appSKey,
-		NwkSKey:     nwkSKey,
-		DevAddr:     conf.DevAddr,
-		Gateways:    conf.Gateways,
+		JoinType: conf.JoinType,
+		Decoder:  decoderURL,
+		Interval: intervalMin,
+		DevEUI:   conf.DevEUI,
+		AppKey:   appKey,
+		AppSKey:  appSKey,
+		NwkSKey:  nwkSKey,
+		DevAddr:  conf.DevAddr,
+		Gateways: conf.Gateways,
 	}
 }
 
@@ -89,9 +89,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 type em310Tilt struct {
 	resource.Named
 	logger logging.Logger
-
-	node        node.Node
-	decoderPath string
+	node   node.Node
 }
 
 func newEM310Tilt(

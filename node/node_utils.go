@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -60,7 +61,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		n.AppSKey = appSKey
 	}
 
-	n.DecoderPath = cfg.DecoderPath
+	n.DecoderPath = cfg.Decoder
 	// if the decoder path is a url, save the file
 	if isValidURL(n.DecoderPath) {
 		decoderFilename := path.Base(n.DecoderPath)
@@ -73,7 +74,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		httpClient := &http.Client{
 			Timeout: time.Second * 25,
 		}
-		decoderFilePath, err := WriteDecoderFileFromURL(ctx, decoderFilename, cfg.DecoderPath, httpClient, n.logger)
+		decoderFilePath, err := WriteDecoderFileFromURL(ctx, decoderFilename, cfg.Decoder, httpClient, n.logger)
 		if err != nil {
 			return err
 		}
@@ -226,4 +227,12 @@ func WriteDecoderFileFromURL(ctx context.Context, decoderFilename, url string,
 	}
 
 	return filePath, nil
+}
+
+func isValidURL(str string) bool {
+	parsedURL, err := url.ParseRequestURI(str)
+	if err != nil {
+		return false
+	}
+	return parsedURL.Scheme != "" && parsedURL.Host != ""
 }

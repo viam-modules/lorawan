@@ -49,17 +49,16 @@ func (conf *Config) getNodeConfig() node.Config {
 	filePath := filepath.Join(moduleDataDir, decoderFilename)
 
 	return node.Config{
-		JoinType:    conf.JoinType,
-		Interval:    conf.Interval,
-		DecoderPath: filePath,
-		DevEUI:      conf.DevEUI,
-		AppKey:      conf.AppKey,
-		AppSKey:     conf.AppSKey,
-		NwkSKey:     conf.NwkSKey,
-		DevAddr:     conf.DevAddr,
-		Gateways:    conf.Gateways,
+		JoinType: conf.JoinType,
+		Interval: conf.Interval,
+		Decoder:  filePath,
+		DevEUI:   conf.DevEUI,
+		AppKey:   conf.AppKey,
+		AppSKey:  conf.AppSKey,
+		NwkSKey:  conf.NwkSKey,
+		DevAddr:  conf.DevAddr,
+		Gateways: conf.Gateways,
 	}
-
 }
 
 // Validate ensures all parts of the config are valid.
@@ -76,9 +75,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 type LHT65N struct {
 	resource.Named
 	logger logging.Logger
-
-	node        node.Node
-	decoderPath string
+	node   node.Node
 }
 
 func newLHT65N(

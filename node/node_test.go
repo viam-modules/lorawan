@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ const (
 var (
 	testInterval     = 5.0
 	testNodeReadings = map[string]interface{}{"reading": 1}
+	testDecoderURL   = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/CT_Series/CT101/CT101_Decoder.js"
 )
 
 func createMockGateway() *inject.Sensor {
@@ -60,12 +62,12 @@ func createMockGateway() *inject.Sensor {
 func TestConfigValidate(t *testing.T) {
 	// valid config
 	conf := &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeOTAA,
-		DevEUI:      testDevEUI,
-		AppKey:      testAppKey,
-		Gateways:    []string{testGatewayName},
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeOTAA,
+		DevEUI:   testDevEUI,
+		AppKey:   testAppKey,
+		Gateways: []string{testGatewayName},
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -81,7 +83,7 @@ func TestConfigValidate(t *testing.T) {
 
 	// Test missing interval
 	conf = &Config{
-		DecoderPath: testDecoderPath,
+		Decoder: testDecoderPath,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrIntervalRequired))
@@ -89,17 +91,17 @@ func TestConfigValidate(t *testing.T) {
 	zeroInterval := 0.0
 	// Test zero interval
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &zeroInterval,
+		Decoder:  testDecoderPath,
+		Interval: &zeroInterval,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrIntervalZero))
 
 	// Test invalid join type
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    "INVALID",
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: "INVALID",
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrInvalidJoinType))
@@ -108,53 +110,53 @@ func TestConfigValidate(t *testing.T) {
 func TestValidateOTAAAttributes(t *testing.T) {
 	// Test missing DevEUI
 	conf := &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeOTAA,
-		AppKey:      testAppKey,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeOTAA,
+		AppKey:   testAppKey,
 	}
 	_, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUIRequired))
 
 	// Test invalid DevEUI length
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeOTAA,
-		DevEUI:      "0123456", // Not 8 bytes
-		AppKey:      testAppKey,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeOTAA,
+		DevEUI:   "0123456", // Not 8 bytes
+		AppKey:   testAppKey,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUILength))
 
 	// Test missing AppKey
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeOTAA,
-		DevEUI:      testDevEUI,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeOTAA,
+		DevEUI:   testDevEUI,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyRequired))
 
 	// Test invalid AppKey length
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeOTAA,
-		DevEUI:      testDevEUI,
-		AppKey:      "0123456", // Not 16 bytes
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeOTAA,
+		DevEUI:   testDevEUI,
+		AppKey:   "0123456", // Not 16 bytes
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyLength))
 
 	// Test valid OTAA config
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeOTAA,
-		DevEUI:      testDevEUI,
-		AppKey:      testAppKey,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeOTAA,
+		DevEUI:   testDevEUI,
+		AppKey:   testAppKey,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -163,81 +165,81 @@ func TestValidateOTAAAttributes(t *testing.T) {
 func TestValidateABPAttributes(t *testing.T) {
 	// Test missing AppSKey
 	conf := &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		NwkSKey:     testNwkSKey,
-		DevAddr:     testDevAddr,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		NwkSKey:  testNwkSKey,
+		DevAddr:  testDevAddr,
 	}
 	_, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyRequired))
 
 	// Test invalid AppSKey length
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		AppSKey:     "0123456", // Not 16 bytes
-		NwkSKey:     testNwkSKey,
-		DevAddr:     testDevAddr,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		AppSKey:  "0123456", // Not 16 bytes
+		NwkSKey:  testNwkSKey,
+		DevAddr:  testDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyLength))
 
 	// Test missing NwkSKey
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		AppSKey:     testAppSKey,
-		DevAddr:     testDevAddr,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		AppSKey:  testAppSKey,
+		DevAddr:  testDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyRequired))
 
 	// Test invalid NwkSKey length
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		AppSKey:     testAppSKey,
-		NwkSKey:     "0123456", // Not 16 bytes
-		DevAddr:     testDevAddr,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		AppSKey:  testAppSKey,
+		NwkSKey:  "0123456", // Not 16 bytes
+		DevAddr:  testDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyLength))
 
 	// Test missing DevAddr
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		AppSKey:     testAppSKey,
-		NwkSKey:     testNwkSKey,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		AppSKey:  testAppSKey,
+		NwkSKey:  testNwkSKey,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrRequired))
 
 	// Test invalid DevAddr length
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		AppSKey:     testAppSKey,
-		NwkSKey:     testNwkSKey,
-		DevAddr:     "0123", // Not 4 bytes
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		AppSKey:  testAppSKey,
+		NwkSKey:  testNwkSKey,
+		DevAddr:  "0123", // Not 4 bytes
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrLength))
 
 	// Test valid ABP config
 	conf = &Config{
-		DecoderPath: testDecoderPath,
-		Interval:    &testInterval,
-		JoinType:    JoinTypeABP,
-		AppSKey:     testAppSKey,
-		NwkSKey:     testNwkSKey,
-		DevAddr:     testDevAddr,
+		Decoder:  testDecoderPath,
+		Interval: &testInterval,
+		JoinType: JoinTypeABP,
+		AppSKey:  testAppSKey,
+		NwkSKey:  testNwkSKey,
+		DevAddr:  testDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -255,11 +257,11 @@ func TestNewNode(t *testing.T) {
 	validConf := resource.Config{
 		Name: "test-node",
 		ConvertedAttributes: &Config{
-			DecoderPath: testDecoderPath,
-			Interval:    &testInterval,
-			JoinType:    JoinTypeOTAA,
-			DevEUI:      testDevEUI,
-			AppKey:      testAppKey,
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
 		},
 	}
 
@@ -276,12 +278,12 @@ func TestNewNode(t *testing.T) {
 	validABPConf := resource.Config{
 		Name: "test-node-abp",
 		ConvertedAttributes: &Config{
-			DecoderPath: testDecoderPath,
-			Interval:    &testInterval,
-			JoinType:    JoinTypeABP,
-			AppSKey:     testAppSKey,
-			NwkSKey:     testNwkSKey,
-			DevAddr:     testDevAddr,
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeABP,
+			AppSKey:  testAppSKey,
+			NwkSKey:  testNwkSKey,
+			DevAddr:  testDevAddr,
 		},
 	}
 
@@ -302,6 +304,35 @@ func TestNewNode(t *testing.T) {
 	expectedAppSKey, err := hex.DecodeString(testAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, node.AppSKey, test.ShouldResemble, expectedAppSKey)
+	n.Close(ctx)
+
+	// Decoder can be URL
+	validConf = resource.Config{
+		Name: "test-node",
+		ConvertedAttributes: &Config{
+			Decoder:  testDecoderURL,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	oldEnvVarValue := os.Getenv("VIAM_MODULE_DATA")
+	defer os.Setenv("VIAM_MODULE_DATA", oldEnvVarValue)
+	tmpDir := t.TempDir()
+	os.Setenv("VIAM_MODULE_DATA", tmpDir)
+
+	n, err = newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+
+	node = n.(*Node)
+	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
+	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
+	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
+	test.That(t, node.DecoderPath, test.ShouldEqual, expectedPath)
+
 }
 
 func TestReadings(t *testing.T) {
@@ -315,11 +346,11 @@ func TestReadings(t *testing.T) {
 	validConf := resource.Config{
 		Name: "test-node",
 		ConvertedAttributes: &Config{
-			DecoderPath: testDecoderPath,
-			Interval:    &testInterval,
-			JoinType:    JoinTypeOTAA,
-			DevEUI:      testDevEUI,
-			AppKey:      testAppKey,
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
 		},
 	}
 
@@ -335,11 +366,11 @@ func TestReadings(t *testing.T) {
 	validConf = resource.Config{
 		Name: "other-node",
 		ConvertedAttributes: &Config{
-			DecoderPath: testDecoderPath,
-			Interval:    &testInterval,
-			JoinType:    JoinTypeOTAA,
-			DevEUI:      testDevEUI,
-			AppKey:      testAppKey,
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
 		},
 	}
 

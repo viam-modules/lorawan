@@ -64,15 +64,15 @@ func (conf *Config) getNodeConfig() node.Config {
 		intervalMin = conf.Interval
 	}
 	return node.Config{
-		JoinType:    conf.JoinType,
-		DecoderPath: decoderURL,
-		Interval:    intervalMin,
-		DevEUI:      conf.DevEUI,
-		AppKey:      appKey,
-		AppSKey:     appSKey,
-		NwkSKey:     nwkSKey,
-		DevAddr:     conf.DevAddr,
-		Gateways:    conf.Gateways,
+		JoinType: conf.JoinType,
+		Decoder:  decoderURL,
+		Interval: intervalMin,
+		DevEUI:   conf.DevEUI,
+		AppKey:   appKey,
+		AppSKey:  appSKey,
+		NwkSKey:  nwkSKey,
+		DevAddr:  conf.DevAddr,
+		Gateways: conf.Gateways,
 	}
 }
 
@@ -90,8 +90,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 type CT101 struct {
 	resource.Named
 	logger logging.Logger
-
-	node node.Node
+	node   node.Node
 }
 
 func newCT101(
