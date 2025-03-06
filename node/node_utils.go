@@ -63,8 +63,6 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 
 	n.DecoderPath = cfg.Decoder
 
-	n.logger.Infof("HERE")
-	n.logger.Infof(n.DecoderPath)
 	// if the decoder path is a url, save the file
 	if isValidURL(n.DecoderPath) {
 		decoderFilename := path.Base(n.DecoderPath)

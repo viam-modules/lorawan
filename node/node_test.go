@@ -327,7 +327,6 @@ func TestNewNode(t *testing.T) {
 	}
 
 	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
 	n, err = newNode(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
@@ -338,6 +337,23 @@ func TestNewNode(t *testing.T) {
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, node.DecoderPath, test.ShouldEqual, expectedPath)
 	n.Close(ctx)
+
+	// Invalid decoder file should error
+	invalidDecoderConf := resource.Config{
+		Name: "test-node",
+		ConvertedAttributes: &Config{
+			Decoder:  "/worong/path",
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	n, err = newNode(ctx, deps, invalidDecoderConf, logger)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
+
 }
 
 func TestReadings(t *testing.T) {
