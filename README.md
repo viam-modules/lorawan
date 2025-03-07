@@ -5,10 +5,13 @@ For more on why this is useful, see the [article on the Viam blog](https://www.v
 
 This module combines the functionality of a LoRaWAN gateway and network server, enabling communication between LoRaWAN sensors and the Viam app.
 It handles packet forwarding, device management, and message routing to allow LoRaWAN sensor data to be viewed and managed directly in Viam.
-This module provides two models:
+This module provides the following models:
 
 - `sx1302-gateway`: Sensor model for a SX1302 LoRaWAN concentrator hat connected to a Raspberry Pi.
-- `node`: Sensor model for the end nodes sending data to the gateway.
+- `node`: Sensor model for any class A, US915 LoraWAN end device.
+- `dragino-LHT65N`: Sensor model for the dragino LHT65N temperature and humidity sensor.
+- `milesight-ct101`: Sensor model for the milesight ct101 current transformer.
+- `milesight-em310-tilt`: Sensor model for the milesight em310 tilt sensor.
 
 You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
 
@@ -205,7 +208,6 @@ The node registers itself with the gateway so the gateway will recognize message
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
-
 
 
 ## Troubleshooting Notes
