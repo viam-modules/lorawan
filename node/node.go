@@ -49,15 +49,15 @@ var noReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config defines the node's config.
 type Config struct {
-	JoinType    string   `json:"join_type,omitempty"`
-	DecoderPath string   `json:"decoder_path"`
-	Interval    *float64 `json:"uplink_interval_mins"`
-	DevEUI      string   `json:"dev_eui,omitempty"`
-	AppKey      string   `json:"app_key,omitempty"`
-	AppSKey     string   `json:"app_s_key,omitempty"`
-	NwkSKey     string   `json:"network_s_key,omitempty"`
-	DevAddr     string   `json:"dev_addr,omitempty"`
-	Gateways    []string `json:"gateways"`
+	JoinType string   `json:"join_type,omitempty"`
+	Decoder  string   `json:"decoder_path"`
+	Interval *float64 `json:"uplink_interval_mins"`
+	DevEUI   string   `json:"dev_eui,omitempty"`
+	AppKey   string   `json:"app_key,omitempty"`
+	AppSKey  string   `json:"app_s_key,omitempty"`
+	NwkSKey  string   `json:"network_s_key,omitempty"`
+	DevAddr  string   `json:"dev_addr,omitempty"`
+	Gateways []string `json:"gateways"`
 }
 
 func init() {
@@ -71,7 +71,7 @@ func init() {
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	if conf.DecoderPath == "" {
+	if conf.Decoder == "" {
 		return nil, resource.NewConfigValidationError(path, ErrDecoderPathRequired)
 	}
 

@@ -13,8 +13,6 @@ import (
 
 const (
 	decoderFilename = "LHT65NChirpstack4decoder.js"
-	decoderURL      = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/refs/heads/main/LHT65N/" +
-		"LHT65N Chirpstack  4.0 decoder.txt"
 )
 
 // Model represents a dragino-LHT65N lorawan node model.
@@ -46,15 +44,15 @@ func init() {
 
 func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 	return node.Config{
-		JoinType:    conf.JoinType,
-		DecoderPath: decoderFilePath,
-		Interval:    conf.Interval,
-		DevEUI:      conf.DevEUI,
-		AppKey:      conf.AppKey,
-		AppSKey:     conf.AppSKey,
-		NwkSKey:     conf.NwkSKey,
-		DevAddr:     conf.DevAddr,
-		Gateways:    conf.Gateways,
+		JoinType: conf.JoinType,
+		Interval: conf.Interval,
+		Decoder:  decoderFilePath,
+		DevEUI:   conf.DevEUI,
+		AppKey:   conf.AppKey,
+		AppSKey:  conf.AppSKey,
+		NwkSKey:  conf.NwkSKey,
+		DevAddr:  conf.DevAddr,
+		Gateways: conf.Gateways,
 	}
 }
 
@@ -71,10 +69,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 // LHT65N defines a lorawan node device.
 type LHT65N struct {
 	resource.Named
-	logger logging.Logger
-
-	node        node.Node
+	logger      logging.Logger
 	decoderPath string
+	node        node.Node
 }
 
 func newLHT65N(
