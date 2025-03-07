@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -54,6 +55,8 @@ var (
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
+const sendDownlinkKey = "senddown"
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -75,6 +78,7 @@ type deviceInfo struct {
 	DevEUI  string `json:"dev_eui"`
 	DevAddr string `json:"dev_addr"`
 	AppSKey string `json:"app_skey"`
+	NwkSKey string `json:"nwk_skey"`
 }
 
 func init() {
@@ -128,6 +132,8 @@ type gateway struct {
 	logWriter *os.File
 	dataFile  *os.File
 	dataMu    sync.Mutex
+
+	sendNewDownlink atomic.Bool
 }
 
 // NewGateway creates a new gateway
@@ -315,8 +321,9 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
+		g.mu.Lock()
 		numPackets := int(C.receive(p))
-
+		g.mu.Unlock()
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -349,20 +356,21 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
-					g.handlePacket(ctx, payload)
+					time := time.Now()
+					g.handlePacket(ctx, payload, int(packets[i].freq_hz), time, int(packets[i].count_us))
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq int, t time.Time, count int) {
 	g.receivingWorker.Add(func(ctx context.Context) {
 		// first byte is MHDR - specifies message type
 		switch payload[0] {
 		case 0x0:
 			g.logger.Debugf("received join request")
-			err := g.handleJoin(ctx, payload, time.Now())
+			err := g.handleJoin(ctx, payload, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -372,7 +380,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 			}
 		case 0x40:
 			g.logger.Debugf("received data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload)
+			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -384,7 +392,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
 			g.updateReadings(name, readings)
 		case 0x80:
 			g.logger.Debugf("received confirmed data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload)
+			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
 				if errors.Is(errNoDevice, err) {
@@ -475,6 +483,17 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
+	if _, ok := cmd[sendDownlinkKey]; ok {
+		if g.sendNewDownlink.Load() {
+			return nil, errors.New("downlink already flagged")
+		}
+		g.sendNewDownlink.Store(true)
+		return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
+	}
+	// if _, ok := cmd[setFCntKey]; ok {
+	// 	fCntDown =
+	// 	return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
+	// }
 
 	return map[string]interface{}{}, nil
 }
@@ -533,8 +552,14 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 		return fmt.Errorf("failed to decode file's dev addr: %w", err)
 	}
 
+	nwksKey, err := hex.DecodeString(d.NwkSKey)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's nwk session key: %w", err)
+	}
+
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
+	device.NwkSKey = nwksKey
 
 	// Update the device in the map.
 	g.devices[device.NodeName] = device

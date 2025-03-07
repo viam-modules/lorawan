@@ -28,7 +28,6 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
-	"go.viam.com/utils"
 )
 
 type joinRequest struct {
@@ -48,7 +47,7 @@ const (
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, count int) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -61,71 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time) e
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	// TODO: Move this to generic downlink function
-	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:    C.uint32_t(rx2Frequenecy),
-		tx_mode:    C.uint8_t(0), // immediate mode
-		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),    // tx power in dbm
-		modulation: C.uint8_t(0x10), // LORA modulation
-		bandwidth:  C.uint8_t(rx2Bandwidth),
-		datarate:   C.uint32_t(rx2SF),
-		coderate:   C.uint8_t(0x01), // code rate 4/5
-		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
-		size:       C.uint16_t(len(joinAccept)),
-	}
-
-	var cPayload [256]C.uchar
-	for i, b := range joinAccept {
-		cPayload[i] = C.uchar(b)
-	}
-	txPkt.payload = cPayload
-
-	// send on rx2 window - opens 6 seconds after join request.
-	waitDuration := (joinRx2WindowSec * time.Second) - (time.Since(t))
-	if !accurateSleep(ctx, waitDuration) {
-		return fmt.Errorf("failed to send join accept: %w", ctx.Err())
-	}
-
-	// lock so there is not two sends at the same time.
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	errCode := int(C.send(&txPkt))
-	if errCode != 0 {
-		return errSendJoinAccept
-	}
-
-	return nil
-}
-
-// According to lorawan docs, the rx windows have an error range of 20 microseconds, so
-// we need to sleep for a more accurate amount of time.
-func accurateSleep(ctx context.Context, duration time.Duration) bool {
-	// If we use utils.SelectContextOrWait(), we will wake up sometime after when we're supposed
-	// to, which can be hundreds of microseconds later (because the process scheduler in the OS only
-	// schedules things every millisecond or two). For use cases like a web server responding to a
-	// query, that's fine. but when outputting a PWM signal, hundreds of microseconds can be a big
-	// deal. To avoid this, we sleep for less time than we're supposed to, and then busy-wait until
-	// the right time. Inspiration for this approach was taken from
-	// https://blog.bearcats.nl/accurate-sleep-function/
-	// On a raspberry pi 4, naively calling utils.SelectContextOrWait tended to have an error of
-	// about 140-300 microseconds, while this version had an error of 0.3-0.6 microseconds.
-	startTime := time.Now()
-	maxBusyWaitTime := 1500 * time.Microsecond
-	if duration > maxBusyWaitTime {
-		shorterDuration := duration - maxBusyWaitTime
-		if !utils.SelectContextOrWait(ctx, shorterDuration) {
-			return false
-		}
-	}
-
-	for time.Since(startTime) < duration {
-		if err := ctx.Err(); err != nil {
-			return false
-		}
-		// Otherwise, busy-wait some more
-	}
-	return true
+	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t, count)
 }
 
 // payload of join request consists of
@@ -220,8 +155,8 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		0x00, // Disable channels 40-47
 		0x00, // Disable channels 48-55
 		0x00, // Disable channels 56-63
-		0x00, // Disable channels 64-71
-		0x00, // Disable channels 72-79
+		0x01, // Disable channels 64-71
+		0xff, // Disable channels 72-79
 		0x00, // RFU (reserved for future use)
 		0x00, // RFU
 		0x00, // RFU
@@ -243,29 +178,37 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload = append(payload, resMIC[:]...)
 
+	g.logger.Infof("before length: %d", len(payload))
+
 	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
+
+	g.logger.Infof("encrypted length: %d", len(enc))
 
 	ja := make([]byte, 0)
 	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
 
+	g.logger.Infof("ja length %d", len(ja))
+
 	// generate the session keys
-	appsKey, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
+	keys, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
 	if err != nil {
 		return nil, err
 	}
 
-	d.AppSKey = appsKey[:]
+	d.AppSKey = keys.appSKey
+	d.NwkSKey = keys.nwkSKey
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
 		DevEUI:  fmt.Sprintf("%X", devEUIBE),
 		DevAddr: fmt.Sprintf("%X", d.Addr),
 		AppSKey: fmt.Sprintf("%X", d.AppSKey),
+		NwkSKey: fmt.Sprintf("%X", d.NwkSKey),
 	}
 
 	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
@@ -274,7 +217,30 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		g.logger.Errorf("failed to write device info to file: %v", err)
 	}
 
-	// return the encrypted join accept message
+	// joinAcceptBytes := []byte{0x20}
+
+	// // return the encrypted join accept message
+	// ja2, err := hex.DecodeString("96ab2576dca7eab27de3e8f400ccb0bd021288d99200b1cd3160437e")
+	// if err != nil {
+	// 	fmt.Println("Error decoding hex string:", err)
+	// }
+
+	// joinAcceptBytes = append(joinAcceptBytes, ja2...)
+	// mic := []byte{25, 57, 139, 84}
+	// nwkSKey, _ := hex.DecodeString("c6cd9837b153d3d1ba8ebb0fa7a5ea38")
+	// d.NwkSKey = nwkSKey
+	// appSKey, _ := hex.DecodeString("03cd0b2c09d2832a267a69266b71dcd6")
+	// d.AppSKey = appSKey
+
+	// devAddrBE := []byte{0x01, 0xa3, 0x6a, 0xc0}
+	// d.Addr = devAddrBE
+	// //devAddrLE := reverseByteArray(devAddrBE)
+
+	// joinAcceptBytes = append(joinAcceptBytes, mic...)
+
+	// g.logger.Infof("length: %d", len(joinAcceptBytes))
+
+	//return joinAcceptBytes, nil
 	return ja, nil
 }
 
@@ -334,7 +300,12 @@ func validateMIC(appKey types.AES128Key, payload []byte) error {
 	return nil
 }
 
-func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (types.AES128Key, error) {
+type sessionKeys struct {
+	appSKey []byte
+	nwkSKey []byte
+}
+
+func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID []byte, appKey types.AES128Key) (sessionKeys, error) {
 	cryptoDev := &ttnpb.EndDevice{
 		Ids: &ttnpb.EndDeviceIdentifiers{JoinEui: joinEUI, DevEui: devEUI},
 	}
@@ -342,6 +313,8 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 	// TTN expects big endian dev nonce
 	devNonceBE := reverseByteArray(devNonce)
 	applicationCryptoService := cryptoservices.NewMemory(nil, &appKey)
+
+	var keys sessionKeys
 
 	// generate the appSKey!
 	// all inputs here are big endian.
@@ -354,10 +327,20 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 		types.NetID(networkID),
 	)
 	if err != nil {
-		return types.AES128Key{}, fmt.Errorf("failed to generate AppSKey: %w", err)
+		return sessionKeys{}, fmt.Errorf("failed to generate AppSKey: %s", err)
 	}
 
-	return appsKey, nil
+	keys.appSKey = appsKey[:]
+
+	nwkSKey := crypto.DeriveLegacyNwkSKey(
+		appKey,
+		types.JoinNonce(jn),
+		types.NetID(networkID),
+		types.DevNonce(devNonceBE))
+
+	keys.nwkSKey = nwkSKey[:]
+
+	return keys, nil
 }
 
 // generates random 3 byte join nonce
@@ -483,3 +466,9 @@ func readFromFile(file *os.File) ([]deviceInfo, error) {
 
 	return devices, nil
 }
+
+// 96 157 235 5 0 128 2 0 57 255 0 1 1 61 239 231 4 162 91 218 82
+
+// frame payload 61 239 231 4
+
+// mic  162 91 218 82
