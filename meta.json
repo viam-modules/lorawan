@@ -26,7 +26,7 @@
      {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:milesight-em310-tilt",
-      "markdown_link": "README.md#configure-the-viamlorawanmilesightem310tilt",
+      "markdown_link": "",
       "short_description": "A sensor component for a milesight em310 tilt node."
      },
      {
