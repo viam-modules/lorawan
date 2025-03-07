@@ -156,9 +156,8 @@ The node registers itself with the gateway so the gateway will recognize message
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
-y (16 bytes in hex). Used to securely join the network. The default is **5572404C696E6B4C6F52613230313823**. |
+| app_s_key | string | no | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+| network_s_key | string | no | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
 
 ## Configure your `viam:lorawan:dragino-LHT65N`
 
