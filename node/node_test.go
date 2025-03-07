@@ -517,7 +517,7 @@ func TestIsValidURL(t *testing.T) {
 	}
 
 	for _, url := range validURLs {
-		test.That(t, isValidURL(url), test.ShouldBeTrue, url)
+		test.That(t, isValidURL(url), test.ShouldBeTrue)
 	}
 
 	// Test invalid URLs
@@ -535,7 +535,7 @@ func TestIsValidURL(t *testing.T) {
 	}
 
 	for _, url := range invalidURLs {
-		test.That(t, isValidURL(url), test.ShouldBeFalse, url)
+		test.That(t, isValidURL(url), test.ShouldBeFalse)
 	}
 }
 
