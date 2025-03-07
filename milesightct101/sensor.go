@@ -3,8 +3,6 @@ package milesightct101
 
 import (
 	"context"
-	"net/http"
-	"time"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -13,8 +11,8 @@ import (
 )
 
 const (
-	decoderFilename = "CT101_Decoder.js"
-	decoderURL      = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/refs/heads/main/CT_Series/CT101/CT101_Decoder.js"
+	decoderURL = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/40e844fedbcf9a8c3b279142672fab1c89bee2e0/" +
+		"CT_Series/CT101/CT101_Decoder.js"
 	// OTAA defaults.
 	defaultAppKey = "5572404C696E6B4C6F52613230313823"
 	// ABP defaults.
@@ -49,7 +47,7 @@ func init() {
 		})
 }
 
-func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
+func (conf *Config) getNodeConfig() node.Config {
 	appKey := defaultAppKey
 	if conf.AppKey != "" {
 		appKey = conf.AppKey
@@ -67,21 +65,21 @@ func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 		intervalMin = conf.Interval
 	}
 	return node.Config{
-		JoinType:    conf.JoinType,
-		DecoderPath: decoderFilePath,
-		Interval:    intervalMin,
-		DevEUI:      conf.DevEUI,
-		AppKey:      appKey,
-		AppSKey:     appSKey,
-		NwkSKey:     nwkSKey,
-		DevAddr:     conf.DevAddr,
-		Gateways:    conf.Gateways,
+		JoinType: conf.JoinType,
+		Decoder:  decoderURL,
+		Interval: intervalMin,
+		DevEUI:   conf.DevEUI,
+		AppKey:   appKey,
+		AppSKey:  appSKey,
+		NwkSKey:  nwkSKey,
+		DevAddr:  conf.DevAddr,
+		Gateways: conf.Gateways,
 	}
 }
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
-	nodeConf := conf.getNodeConfig("fixed")
+	nodeConf := conf.getNodeConfig()
 	deps, err := nodeConf.Validate(path)
 	if err != nil {
 		return nil, err
@@ -93,9 +91,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 type CT101 struct {
 	resource.Named
 	logger logging.Logger
-
-	node        node.Node
-	decoderPath string
+	node   node.Node
 }
 
 func newCT101(
@@ -104,22 +100,13 @@ func newCT101(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	httpClient := &http.Client{
-		Timeout: time.Second * 25,
-	}
-	decoderFilePath, err := node.WriteDecoderFileFromURL(ctx, decoderFilename, decoderURL, httpClient, logger)
-	if err != nil {
-		return nil, err
-	}
-
 	n := &CT101{
-		Named:       conf.ResourceName().AsNamed(),
-		logger:      logger,
-		node:        node.NewSensor(conf, logger),
-		decoderPath: decoderFilePath,
+		Named:  conf.ResourceName().AsNamed(),
+		logger: logger,
+		node:   node.NewSensor(conf, logger),
 	}
 
-	err = n.Reconfigure(ctx, deps, conf)
+	err := n.Reconfigure(ctx, deps, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -134,14 +121,14 @@ func (n *CT101) Reconfigure(ctx context.Context, deps resource.Dependencies, con
 		return err
 	}
 
-	nodeCfg := cfg.getNodeConfig(n.decoderPath)
+	nodeCfg := cfg.getNodeConfig()
 
 	err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg)
 	if err != nil {
 		return err
 	}
 
-	err = node.CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
+	err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger)
 	if err != nil {
 		return err
 	}

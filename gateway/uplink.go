@@ -66,7 +66,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload: %w", err)
+		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload of device %s: %w", device.NodeName, err)
 	}
 
 	// payload was empty or unparsable
@@ -122,7 +122,7 @@ func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (
 	//nolint: gosec
 	decoder, err := os.ReadFile(path)
 	if err != nil {
-		return map[string]interface{}{}, err
+		return map[string]interface{}{}, fmt.Errorf("error reading decoder: %w", err)
 	}
 
 	// Convert the byte slice to a string
@@ -130,7 +130,7 @@ func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (
 
 	readingsMap, err := convertBinaryToMap(ctx, fPort, fileContent, data)
 	if err != nil {
-		return map[string]interface{}{}, err
+		return map[string]interface{}{}, fmt.Errorf("error executing decoder: %w", err)
 	}
 
 	return readingsMap, nil
