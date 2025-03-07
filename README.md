@@ -196,7 +196,7 @@ The node registers itself with the gateway so the gateway will recognize message
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
+| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. Unique to the specific device, can be found on the box. |
 
 ### ABP Attributes
 
