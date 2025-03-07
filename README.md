@@ -115,7 +115,7 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
-## Configure your milesight sensor: `viam:lorawan:milesight-ct101` or `viam:lorawan:milesight-em10-tilt`
+## Configure your milesight sensor
 
 Example OTAA node configuration:
 
@@ -168,6 +168,7 @@ Example OTAA node configuration:
 
 ```json
 {
+  "join_type": "OTAA",
   "dev_eui": "0123456789ABCDEF",
   "app_key": "0123456789ABCDEF0123456789ABCDEF",
   "gateways": ["gateway-1"]
