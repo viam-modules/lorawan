@@ -350,7 +350,7 @@ func TestNewNode(t *testing.T) {
 		},
 	}
 
-	n, err = newNode(ctx, deps, invalidDecoderConf, logger)
+	_, err = newNode(ctx, deps, invalidDecoderConf, logger)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
 
@@ -503,4 +503,80 @@ func TestWriteDecoder(t *testing.T) {
 		_, err := WriteDecoderFileFromURL(context.Background(), decoderBad, srv.URL+"/myurl", sClient, logger)
 		test.That(t, err, test.ShouldBeError, fmt.Errorf(ErrBadDecoderURL, 404))
 	})
+}
+
+func TestIsValidURL(t *testing.T) {
+	// Test valid URLs
+	validURLs := []string{
+		"http://example.com",
+		"https://example.com",
+		"https://example.com/path/to/resource",
+		"https://example.com/path/to/resource?param=value",
+		"https://sub.example.com:8080/path",
+		"ftp://ftp.example.com",
+	}
+
+	for _, url := range validURLs {
+		test.That(t, isValidURL(url), test.ShouldBeTrue, url)
+	}
+
+	// Test invalid URLs
+	invalidURLs := []string{
+		"",
+		"example.com",
+		"http://",
+		"https://",
+		"/path/to/resource",
+		"file.js",
+		"./file.js",
+		"../file.js",
+		"C:/path/to/file.js",
+		"/usr/local/file.js",
+	}
+
+	for _, url := range invalidURLs {
+		test.That(t, isValidURL(url), test.ShouldBeFalse, url)
+	}
+}
+
+func TestIsValidFilePath(t *testing.T) {
+	// Create a temporary directory for testing files
+	tempDir := t.TempDir()
+
+	// Test valid JS file
+	validJSPath := filepath.Join(tempDir, "valid.js")
+	err := os.WriteFile(validJSPath, []byte("// test file"), 0666)
+	test.That(t, err, test.ShouldBeNil)
+	err = isValidFilePath(validJSPath)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Test nested valid JS file
+	dirPath := filepath.Join(tempDir, "test_dir")
+	err = os.Mkdir(dirPath, 0777)
+	test.That(t, err, test.ShouldBeNil)
+	nestedJSPath := filepath.Join(dirPath, "nested.js")
+	err = os.WriteFile(nestedJSPath, []byte("// nested test file"), 0666)
+	test.That(t, err, test.ShouldBeNil)
+	err = isValidFilePath(nestedJSPath)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Test non-existent file
+	nonExistentPath := filepath.Join(tempDir, "nonexistent.js")
+	err = isValidFilePath(nonExistentPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error checking file")
+
+	// Test directory instead of file
+	err = isValidFilePath(dirPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldEqual, "path is a directory, not a file")
+
+	// Test file with wrong extension
+	invalidExtPath := filepath.Join(tempDir, "invalid.txt")
+	err = os.WriteFile(invalidExtPath, []byte("test file"), 0666)
+	test.That(t, err, test.ShouldBeNil)
+	err = isValidFilePath(invalidExtPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldEqual, "decoder must be a .js file")
+
 }

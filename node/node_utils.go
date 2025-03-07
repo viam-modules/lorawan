@@ -81,7 +81,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		}
 		n.DecoderPath = decoderFilePath
 	} else if err := isValidFilePath(n.DecoderPath); err != nil {
-		return fmt.Errorf("provided decoder file path is not valid: %v", err)
+		return fmt.Errorf("provided decoder file path is not valid: %w", err)
 	}
 	n.JoinType = cfg.JoinType
 
@@ -243,7 +243,7 @@ func isValidFilePath(path string) error {
 	// Get file info
 	info, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("error checking file: %v", err)
+		return fmt.Errorf("error checking file: %w", err)
 	}
 
 	if info.IsDir() {
