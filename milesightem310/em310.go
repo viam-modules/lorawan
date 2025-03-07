@@ -29,7 +29,7 @@ var Model = node.LorawanFamily.WithModel("milesight-em310-tilt")
 // Config defines the em310-tilt's config.
 type Config struct {
 	JoinType string   `json:"join_type,omitempty"`
-	Interval *float64 `json:"uplink_interval_mins"`
+	Interval *float64 `json:"uplink_interval_mins,omitempty"`
 	DevEUI   string   `json:"dev_eui,omitempty"`
 	AppKey   string   `json:"app_key,omitempty"`
 	AppSKey  string   `json:"app_s_key,omitempty"`
