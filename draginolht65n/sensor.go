@@ -3,8 +3,7 @@ package draginolht65n
 
 import (
 	"context"
-	"net/http"
-	"time"
+	"embed"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -14,17 +13,20 @@ import (
 
 const (
 	decoderFilename = "LHT65NChirpstack4decoder.js"
-	decoderURL      = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/refs/heads/main/LHT65N/" +
-		"LHT65N Chirpstack  4.0 decoder.txt"
 )
 
 // Model represents a dragino-LHT65N lorawan node model.
 var Model = node.LorawanFamily.WithModel("dragino-LHT65N")
 
+//go:embed LHT65NChirpstack4decoder.js
+var decoderFile embed.FS
+
+var defaultIntervalMin = 20. // minutes
+
 // Config defines the dragino-LHT65N's config.
 type Config struct {
 	JoinType string   `json:"join_type,omitempty"`
-	Interval *float64 `json:"uplink_interval_mins"`
+	Interval *float64 `json:"uplink_interval_mins,omitempty"`
 	DevEUI   string   `json:"dev_eui,omitempty"`
 	AppKey   string   `json:"app_key,omitempty"`
 	AppSKey  string   `json:"app_s_key,omitempty"`
@@ -43,16 +45,21 @@ func init() {
 }
 
 func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
+	intervalMin := &defaultIntervalMin
+	if conf.Interval != nil {
+		intervalMin = conf.Interval
+	}
+
 	return node.Config{
-		JoinType:    conf.JoinType,
-		DecoderPath: decoderFilePath,
-		Interval:    conf.Interval,
-		DevEUI:      conf.DevEUI,
-		AppKey:      conf.AppKey,
-		AppSKey:     conf.AppSKey,
-		NwkSKey:     conf.NwkSKey,
-		DevAddr:     conf.DevAddr,
-		Gateways:    conf.Gateways,
+		JoinType: conf.JoinType,
+		Decoder:  decoderFilePath,
+		Interval: intervalMin,
+		DevEUI:   conf.DevEUI,
+		AppKey:   conf.AppKey,
+		AppSKey:  conf.AppSKey,
+		NwkSKey:  conf.NwkSKey,
+		DevAddr:  conf.DevAddr,
+		Gateways: conf.Gateways,
 	}
 }
 
@@ -69,10 +76,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 // LHT65N defines a lorawan node device.
 type LHT65N struct {
 	resource.Named
-	logger logging.Logger
-
-	node        node.Node
+	logger      logging.Logger
 	decoderPath string
+	node        node.Node
 }
 
 func newLHT65N(
@@ -81,10 +87,7 @@ func newLHT65N(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	httpClient := &http.Client{
-		Timeout: time.Second * 25,
-	}
-	decoderFilePath, err := node.WriteDecoderFileFromURL(ctx, decoderFilename, decoderURL, httpClient, logger)
+	decoderFilePath, err := node.WriteDecoderFile(decoderFilename, decoderFile)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +121,7 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 		return err
 	}
 
-	err = node.CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
+	err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger)
 	if err != nil {
 		return err
 	}

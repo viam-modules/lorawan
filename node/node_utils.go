@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.viam.com/rdk/logging"
@@ -58,7 +61,28 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		n.AppSKey = appSKey
 	}
 
-	n.DecoderPath = cfg.DecoderPath
+	n.DecoderPath = cfg.Decoder
+
+	// if the decoder path is a url, save the file
+	if isValidURL(n.DecoderPath) {
+		decoderFilename := path.Base(n.DecoderPath)
+		// Check if the extension is .js
+		if !strings.HasSuffix(decoderFilename, ".js") {
+			// Change extension to .js
+			decoderFilename = strings.TrimSuffix(decoderFilename, path.Ext(decoderFilename)) + ".js"
+		}
+
+		httpClient := &http.Client{
+			Timeout: time.Second * 25,
+		}
+		decoderFilePath, err := WriteDecoderFileFromURL(ctx, decoderFilename, cfg.Decoder, httpClient, n.logger)
+		if err != nil {
+			return err
+		}
+		n.DecoderPath = decoderFilePath
+	} else if err := isValidFilePath(n.DecoderPath); err != nil {
+		return fmt.Errorf("provided decoder file path is not valid: %w", err)
+	}
 	n.JoinType = cfg.JoinType
 
 	if n.JoinType == "" {
@@ -205,4 +229,29 @@ func WriteDecoderFileFromURL(ctx context.Context, decoderFilename, url string,
 	}
 
 	return filePath, nil
+}
+
+func isValidURL(str string) bool {
+	parsedURL, err := url.ParseRequestURI(str)
+	if err != nil {
+		return false
+	}
+	return parsedURL.Scheme != "" && parsedURL.Host != ""
+}
+
+func isValidFilePath(path string) error {
+	// Get file info
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("error checking file: %w", err)
+	}
+
+	if info.IsDir() {
+		return errors.New("path is a directory, not a file")
+	}
+
+	if filepath.Ext(path) != ".js" {
+		return errors.New("decoder must be a .js file")
+	}
+	return nil
 }
