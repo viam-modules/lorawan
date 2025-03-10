@@ -5,10 +5,13 @@ For more on why this is useful, see the [article on the Viam blog](https://www.v
 
 This module combines the functionality of a LoRaWAN gateway and network server, enabling communication between LoRaWAN sensors and the Viam app.
 It handles packet forwarding, device management, and message routing to allow LoRaWAN sensor data to be viewed and managed directly in Viam.
-This module provides two models:
+This module provides the following models:
 
 - `sx1302-gateway`: Sensor model for a SX1302 LoRaWAN concentrator hat connected to a Raspberry Pi.
-- `node`: Sensor model for the end nodes sending data to the gateway.
+- `node`: Sensor model for any class A, US915 LoraWAN end device.
+- `dragino-LHT65N`: Sensor model for the dragino LHT65N temperature and humidity sensor.
+- `milesight-ct101`: Sensor model for the milesight ct101 current transformer.
+- `milesight-em310-tilt`: Sensor model for the milesight em310 tilt sensor.
 
 You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
 
@@ -112,7 +115,7 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
-## Configure the `viam:lorawan:milesight-ct101`
+## Configure your milesight sensor
 
 Example OTAA node configuration:
 
@@ -139,7 +142,7 @@ Example ABP node configuration:
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **10** minutes. |
+| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **10** minutes for the ct101 and **1080** minutes for the em310-tilt. |
 | gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
@@ -156,10 +159,10 @@ The node registers itself with the gateway so the gateway will recognize message
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+| app_s_key | string | no | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+| network_s_key | string | no | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
 
-## Configure the `viam:lorawan:milesight-em10-tilt`
+## Configure your `viam:lorawan:dragino-LHT65N`
 
 Example OTAA node configuration:
 
@@ -167,29 +170,29 @@ Example OTAA node configuration:
 {
   "join_type": "OTAA",
   "dev_eui": "0123456789ABCDEF",
+  "app_key": "0123456789ABCDEF0123456789ABCDEF",
   "gateways": ["gateway-1"]
 }
 ```
 
 Example ABP node configuration:
-
 ```json
 {
   "join_type": "ABP",
   "dev_addr": "01234567",
+  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
   "gateways": ["gateway-1"]
 }
 ```
-
 ### Common Attributes
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **1080** minutes. |
+| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **20** minutes. |
 | gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
-The gateway component must be added as a dependency in the `Depends on` drop down.
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
@@ -197,15 +200,16 @@ The node registers itself with the gateway so the gateway will recognize message
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | no | Application Key (16 bytes in hex). Used to securely join the network. The default is **5572404C696E6B4C6F52613230313823**. |
+| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. Unique to the specific device, can be found on the box. |
 
 ### ABP Attributes
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+
 
 ## Troubleshooting Notes
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.

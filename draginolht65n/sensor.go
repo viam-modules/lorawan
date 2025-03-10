@@ -21,10 +21,12 @@ var Model = node.LorawanFamily.WithModel("dragino-LHT65N")
 //go:embed LHT65NChirpstack4decoder.js
 var decoderFile embed.FS
 
+var defaultIntervalMin = 20. // minutes
+
 // Config defines the dragino-LHT65N's config.
 type Config struct {
 	JoinType string   `json:"join_type,omitempty"`
-	Interval *float64 `json:"uplink_interval_mins"`
+	Interval *float64 `json:"uplink_interval_mins,omitempty"`
 	DevEUI   string   `json:"dev_eui,omitempty"`
 	AppKey   string   `json:"app_key,omitempty"`
 	AppSKey  string   `json:"app_s_key,omitempty"`
@@ -43,10 +45,15 @@ func init() {
 }
 
 func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
+	intervalMin := &defaultIntervalMin
+	if conf.Interval != nil {
+		intervalMin = conf.Interval
+	}
+
 	return node.Config{
 		JoinType: conf.JoinType,
-		Interval: conf.Interval,
 		Decoder:  decoderFilePath,
+		Interval: intervalMin,
 		DevEUI:   conf.DevEUI,
 		AppKey:   conf.AppKey,
 		AppSKey:  conf.AppSKey,
@@ -114,7 +121,7 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 		return err
 	}
 
-	err = node.CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
+	err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger)
 	if err != nil {
 		return err
 	}
