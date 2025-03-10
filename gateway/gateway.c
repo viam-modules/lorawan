@@ -51,6 +51,19 @@ int setUpGateway(int bus) {
         return 1;
     }
 
+
+
+    struct lgw_conf_sx1261_s sx1261conf;
+    strncpy(sx1261conf.spi_path, "/dev/spidev0.1", sizeof sx1261conf.spi_path);
+    sx1261conf.spi_path[sizeof sx1261conf.spi_path - 1] = '\0';
+    sx1261conf.rssi_offset = 0;
+    sx1261conf.enable = false;
+
+    if (lgw_sx1261_setconf(&sx1261conf) != LGW_HAL_SUCCESS) {
+        MSG("ERROR: Failed to configure the SX1261 radio\n");
+        return -1;
+    }
+
     // The rfConf configures the two RF chains the gateway HAT has.
     struct lgw_conf_rxrf_s rfconf;
 
@@ -89,8 +102,6 @@ int setUpGateway(int bus) {
     struct lgw_conf_rxif_s ifconf;
     memset(&ifconf, 0, sizeof(ifconf));
     ifconf.enable = true;
-    ifconf.datarate = DR_LORA_SF10;
-    ifconf.bandwidth = 0x04; //125k
     for (int i = 0; i < 8; i++) {
         ifconf.rf_chain = rfChains[i];
         ifconf.freq_hz = ifFrequencies[i];
@@ -100,15 +111,20 @@ int setUpGateway(int bus) {
     }
 
 
-//     2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   0:    902.3MHz rf=0 freq=-400.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   1:    902.5MHz rf=0 freq=-200.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   2:    902.7MHz rf=0 freq=  +0.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   3:    902.9MHz rf=0 freq=+200.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   4:    903.1MHz rf=0 freq=+400.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   5:    903.3MHz rf=1 freq=-400.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   6:    903.5MHz rf=1 freq=-200.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [mSF]   7:    903.7MHz rf=1 freq=  +0.0 datarate=0
-// 2025-03-05 18:34:30.643 [RAL:INFO]  [STD]   8:    903.0MHz rf=0 freq=+300.0 datarate=8 bw=6
+    // Configure lora std channel.
+    ifconf.bandwidth = 0x06;
+    ifconf.rf_chain = 0;
+    ifconf.freq_hz = 300000;
+    ifconf.datarate = DR_LORA_SF8;
+    ifconf.implicit_coderate = 1;
+    ifconf.implicit_crc_en = false;
+    ifconf.implicit_payload_length = 17;
+    ifconf.implicit_hdr = false;
+
+    if (lgw_rxif_setconf(8, &ifconf) != LGW_HAL_SUCCESS) {
+        return 4;
+    }
+
 
     struct lgw_tx_gain_lut_s lut;
     struct lgw_tx_gain_s txGain[16];

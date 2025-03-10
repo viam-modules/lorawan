@@ -83,17 +83,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 		// waitTime = (joinRx2WindowSec) - (time.Since(t).Seconds()) // only for debugging
 	default:
 		waitDuration = (2 * time.Second) - (time.Since(t)) - 47709/32*time.Microsecond
-		// waitTime = 2 - (time.Since(t).Seconds())           // only for debugging
 	}
-
-	// // if !utils.SelectContextOrWait(ctx, time.Second*time.Duration(waitTime)) {
-	// // 	return errors.New("context canceled")
-	// // }
-	// // waitDuration := time.Duration(waitTime * 10e9)
-
-	// if !accurateSleep(ctx, waitDuration) {
-	// 	return errors.New("context canceled")
-	// }
 
 	// lock the mutex to prevent two sends at the same time.
 	g.mu.Lock()

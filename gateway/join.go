@@ -139,29 +139,29 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	// DLSettings byte:
 	// Bit 7: OptNeg (0)
-	// Bits 6-4: RX1DROffset - setting default - offset 0
-	// Bits 3-0: RX2DR - setting default - equal to uplink DR
-	payload = append(payload, 0x00)
-	payload = append(payload, 0x01) // rx delay: 1 second
+	// Bits 6-4: RX1DROffset
+	// Bits 3-0: RX2DR
+	payload = append(payload, 0x08) // Use data rate 8 for rx2 downlinks
+	payload = append(payload, 0x01) // rx1 delay: 1 second
 
 	// CFList for US915 using Channel Mask
 	// This tells the device to only transmit on channels 0-7
 	cfList := []byte{
-		0xFF, // Enable channels 0-7
-		0x00, // Disable channels 8-15
-		0x00, // Disable channels 16-23
-		0x00, // Disable channels 24-31
-		0x00, // Disable channels 32-39
-		0x00, // Disable channels 40-47
-		0x00, // Disable channels 48-55
-		0x00, // Disable channels 56-63
-		0x01, // Disable channels 64-71
-		0xff, // Disable channels 72-79
-		0x00, // RFU (reserved for future use)
-		0x00, // RFU
-		0x00, // RFU
-		0x00, // RFU
-		0x00, // RFU
+		0xFF, // Enable channels 0-7 ff
+		0x00, // Disable channels 8-15 0
+		0x00, // Disable channels 16-23 0
+		0x00, // Disable channels 24-31 0
+		0x00, // Disable channels 32-39 0
+		0x00, // Disable channels 40-47 0
+		0x00, // Disable channels 48-55 0
+		0x00, // Disable channels 56-63 0
+		0x01, // Enable channel 64, disable 65-71
+		0x00, // Disable channels 72-79 0
+		0x00, // RFU (reserved for future use) 0
+		0x00, // RFU 0
+		0x00, // RFU 0
+		0x00, // RFU 0
+		0x00, // RFU 0
 		0x01, // CFList Type = 1 (Channel Mask)
 	}
 
