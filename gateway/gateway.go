@@ -22,6 +22,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -483,17 +484,37 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
-	if _, ok := cmd[sendDownlinkKey]; ok {
-		if g.sendNewDownlink.Load() {
-			return nil, errors.New("downlink already flagged")
+	if payload, ok := cmd[sendDownlinkKey]; ok {
+		downlinks, ok := payload.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
 		}
-		g.sendNewDownlink.Store(true)
+
+		for name, payload := range downlinks {
+			dev, ok := g.devices[name]
+			if !ok {
+				return nil, fmt.Errorf("node with name %s not found", name)
+			}
+
+			strPayload, ok := payload.(string)
+			if !ok {
+				return nil, fmt.Errorf("expected a string value but got %v", reflect.TypeOf(strPayload))
+
+			}
+
+			payloadBytes, err := hex.DecodeString(strPayload)
+			if err != nil {
+				return nil, errors.New("failed to decode string to bytes")
+			}
+
+			dev.Downlinks = append(dev.Downlinks, payloadBytes)
+		}
+		// if g.sendNewDownlink.Load() {
+		// 	return nil, errors.New("downlink already flagged")
+		// }
+		// g.sendNewDownlink.Store(true)
 		return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
 	}
-	// if _, ok := cmd[setFCntKey]; ok {
-	// 	fCntDown =
-	// 	return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
-	// }
 
 	return map[string]interface{}{}, nil
 }
@@ -617,6 +638,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 		return nil, err
 	}
 
+	node.FPort = byte(mapNode["FPort"].(float64))
 	node.NodeName = mapNode["NodeName"].(string)
 	node.JoinType = mapNode["JoinType"].(string)
 

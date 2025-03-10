@@ -52,18 +52,6 @@ int setUpGateway(int bus) {
     }
 
 
-
-    struct lgw_conf_sx1261_s sx1261conf;
-    strncpy(sx1261conf.spi_path, "/dev/spidev0.1", sizeof sx1261conf.spi_path);
-    sx1261conf.spi_path[sizeof sx1261conf.spi_path - 1] = '\0';
-    sx1261conf.rssi_offset = 0;
-    sx1261conf.enable = false;
-
-    if (lgw_sx1261_setconf(&sx1261conf) != LGW_HAL_SUCCESS) {
-        MSG("ERROR: Failed to configure the SX1261 radio\n");
-        return -1;
-    }
-
     // The rfConf configures the two RF chains the gateway HAT has.
     struct lgw_conf_rxrf_s rfconf;
 

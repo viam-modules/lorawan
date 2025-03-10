@@ -32,30 +32,10 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-	if phyPayload[0] == 0x80 {
-		g.logger.Infof("%d", fCntDown)
-		// if fCntDown == 3 {
-		g.logger.Warnf("sending interval change")
-		// } else {
-		// 	g.logger.Warnf("GOT CONFIRMED DATA SENDING DOWNLINK")
-		// 	g.logger.Warnf("nwksKey %x", device.NwkSKey)
-		// 	payload, err := createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
-		// 	if err != nil {
-		// 		return "", map[string]interface{}{}, errors.New("failed to create downlink")
-		// 	}
-
-		// 	err = g.sendDownLink(ctx, payload, false)
-		// 	if err != nil {
-		// 		return "", map[string]interface{}{}, errors.New("failed to send downlink")
-		// 	}
-
-		// }
-	}
-
-	if g.sendNewDownlink.Load() {
-		g.sendNewDownlink.Store(false)
-		g.logger.Warnf("sending interval change")
-		payload, err := g.createIntervalDownlink(devAddr, types.AES128Key(device.NwkSKey), types.AES128Key(device.AppSKey))
+	for _, framePayload := range device.Downlinks {
+		// g.sendNewDownlink.Store(false)
+		g.logger.Infof("sending interval change")
+		payload, err := g.createIntervalDownlink(device, framePayload)
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to create downlink")
 		}
@@ -64,6 +44,9 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to send downlink")
 		}
+
+		// remove the downlink we just sent from the queue
+		device.Downlinks = device.Downlinks[1:]
 	}
 
 	// Frame control byte contains various settings

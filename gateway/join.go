@@ -202,6 +202,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = keys.appSKey
 	d.NwkSKey = keys.nwkSKey
+	d.FCntDown = 1
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
@@ -217,30 +218,6 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		g.logger.Errorf("failed to write device info to file: %v", err)
 	}
 
-	// joinAcceptBytes := []byte{0x20}
-
-	// // return the encrypted join accept message
-	// ja2, err := hex.DecodeString("96ab2576dca7eab27de3e8f400ccb0bd021288d99200b1cd3160437e")
-	// if err != nil {
-	// 	fmt.Println("Error decoding hex string:", err)
-	// }
-
-	// joinAcceptBytes = append(joinAcceptBytes, ja2...)
-	// mic := []byte{25, 57, 139, 84}
-	// nwkSKey, _ := hex.DecodeString("c6cd9837b153d3d1ba8ebb0fa7a5ea38")
-	// d.NwkSKey = nwkSKey
-	// appSKey, _ := hex.DecodeString("03cd0b2c09d2832a267a69266b71dcd6")
-	// d.AppSKey = appSKey
-
-	// devAddrBE := []byte{0x01, 0xa3, 0x6a, 0xc0}
-	// d.Addr = devAddrBE
-	// //devAddrLE := reverseByteArray(devAddrBE)
-
-	// joinAcceptBytes = append(joinAcceptBytes, mic...)
-
-	// g.logger.Infof("length: %d", len(joinAcceptBytes))
-
-	//return joinAcceptBytes, nil
 	return ja, nil
 }
 

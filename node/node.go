@@ -58,6 +58,7 @@ type Config struct {
 	NwkSKey  string   `json:"network_s_key,omitempty"`
 	DevAddr  string   `json:"dev_addr,omitempty"`
 	Gateways []string `json:"gateways"`
+	FPort    string   `json:"fport,omitempty"`
 }
 
 func init() {
@@ -161,6 +162,11 @@ type Node struct {
 	NodeName    string
 	gateway     sensor.Sensor
 	JoinType    string
+
+	FCntDown uint32
+	FPort    byte // for downlinks, only required when frame payload exists.
+
+	Downlinks [][]byte // list of downlink frame payloads to send
 }
 
 func newNode(
