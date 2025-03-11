@@ -32,15 +32,17 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-	for _, framePayload := range device.Downlinks {
-		// g.sendNewDownlink.Store(false)
+	g.logger.Debugf("received data uplink from %s", device.NodeName)
+
+	// we will send one device downlink from the do command per uplink.
+	if len(device.Downlinks) > 0 {
 		g.logger.Infof("sending interval change")
-		payload, err := g.createIntervalDownlink(device, framePayload)
+		payload, err := g.createDownlink(device, device.Downlinks[0])
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to create downlink")
 		}
 
-		err = g.sendDownLink(ctx, payload, false, uplinkFreq, t, count)
+		err = g.sendDownLink(ctx, payload, false, t, count)
 		if err != nil {
 			return "", map[string]interface{}{}, errors.New("failed to send downlink")
 		}

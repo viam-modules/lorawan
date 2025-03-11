@@ -19,7 +19,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -76,10 +75,11 @@ type Config struct {
 // deviceInfo is a struct containing OTAA device information.
 // This info is saved across module restarts for each device.
 type deviceInfo struct {
-	DevEUI  string `json:"dev_eui"`
-	DevAddr string `json:"dev_addr"`
-	AppSKey string `json:"app_skey"`
-	NwkSKey string `json:"nwk_skey"`
+	DevEUI   string `json:"dev_eui"`
+	DevAddr  string `json:"dev_addr"`
+	AppSKey  string `json:"app_skey"`
+	NwkSKey  string `json:"nwk_skey"`
+	FCntDown uint32 `json:"fcnt_down"`
 }
 
 func init() {
@@ -380,7 +380,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, uplinkFreq i
 				g.logger.Errorf("couldn't handle join request: %s", err)
 			}
 		case 0x40:
-			g.logger.Debugf("received data uplink")
+			//g.logger.Debugf("received data uplink")
 			name, readings, err := g.parseDataUplink(ctx, payload, uplinkFreq, t, count)
 			if err != nil {
 				// don't log as error if it was a request from unknown device.
@@ -509,11 +509,8 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 			dev.Downlinks = append(dev.Downlinks, payloadBytes)
 		}
-		// if g.sendNewDownlink.Load() {
-		// 	return nil, errors.New("downlink already flagged")
-		// }
-		// g.sendNewDownlink.Store(true)
-		return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
+
+		return map[string]interface{}{sendDownlinkKey: "downlink added"}, nil
 	}
 
 	return map[string]interface{}{}, nil
@@ -526,11 +523,8 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 //	-- datarate should be same
 //	-- payload should be same
 func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
-	if math.Abs(float64(p1.count_us-p2.count_us)) <= 24 &&
-		p1.freq_hz == p2.freq_hz &&
-		p1.datarate == p2.datarate &&
-		//nolint:gocritic
-		C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
+	//nolint:gocritic
+	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
 		return true
 	}
 	return false

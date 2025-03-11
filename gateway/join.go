@@ -60,7 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, c
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t, count)
+	return g.sendDownLink(ctx, joinAccept, true, t, count)
 }
 
 // payload of join request consists of
@@ -178,21 +178,14 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload = append(payload, resMIC[:]...)
 
-	g.logger.Infof("before length: %d", len(payload))
-
 	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
-
-	g.logger.Infof("encrypted length: %d", len(enc))
-
 	ja := make([]byte, 0)
 	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
-
-	g.logger.Infof("ja length %d", len(ja))
 
 	// generate the session keys
 	keys, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
@@ -202,14 +195,15 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = keys.appSKey
 	d.NwkSKey = keys.nwkSKey
-	d.FCntDown = 1
+	d.FCntDown = 0
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
-		DevEUI:  fmt.Sprintf("%X", devEUIBE),
-		DevAddr: fmt.Sprintf("%X", d.Addr),
-		AppSKey: fmt.Sprintf("%X", d.AppSKey),
-		NwkSKey: fmt.Sprintf("%X", d.NwkSKey),
+		DevEUI:   fmt.Sprintf("%X", devEUIBE),
+		DevAddr:  fmt.Sprintf("%X", d.Addr),
+		AppSKey:  fmt.Sprintf("%X", d.AppSKey),
+		NwkSKey:  fmt.Sprintf("%X", d.NwkSKey),
+		FCntDown: d.FCntDown,
 	}
 
 	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
