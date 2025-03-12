@@ -46,6 +46,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 		}
 
+		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
+
 		// remove the downlink we just sent from the queue
 		device.Downlinks = device.Downlinks[1:]
 	}

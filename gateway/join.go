@@ -134,7 +134,10 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Bit 7: OptNeg (0)
 	// Bits 6-4: RX1DROffset
 	// Bits 3-0: RX2DR
-	payload = append(payload, 0x08) // Use data rate 8 for rx2 downlinks
+	// Use data rate 8 for rx2 downlinks
+	// DR8 = SF12 BW 500K
+	// See lorawan1.0.3 regional specs doc 2.5.3 for a table of data rates to SF/BW
+	payload = append(payload, 0x08)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
 	// CFList for US915 using Channel Mask

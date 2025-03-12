@@ -89,8 +89,6 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, join bool, p
 		time.Sleep(2 * time.Millisecond)
 	}
 
-	g.logger.Infof("sent the downlink packet")
-
 	return nil
 }
 
@@ -202,8 +200,8 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 	return payload, nil
 }
 
-// Helper function to calculate the downlink channel to be used for RX1.
-func findDownLinkChannel(uplinkFreq int) int {
+// Helper function to calculate the downlink freq to be used for RX1.
+func findDownLinkFreq(uplinkFreq int) int {
 	// channel number between 0-64
 	upLinkFreqNum := (uplinkFreq - 902300000) / 200000
 	downLinkChan := upLinkFreqNum % 8
