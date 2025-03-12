@@ -247,6 +247,10 @@ func parseErrorCode(errCode int) string {
 	case 4:
 		return "error setting the intermediate frequency chain config"
 	case 5:
+		return "error configuring the lora STD channel"
+	case 6:
+		return "error configuring the tx gain settings"
+	case 7:
 		return "error starting the gateway"
 	default:
 		return "unknown error"
@@ -514,12 +518,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// Criteria to determine if packets are identical:
-//
-//	-- count_us should be equal or can have up to 24µs of difference (3 samples)
-//	-- freq should be same
-//	-- datarate should be same
-//	-- payload should be same
+// Classifying two packets as the same if they have identifical payloads.
 func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
 	//nolint
 	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {

@@ -77,7 +77,6 @@ int setUpGateway(int bus) {
     }
 
     rfconf.freq_hz = RADIO_1_FREQ;
-   // rfconf.tx_enable = false;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
         return 3;
 
@@ -108,12 +107,12 @@ int setUpGateway(int bus) {
     ifconf.implicit_crc_en = false;
     ifconf.implicit_payload_length = 17;
     ifconf.implicit_hdr = false;
-
     if (lgw_rxif_setconf(8, &ifconf) != LGW_HAL_SUCCESS) {
-        return 4;
+        return 5;
     }
 
-
+    // the tx gain config contains transmission gain settings for downlinks.
+    // Using the same values as basic station
     struct lgw_tx_gain_lut_s lut;
     struct lgw_tx_gain_s txGain[16];
 
@@ -134,13 +133,13 @@ int setUpGateway(int bus) {
     lut.size = 16;
 
     if(lgw_txgain_setconf(0, &lut) != LGW_HAL_SUCCESS) {
-        return 4;
+        return 6;
     }
 
     // start the gateway.
     int res = lgw_start();
     if (res != LGW_HAL_SUCCESS) {
-        return 5;
+        return 7;
     }
     return 0;
  }
@@ -164,9 +163,6 @@ int send(struct lgw_pkt_tx_s* packet) {
 void disableBuffering() {
     setbuf(stdout, NULL);
 }
-
-
-
 
 #ifdef TESTING
 void redirectToPipe(int fd) {

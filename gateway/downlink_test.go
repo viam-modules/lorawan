@@ -4,33 +4,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
-	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
 
 func TestCreateDownLink(t *testing.T) {
-	testFile := createDataFile(t)
-
-	// Create a test device using existing test variables
-	testDevice := &node.Node{
-		NodeName: testNodeName,
-		Addr:     testDeviceAddr,
-		AppSKey:  testAppSKey,
-		NwkSKey:  testNwkSKey,
-		FCntDown: 0,
-		FPort:    0x01, // Port 1
-		DevEui:   testDevEUI,
-	}
-
-	// Set up the gateway for testing
-	g := &gateway{
-		logger:   logging.NewTestLogger(t),
-		dataFile: testFile,
-	}
-
+	g := createTestGateway(t)
+	testDevice := g.devices[testNodeName]
 	framePayload := []byte{0x01, 0x02, 0x03, 0x04}
 
 	payload, err := g.createDownlink(testDevice, framePayload)
@@ -62,7 +43,6 @@ func TestCreateDownLink(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, micBytes, test.ShouldResemble, expectedMIC[:])
 
-	// Verify file persistence
 	deviceInfoList, err := readFromFile(g.dataFile)
 	test.That(t, err, test.ShouldBeNil)
 

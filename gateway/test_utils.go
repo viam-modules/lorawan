@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/viam-modules/gateway/node"
+	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
 
@@ -45,4 +47,27 @@ func createDataFile(t *testing.T) *os.File {
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
 	test.That(t, err, test.ShouldBeNil)
 	return file
+}
+
+func createTestGateway(t *testing.T) *gateway {
+	// Create a temp device data file for testing
+	file := createDataFile(t)
+
+	testDevices := make(map[string]*node.Node)
+	testNode := &node.Node{
+		Addr:        testDeviceAddr,
+		AppSKey:     testAppSKey,
+		NwkSKey:     testNwkSKey,
+		NodeName:    testNodeName,
+		DecoderPath: testDecoderPath,
+		JoinType:    "OTAA",
+		DevEui:      testDevEUI,
+	}
+	testDevices[testNodeName] = testNode
+
+	return &gateway{
+		logger:   logging.NewTestLogger(t),
+		devices:  testDevices,
+		dataFile: file,
+	}
 }
