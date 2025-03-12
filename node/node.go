@@ -43,9 +43,10 @@ const (
 	JoinTypeOTAA = "OTAA"
 	// JoinTypeABP is the ABP Join type.
 	JoinTypeABP = "ABP"
-	// DownlinkKey is the DoCommand Key to send a payload to the gateway
-	DownlinkKey            = "send_downlink"
-	GatewaySendDownlinkKey = "senddown"
+	// DownlinkKey is the DoCommand Key to send a payload to the gateway.
+	DownlinkKey = "send_downlink"
+	// GatewaySendDownlinkKey is the DoCommand Key for the gateway model to queue a downlink.
+	GatewaySendDownlinkKey = "add_downlink_to_queue"
 )
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}

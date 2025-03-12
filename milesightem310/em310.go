@@ -3,6 +3,9 @@ package milesightem310
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
+	"math"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -16,6 +19,9 @@ const (
 	defaultAppKey  = "5572404C696E6B4C6F52613230313823"
 	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
 	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
+
+	intervalKey = "set_interval"
+	resetKey    = "restart_sensor"
 )
 
 var defaultIntervalMin = 1080.
@@ -127,6 +133,15 @@ func (n *em310Tilt) Reconfigure(ctx context.Context, deps resource.Dependencies,
 		return err
 	}
 
+	// set the interval if one was provided
+	// we do not send a default in case the user has already set an interval they prefer
+	if cfg.Interval != nil && *cfg.Interval != 0 {
+		_, err = n.addIntervalToQueue(ctx, *nodeCfg.Interval, false)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger)
 	if err != nil {
 		return err
@@ -143,4 +158,49 @@ func (n *em310Tilt) Close(ctx context.Context) error {
 // Readings returns the node's readings.
 func (n *em310Tilt) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	return n.node.Readings(ctx, extra)
+}
+
+// DoCommand implements the DoCommand for the em310Tilt.
+func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	testOnly := node.CheckTestKey(cmd)
+	if interval, ok := cmd[intervalKey].(float64); ok {
+		return n.addIntervalToQueue(ctx, interval, testOnly)
+	}
+	if _, ok := cmd[resetKey]; ok {
+		return n.addRestartToQueue(ctx, testOnly)
+	}
+
+	// do generic node if no sensor specific key was found
+	return n.node.DoCommand(ctx, cmd)
+}
+
+func (n *em310Tilt) addIntervalToQueue(ctx context.Context, interval float64, testOnly bool) (map[string]interface{}, error) {
+	// convert to the nearest second.
+	convertToSeconds := uint16(math.Round(interval * 60))
+
+	// create a byte array of size 2 and put the payload in as little endian.
+	bs := make([]byte, 2)
+	binary.LittleEndian.PutUint16(bs, convertToSeconds)
+
+	// ff byte is the channel, 03 is the message type byte for the downlink.
+	intervalString := "ff03"
+	for _, b := range bs {
+		intervalString = fmt.Sprintf("%s%02x", intervalString, b)
+	}
+
+	if testOnly {
+		return map[string]interface{}{node.DownlinkKey: intervalString}, nil
+	}
+
+	return n.node.SendDownlink(ctx, intervalString, false)
+}
+
+func (n *em310Tilt) addRestartToQueue(ctx context.Context, testOnly bool) (map[string]interface{}, error) {
+	// ff byte is the channel, 10 is the message type and ff is the command for the downlink.
+	intervalString := "ff10ff"
+	if testOnly {
+		return map[string]interface{}{node.DownlinkKey: intervalString}, nil
+	}
+
+	return n.node.SendDownlink(ctx, intervalString, false)
 }

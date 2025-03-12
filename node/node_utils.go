@@ -266,13 +266,13 @@ func isValidFilePath(path string) error {
 	return nil
 }
 
-// check if a map has the testkey set
+// CheckTestKey checks if a map has the testKey set.
 func CheckTestKey(cmd map[string]interface{}) bool {
 	_, ok := cmd[testKey]
 	return ok
 }
 
-// SendDownlink sends a downlink command to the gateway via the gateway's DoCommand
+// SendDownlink sends a downlink command to the gateway via the gateway's DoCommand.
 func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) (map[string]interface{}, error) {
 	req := map[string]interface{}{}
 	downlinks := map[string]interface{}{}
