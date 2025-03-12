@@ -33,21 +33,36 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	g.logger.Debugf("received uplink from %s", device.NodeName)
 
+	sendAck := false
+	// confirmed data up
+	if phyPayload[0] == 0x80 {
+		sendAck = true
+	}
+
 	// we will send one device downlink from the do command per uplink.
+	var downlinkPayload []byte
 	if len(device.Downlinks) > 0 {
-		g.logger.Debugf("sending downlink message")
-		payload, err := g.createDownlink(device, device.Downlinks[0])
+		var err error
+		downlinkPayload, err = g.createDownlink(device, device.Downlinks[0], sendAck)
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}
 
-		err = g.sendDownlink(ctx, payload, false, packetTime)
+		// remove the downlink we just sent from the queue
+		device.Downlinks = device.Downlinks[1:]
+	}
+
+	if sendAck || downlinkPayload != nil {
+		g.logger.Debugf("sending downlink message")
+		err = g.sendDownlink(ctx, downlinkPayload, false, packetTime)
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 		}
+	}
 
-		// remove the downlink we just sent from the queue
-		device.Downlinks = device.Downlinks[1:]
+	err = g.sendDownlink(ctx, downlinkPayload, false, packetTime)
+	if err != nil {
+		return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 	}
 
 	// Frame control byte contains various settings
