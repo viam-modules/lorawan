@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,30 +13,6 @@ import (
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
-
-var (
-	// Test device identifiers.
-	testDevEUI = []byte{0x10, 0x0F, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09} // Big endian
-	testAppKey = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-	testName   = "test-device"
-
-	// Join request fields.
-	testJoinEUI  = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	testDevEUILE = []byte{0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10} // Little endian
-	testDevNonce = []byte{0x11, 0x12}
-
-	// Unknown device for testing error cases.
-	unknownDevEUI = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-)
-
-func createDataFile(t *testing.T) *os.File {
-	// Create a temp device data file for testing
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "devices.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
-	test.That(t, err, test.ShouldBeNil)
-	return file
-}
 
 func TestReverseByteArray(t *testing.T) {
 	tests := []struct {
@@ -114,9 +89,9 @@ func TestParseJoinRequestPacket(t *testing.T) {
 	testDevice := &node.Node{
 		DevEui:   testDevEUI,
 		AppKey:   testAppKey,
-		NodeName: testName,
+		NodeName: testNodeName,
 	}
-	devices[testName] = testDevice
+	devices[testNodeName] = testDevice
 
 	g := &gateway{
 		logger:  logging.NewTestLogger(t),
@@ -368,9 +343,9 @@ func TestHandleJoin(t *testing.T) {
 	testDevice := &node.Node{
 		DevEui:   testDevEUI,
 		AppKey:   testAppKey,
-		NodeName: testName,
+		NodeName: testNodeName,
 	}
-	devices[testName] = testDevice
+	devices[testNodeName] = testDevice
 
 	g := &gateway{
 		logger:   logging.NewTestLogger(t),

@@ -47,7 +47,7 @@ const (
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, count int) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime time.Time) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, c
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	return g.sendDownLink(ctx, joinAccept, true, t, count)
+	return g.sendDownLink(ctx, joinAccept, true, packetTime)
 }
 
 // payload of join request consists of
@@ -437,9 +437,3 @@ func readFromFile(file *os.File) ([]deviceInfo, error) {
 
 	return devices, nil
 }
-
-// 96 157 235 5 0 128 2 0 57 255 0 1 1 61 239 231 4 162 91 218 82
-
-// frame payload 61 239 231 4
-
-// mic  162 91 218 82

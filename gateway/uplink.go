@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -16,11 +15,13 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
 
+var logCount = 0
+
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplinkFreq int, t time.Time, count int) (string, map[string]interface{}, error) {
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -32,19 +33,19 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-	g.logger.Debugf("received data uplink from %s", device.NodeName)
+	g.logger.Debugf("received uplink from %s", device.NodeName)
 
 	// we will send one device downlink from the do command per uplink.
 	if len(device.Downlinks) > 0 {
 		g.logger.Infof("sending interval change")
 		payload, err := g.createDownlink(device, device.Downlinks[0])
 		if err != nil {
-			return "", map[string]interface{}{}, errors.New("failed to create downlink")
+			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}
 
-		err = g.sendDownLink(ctx, payload, false, t, count)
+		err = g.sendDownLink(ctx, payload, false, packetTime)
 		if err != nil {
-			return "", map[string]interface{}{}, errors.New("failed to send downlink")
+			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 		}
 
 		// remove the downlink we just sent from the queue
@@ -54,7 +55,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
-	g.logger.Infof("FCTRL: %x", fctrl)
 	foptsLength := fctrl & 0x0F
 
 	// frame count - should increase by 1 with each packet sent
@@ -62,8 +62,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 
 	// fopts not supported in this module yet.
 	if foptsLength != 0 {
-		fopts := phyPayload[8 : 8+foptsLength]
-		g.logger.Infof("FOPTS: %x", fopts)
+		_ = phyPayload[8 : 8+foptsLength]
 
 	}
 
@@ -104,7 +103,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, uplink
 	// Note that this won't precisely reflect when the uplink was sent, but since lorawan uplinks are sent infrequently
 	// (once per minute max),it will be accurate enough.
 	unix := int(time.Now().Unix())
-	t = time.Unix(int64(unix), 0)
+	t := time.Unix(int64(unix), 0)
 	timestamp := t.Format(time.RFC3339)
 	readings["time"] = timestamp
 
