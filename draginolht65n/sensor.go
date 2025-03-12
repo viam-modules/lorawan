@@ -4,6 +4,7 @@ package draginolht65n
 import (
 	"context"
 	"embed"
+	"fmt"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -13,6 +14,8 @@ import (
 
 const (
 	decoderFilename = "LHT65NChirpstack4decoder.js"
+	intervalKey     = "set_interval"
+	testKey         = "test_only"
 )
 
 // Model represents a dragino-LHT65N lorawan node model.
@@ -138,4 +141,30 @@ func (n *LHT65N) Close(ctx context.Context) error {
 // Readings returns the node's readings.
 func (n *LHT65N) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	return n.node.Readings(ctx, extra)
+}
+
+func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	testOnly := checkTestKey(cmd)
+
+	if interval, ok := cmd[intervalKey].(int); ok {
+		return n.addIntervalToQueue(ctx, interval, testOnly)
+	}
+
+	// do generic node if no sensor specific key was found
+	return n.node.DoCommand(ctx, cmd)
+}
+
+// check if a map has the testkey set
+func checkTestKey(cmd map[string]interface{}) bool {
+	_, ok := cmd[testKey]
+	return ok
+}
+
+func (n *LHT65N) addIntervalToQueue(ctx context.Context, interval int, testOnly bool) (map[string]interface{}, error) {
+	intervalString := fmt.Sprintf("01%06x", interval)
+	if testOnly {
+		return map[string]interface{}{node.DownlinkKey: intervalString}, nil
+	}
+
+	return n.node.SendDownlink(ctx, intervalString)
 }

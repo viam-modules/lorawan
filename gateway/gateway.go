@@ -56,8 +56,6 @@ var (
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
-const sendDownlinkKey = "senddown"
-
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -484,7 +482,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
-	if payload, ok := cmd[sendDownlinkKey]; ok {
+	if payload, ok := cmd[node.GatewaySendDownKey]; ok {
 		downlinks, ok := payload.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
@@ -513,7 +511,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		// 	return nil, errors.New("downlink already flagged")
 		// }
 		// g.sendNewDownlink.Store(true)
-		return map[string]interface{}{sendDownlinkKey: "downlink flag set"}, nil
+		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink flag set"}, nil
 	}
 
 	return map[string]interface{}{}, nil

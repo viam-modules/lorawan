@@ -43,6 +43,9 @@ const (
 	JoinTypeOTAA = "OTAA"
 	// JoinTypeABP is the ABP Join type.
 	JoinTypeABP = "ABP"
+	// DownlinkKey is the DoCommand Key to send a payload to the gateway
+	DownlinkKey            = "send_downlink"
+	GatewaySendDownlinkKey = "senddown"
 )
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
@@ -276,4 +279,26 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		return reading.(map[string]interface{}), nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
+}
+
+func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	resp := map[string]interface{}{}
+	var err error
+
+	if payload, payloadSet := cmd[DownlinkKey].(string); payloadSet {
+		resp[DownlinkKey], err = n.SendDownlink(ctx, payload)
+		if err != nil {
+			return map[string]interface{}{}, err
+		}
+	}
+
+	return resp, nil
+}
+
+func (n *Node) SendDownlink(ctx context.Context, payload string) (map[string]interface{}, error) {
+	req := map[string]interface{}{}
+	downlinks := map[string]interface{}{}
+	downlinks[n.NodeName] = payload
+	req[GatewaySendDownlinkKey] = downlinks
+	return n.gateway.DoCommand(ctx, req)
 }
