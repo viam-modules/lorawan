@@ -159,19 +159,23 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 
 	// payload = append(payload, fopts...)
 
-	payload = append(payload, device.FPort)
-
 	// 30 seconds
 	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
 	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
-	encrypted, err := crypto.EncryptDownlink(
-		types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
-	if err != nil {
-		return nil, err
-	}
+	if framePayload != nil {
+		payload = append(payload, device.FPort)
+		encrypted, err := crypto.EncryptDownlink(
+			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
+		if err != nil {
+			return nil, err
+		}
 
-	payload = append(payload, encrypted...)
+		payload = append(payload, encrypted...)
+	} else {
+		// just an ACK downlink will have 0 for fPort
+		payload = append(payload, 0x00)
+	}
 
 	mic, err := crypto.ComputeLegacyDownlinkMIC(
 		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
