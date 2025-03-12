@@ -353,7 +353,6 @@ func TestNewNode(t *testing.T) {
 	_, err = newNode(ctx, deps, invalidDecoderConf, logger)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
-
 }
 
 func TestReadings(t *testing.T) {
@@ -545,17 +544,17 @@ func TestIsValidFilePath(t *testing.T) {
 
 	// Test valid JS file
 	validJSPath := filepath.Join(tempDir, "valid.js")
-	err := os.WriteFile(validJSPath, []byte("// test file"), 0666)
+	err := os.WriteFile(validJSPath, []byte("// test file"), 0o666)
 	test.That(t, err, test.ShouldBeNil)
 	err = isValidFilePath(validJSPath)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test nested valid JS file
 	dirPath := filepath.Join(tempDir, "test_dir")
-	err = os.Mkdir(dirPath, 0777)
+	err = os.Mkdir(dirPath, 0o777)
 	test.That(t, err, test.ShouldBeNil)
 	nestedJSPath := filepath.Join(dirPath, "nested.js")
-	err = os.WriteFile(nestedJSPath, []byte("// nested test file"), 0666)
+	err = os.WriteFile(nestedJSPath, []byte("// nested test file"), 0o666)
 	test.That(t, err, test.ShouldBeNil)
 	err = isValidFilePath(nestedJSPath)
 	test.That(t, err, test.ShouldBeNil)
@@ -573,10 +572,9 @@ func TestIsValidFilePath(t *testing.T) {
 
 	// Test file with wrong extension
 	invalidExtPath := filepath.Join(tempDir, "invalid.txt")
-	err = os.WriteFile(invalidExtPath, []byte("test file"), 0666)
+	err = os.WriteFile(invalidExtPath, []byte("test file"), 0o666)
 	test.That(t, err, test.ShouldBeNil)
 	err = isValidFilePath(invalidExtPath)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldEqual, "decoder must be a .js file")
-
 }

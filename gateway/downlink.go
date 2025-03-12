@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/viam-modules/gateway/node"
@@ -29,26 +30,20 @@ func findDownLinkChannel(uplinkFreq int) int {
 	downLinkChan := upLinkFreqNum % 8
 	downLinkFreq := downLinkChan*600000 + 923300000
 	return downLinkFreq
-
 }
 
-func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, uplinkFreq int, t time.Time, count int) error {
+func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, packetTime time.Time) error {
 	freq := rx2Frequenecy
 	dataRate := rx2SF
 
-	waitTime := 2 * 10e5
-	if join {
-		waitTime = 6 * 10e5
-	}
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:     C.uint32_t(freq),
 		freq_offset: C.int8_t(0),
-		tx_mode:     C.uint8_t(1), // time stamp
-		count_us:    C.uint32_t(count + int(waitTime)),
+		tx_mode:     C.uint8_t(0), // immediate
 		rf_chain:    C.uint8_t(0),
 		rf_power:    C.int8_t(26),    // tx power in dbm
 		modulation:  C.uint8_t(0x10), // LORA modulation
-		bandwidth:   C.uint8_t(0x06), //500k
+		bandwidth:   C.uint8_t(0x06), // 500k
 		datarate:    C.uint32_t(dataRate),
 		coderate:    C.uint8_t(0x01), // code rate 4/5
 		invert_pol:  C.bool(true),    // Downlinks are always reverse polarity.
@@ -64,9 +59,19 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	}
 	txPkt.payload = cPayload
 
-	// lock the mutex to prevent two sends at the same time.
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	var waitDuration time.Duration
+	switch join {
+	case true:
+		// 47709/32*time.Microsecond is the internal delay of sending a packet
+		waitDuration = (6 * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
+	default:
+		waitDuration = (2 * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
+	}
+
+	if !accurateSleep(ctx, waitDuration) {
+		return fmt.Errorf("error sending downlink: %w", ctx.Err())
+	}
+
 	errCode := int(C.send(&txPkt))
 	if errCode != 0 {
 		return errors.New("failed to send downlink packet")
@@ -75,13 +80,13 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, u
 	for {
 		C.lgw_status(txPkt.rf_chain, 1, &status)
 		if err := ctx.Err(); err != nil {
-			break
+			return fmt.Errorf("error sending downlink: %w", ctx.Err())
 		}
+		// status of 2 means send was successful
 		if int(status) == 2 {
 			break
-		} else {
-			time.Sleep(2 * time.Millisecond)
 		}
+		time.Sleep(2 * time.Millisecond)
 	}
 
 	g.logger.Infof("sent the downlink packet")
@@ -117,48 +122,10 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 	return true
 }
 
-// func createAckDownlink(devAddr []byte, nwkSKey types.AES128Key) ([]byte, error) {
-// 	phyPayload := new(bytes.Buffer)
-
-// 	// Mhdr confirmed data down
-// 	if err := phyPayload.WriteByte(0xA0); err != nil {
-// 		return nil, fmt.Errorf("failed to write MHDR: %w", err)
-// 	}
-
-// 	// the payload needs the dev addr to be in LE
-// 	if _, err := phyPayload.Write(devAddr); err != nil {
-// 		return nil, fmt.Errorf("failed to write DevAddr: %w", err)
-// 	}
-
-// 	// 3. FCtrl: ADR (1), RFU (0), ACK (1), FPending (0), FOptsLen (0)
-// 	if err := phyPayload.WriteByte(0xA0); err != nil {
-// 		return nil, fmt.Errorf("failed to write FCtrl: %w", err)
-// 	}
-
-// 	fCntBytes := make([]byte, 2)
-// 	binary.LittleEndian.PutUint16(fCntBytes, fCntDown)
-// 	if _, err := phyPayload.Write(fCntBytes); err != nil {
-// 		return nil, fmt.Errorf("failed to write FCnt: %w", err)
-// 	}
-
-// 	devAddrBE := reverseByteArray(devAddr)
-// 	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(nwkSKey), *types.MustDevAddr(devAddrBE), uint32(fCntDown), phyPayload.Bytes())
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if _, err := phyPayload.Write(mic[:]); err != nil {
-// 		return nil, fmt.Errorf("failed to write mic: %w", err)
-// 	}
-
-// 	// increment fCntDown
-// 	// TODO: write fcntDown to a file to persist across restarts.
-// 	fCntDown += 1
-
-// 	return phyPayload.Bytes(), nil
-// }
-
-func (g *gateway) createIntervalDownlink(device *node.Node, framePayload []byte) ([]byte, error) {
+// Downlink payload structure
+// | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
+// | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
@@ -172,7 +139,7 @@ func (g *gateway) createIntervalDownlink(device *node.Node, framePayload []byte)
 	payload = append(payload, 0x00)
 
 	fCntBytes := make([]byte, 2)
-	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown))
+	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
 	// fopts := []byte{
@@ -186,24 +153,22 @@ func (g *gateway) createIntervalDownlink(device *node.Node, framePayload []byte)
 
 	// payload = append(payload, fopts...)
 
-	// // Fport
-	// Change to 0x00 for MAC-only downlink
-
-	payload = append(payload, device.FPort) // 0x85 for tilt
+	payload = append(payload, device.FPort)
 
 	// 30 seconds
 	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	//framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
+	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
-	encrypted, err := crypto.EncryptDownlink(types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown), framePayload)
+	encrypted, err := crypto.EncryptDownlink(
+		types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
 	if err != nil {
 		return nil, err
 	}
 
-	// payload = payload[:len(payload)-len(framePayload)]
 	payload = append(payload, encrypted...)
 
-	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown), payload)
+	mic, err := crypto.ComputeLegacyDownlinkMIC(
+		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -211,9 +176,26 @@ func (g *gateway) createIntervalDownlink(device *node.Node, framePayload []byte)
 	payload = append(payload, mic[:]...)
 
 	// increment fCntDown
-	// TODO: write fcntDown to a file to persist across restarts.
-	device.FCntDown += 1
+	device.FCntDown++
+
+	// create new deviceInfo to update the fcntDown in the file.
+	deviceInfo := deviceInfo{
+		DevEUI:   fmt.Sprintf("%X", device.DevEui),
+		DevAddr:  fmt.Sprintf("%X", device.Addr),
+		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
+		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
+		FCntDown: device.FCntDown,
+	}
+
+	err = g.searchAndRemove(g.dataFile, device.DevEui)
+	if err != nil {
+		return nil, fmt.Errorf("failed to remove device info from file: %w", err)
+	}
+
+	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add device info to file: %w", err)
+	}
 
 	return payload, nil
-
 }

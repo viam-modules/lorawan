@@ -47,7 +47,7 @@ const (
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, count int) error {
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime time.Time) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, t time.Time, c
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	return g.sendDownLink(ctx, joinAccept, true, rx2Frequenecy, t, count)
+	return g.sendDownLink(ctx, joinAccept, true, packetTime)
 }
 
 // payload of join request consists of
@@ -178,21 +178,14 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	payload = append(payload, resMIC[:]...)
 
-	g.logger.Infof("before length: %d", len(payload))
-
 	enc, err := crypto.EncryptJoinAccept(types.AES128Key(d.AppKey), payload)
 	if err != nil {
 		return nil, err
 	}
-
-	g.logger.Infof("encrypted length: %d", len(enc))
-
 	ja := make([]byte, 0)
 	// add back mhdr
 	ja = append(ja, 0x20)
 	ja = append(ja, enc...)
-
-	g.logger.Infof("ja length %d", len(ja))
 
 	// generate the session keys
 	keys, err := generateKeys(ctx, jr.devNonce, jr.joinEUI, jn, jr.devEUI, netID, types.AES128Key(d.AppKey))
@@ -202,14 +195,15 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	d.AppSKey = keys.appSKey
 	d.NwkSKey = keys.nwkSKey
-	d.FCntDown = 1
+	d.FCntDown = 0
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
-		DevEUI:  fmt.Sprintf("%X", devEUIBE),
-		DevAddr: fmt.Sprintf("%X", d.Addr),
-		AppSKey: fmt.Sprintf("%X", d.AppSKey),
-		NwkSKey: fmt.Sprintf("%X", d.NwkSKey),
+		DevEUI:   fmt.Sprintf("%X", devEUIBE),
+		DevAddr:  fmt.Sprintf("%X", d.Addr),
+		AppSKey:  fmt.Sprintf("%X", d.AppSKey),
+		NwkSKey:  fmt.Sprintf("%X", d.NwkSKey),
+		FCntDown: d.FCntDown,
 	}
 
 	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
@@ -304,7 +298,7 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 		types.NetID(networkID),
 	)
 	if err != nil {
-		return sessionKeys{}, fmt.Errorf("failed to generate AppSKey: %s", err)
+		return sessionKeys{}, fmt.Errorf("failed to generate AppSKey: %w", err)
 	}
 
 	keys.appSKey = appsKey[:]
@@ -443,9 +437,3 @@ func readFromFile(file *os.File) ([]deviceInfo, error) {
 
 	return devices, nil
 }
-
-// 96 157 235 5 0 128 2 0 57 255 0 1 1 61 239 231 4 162 91 218 82
-
-// frame payload 61 239 231 4
-
-// mic  162 91 218 82
