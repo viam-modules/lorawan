@@ -298,7 +298,7 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 		types.NetID(networkID),
 	)
 	if err != nil {
-		return sessionKeys{}, fmt.Errorf("failed to generate AppSKey: %s", err)
+		return sessionKeys{}, fmt.Errorf("failed to generate AppSKey: %w", err)
 	}
 
 	keys.appSKey = appsKey[:]

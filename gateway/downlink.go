@@ -30,7 +30,6 @@ func findDownLinkChannel(uplinkFreq int) int {
 	downLinkChan := upLinkFreqNum % 8
 	downLinkFreq := downLinkChan*600000 + 923300000
 	return downLinkFreq
-
 }
 
 func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, packetTime time.Time) error {
@@ -44,7 +43,7 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, p
 		rf_chain:    C.uint8_t(0),
 		rf_power:    C.int8_t(26),    // tx power in dbm
 		modulation:  C.uint8_t(0x10), // LORA modulation
-		bandwidth:   C.uint8_t(0x06), //500k
+		bandwidth:   C.uint8_t(0x06), // 500k
 		datarate:    C.uint32_t(dataRate),
 		coderate:    C.uint8_t(0x01), // code rate 4/5
 		invert_pol:  C.bool(true),    // Downlinks are always reverse polarity.
@@ -81,13 +80,13 @@ func (g *gateway) sendDownLink(ctx context.Context, payload []byte, join bool, p
 	for {
 		C.lgw_status(txPkt.rf_chain, 1, &status)
 		if err := ctx.Err(); err != nil {
-			break
+			return fmt.Errorf("error sending downlink: %w", ctx.Err())
 		}
+		// status of 2 means send was successful
 		if int(status) == 2 {
 			break
-		} else {
-			time.Sleep(2 * time.Millisecond)
 		}
+		time.Sleep(2 * time.Millisecond)
 	}
 
 	g.logger.Infof("sent the downlink packet")
@@ -158,16 +157,18 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 
 	// 30 seconds
 	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	//framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
+	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
-	encrypted, err := crypto.EncryptDownlink(types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown)+1, framePayload)
+	encrypted, err := crypto.EncryptDownlink(
+		types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
 	if err != nil {
 		return nil, err
 	}
 
 	payload = append(payload, encrypted...)
 
-	mic, err := crypto.ComputeLegacyDownlinkMIC(types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown)+1, payload)
+	mic, err := crypto.ComputeLegacyDownlinkMIC(
+		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 	payload = append(payload, mic[:]...)
 
 	// increment fCntDown
-	device.FCntDown += 1
+	device.FCntDown++
 
 	// create new deviceInfo to update the fcntDown in the file.
 	deviceInfo := deviceInfo{
@@ -197,5 +198,4 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 	}
 
 	return payload, nil
-
 }

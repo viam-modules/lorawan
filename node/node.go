@@ -4,7 +4,6 @@ package node
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -167,8 +166,7 @@ type Node struct {
 	FCntDown uint32
 	FPort    byte // for downlinks, only required when frame payload exists.
 
-	Downlinks       [][]byte // list of downlink frame payloads to send
-	DownLinkSending atomic.Bool
+	Downlinks [][]byte // list of downlink frame payloads to send
 }
 
 func newNode(

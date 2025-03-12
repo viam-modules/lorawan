@@ -498,7 +498,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			strPayload, ok := payload.(string)
 			if !ok {
 				return nil, fmt.Errorf("expected a string value but got %v", reflect.TypeOf(strPayload))
-
 			}
 
 			payloadBytes, err := hex.DecodeString(strPayload)
@@ -522,7 +521,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 //	-- datarate should be same
 //	-- payload should be same
 func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
-	//nolint:gocritic
+	//nolint
 	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
 		return true
 	}

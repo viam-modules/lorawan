@@ -15,8 +15,6 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
 
-var logCount = 0
-
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
@@ -63,7 +61,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// fopts not supported in this module yet.
 	if foptsLength != 0 {
 		_ = phyPayload[8 : 8+foptsLength]
-
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.

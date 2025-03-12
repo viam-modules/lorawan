@@ -41,6 +41,7 @@ func createDataFile(t *testing.T) *os.File {
 	// Create a temp device data file for testing
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "devices.txt")
+	//nolint:gosec
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
 	test.That(t, err, test.ShouldBeNil)
 	return file
