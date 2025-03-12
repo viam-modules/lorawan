@@ -20,6 +20,8 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
+const testKey = "test_only"
+
 // NewSensor creates a new Node struct. This can be used by external implementers.
 func NewSensor(conf resource.Config, logger logging.Logger) Node {
 	return Node{
@@ -262,4 +264,22 @@ func isValidFilePath(path string) error {
 		return errors.New("decoder must be a .js file")
 	}
 	return nil
+}
+
+// check if a map has the testkey set
+func CheckTestKey(cmd map[string]interface{}) bool {
+	_, ok := cmd[testKey]
+	return ok
+}
+
+// SendDownlink sends a downlink command to the gateway via the gateway's DoCommand
+func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) (map[string]interface{}, error) {
+	req := map[string]interface{}{}
+	downlinks := map[string]interface{}{}
+	downlinks[n.NodeName] = payload
+	req[GatewaySendDownlinkKey] = downlinks
+	if testOnly {
+		return req, nil
+	}
+	return n.gateway.DoCommand(ctx, req)
 }

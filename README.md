@@ -78,6 +78,7 @@ Example OTAA node configuration:
 ```
 
 Example ABP node configuration:
+
 ```json
 {
   "join_type": "ABP",
@@ -89,6 +90,7 @@ Example ABP node configuration:
   "gateways": ["gateway-1"]
 }
 ```
+
 ### Common Attributes
 
 | Name | Type | Required | Description |
@@ -114,6 +116,20 @@ The node registers itself with the gateway so the gateway will recognize message
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+
+### DoCommand
+
+The sensor node model uses DoCommands to send downlinks to sensors from the gateway.
+
+#### Send a downlink
+
+This command will send a generic downlink payload to the gateway. the string is expected to be a set of bytes in hex.
+
+```json
+{
+  "send_downlink": "<BYTESINHEX>"
+}
+```
 
 ## Configure your milesight sensor
 

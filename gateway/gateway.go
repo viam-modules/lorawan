@@ -481,7 +481,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
-	if payload, ok := cmd[node.GatewaySendDownKey]; ok {
+	if payload, ok := cmd[node.GatewaySendDownlinkKey]; ok {
 		downlinks, ok := payload.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
