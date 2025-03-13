@@ -49,6 +49,9 @@ func createMockGateway() *inject.Sensor {
 		if _, ok := cmd["validate"]; ok {
 			return map[string]interface{}{"validate": 1.0}, nil
 		}
+		if _, ok := cmd[GatewaySendDownlinkKey]; ok {
+			return map[string]interface{}{GatewaySendDownlinkKey: "downlink added"}, nil
+		}
 		return map[string]interface{}{}, nil
 	}
 	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
@@ -577,4 +580,87 @@ func TestIsValidFilePath(t *testing.T) {
 	err = isValidFilePath(invalidExtPath)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldEqual, "decoder must be a .js file")
+}
+
+func TestDoCommand(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	mockGateway := createMockGateway()
+	deps := make(resource.Dependencies)
+	deps[encoder.Named(testGatewayName)] = mockGateway
+
+	tmpDir := t.TempDir()
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	// Create the file
+	file, err := os.Create(testDecoderPath)
+	test.That(t, err, test.ShouldBeNil)
+	defer file.Close()
+
+	validConf := resource.Config{
+		Name: "test-node",
+		ConvertedAttributes: &Config{
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	n, err := newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+
+	t.Run("Test successful downlink DoCommand that sends to the gateway", func(t *testing.T) {
+		req := map[string]interface{}{DownlinkKey: "bytes"}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldNotBeNil)
+		test.That(t, err, test.ShouldBeNil)
+
+		// we should receive a success from the gateway
+		gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+		test.That(t, gatewayOk, test.ShouldBeTrue)
+		test.That(t, gatewayResp, test.ShouldEqual, "downlink added")
+
+		// we should not receive a node success message
+		nodeResp, nodeOk := resp[DownlinkKey].(map[string]interface{})
+		test.That(t, nodeOk, test.ShouldBeFalse)
+		test.That(t, nodeResp, test.ShouldBeNil)
+	})
+	t.Run("Test successful downlink DoCommand that returns the node response", func(t *testing.T) {
+		// testKey controls whether we send bytes to the gateway. used for debugging.
+		req := map[string]interface{}{testKey: "", DownlinkKey: "bytes"}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldNotBeNil)
+		test.That(t, err, test.ShouldBeNil)
+
+		// we should receive a success from the gateway
+		gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+		test.That(t, gatewayOk, test.ShouldBeFalse)
+		test.That(t, gatewayResp, test.ShouldEqual, "")
+
+		// we should not receive a node success message
+		nodeResp, nodeOk := resp[DownlinkKey].(map[string]interface{})
+		test.That(t, nodeOk, test.ShouldBeTrue)
+		test.That(t, nodeResp, test.ShouldNotBeNil)
+		testNodeBytes, ok := nodeResp[n.Name().ShortName()]
+		test.That(t, ok, test.ShouldBeTrue)
+		test.That(t, testNodeBytes, test.ShouldEqual, req[DownlinkKey])
+	})
+
+	t.Run("Test nil DoCommand returns empty", func(t *testing.T) {
+		resp, err := n.DoCommand(ctx, nil)
+		test.That(t, resp, test.ShouldBeEmpty)
+		test.That(t, err, test.ShouldBeNil)
+	})
+
+	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
+		req := map[string]interface{}{DownlinkKey: false}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldBeEmpty)
+		test.That(t, err.Error(), test.ShouldContainSubstring, "Error parsing payload, expected string")
+	})
+
 }

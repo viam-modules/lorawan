@@ -4,6 +4,7 @@ package node
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -285,14 +286,13 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 // DoCommand lets users send downlink commands from the node to the gateway.
 func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	resp := map[string]interface{}{}
-	var err error
 	testOnly := CheckTestKey(cmd)
 
-	if payload, payloadSet := cmd[DownlinkKey].(string); payloadSet {
-		resp[DownlinkKey], err = n.SendDownlink(ctx, payload, testOnly)
-		if err != nil {
-			return map[string]interface{}{}, err
+	if payload, payloadSet := cmd[DownlinkKey]; payloadSet {
+		if payloadString, payloadOk := payload.(string); payloadOk {
+			return n.SendDownlink(ctx, payloadString, testOnly)
 		}
+		return map[string]interface{}{}, fmt.Errorf("Error parsing payload, expected string got %v", payload)
 	}
 
 	return resp, nil

@@ -277,9 +277,12 @@ func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) 
 	req := map[string]interface{}{}
 	downlinks := map[string]interface{}{}
 	downlinks[n.NodeName] = payload
-	req[GatewaySendDownlinkKey] = downlinks
+	// return the expected message if testOnly is set.
 	if testOnly {
+		req[DownlinkKey] = downlinks
 		return req, nil
 	}
+
+	req[GatewaySendDownlinkKey] = downlinks
 	return n.gateway.DoCommand(ctx, req)
 }
