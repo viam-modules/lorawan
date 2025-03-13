@@ -584,6 +584,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.DecoderPath = newNode.DecoderPath
 	mergedNode.NodeName = newNode.NodeName
 	mergedNode.JoinType = newNode.JoinType
+	mergedNode.FPort = newNode.FPort
 
 	switch mergedNode.JoinType {
 	case "OTAA":

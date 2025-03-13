@@ -47,6 +47,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}
+
 		// remove the downlink we just sent from the queue
 		device.Downlinks = device.Downlinks[1:]
 		// no frame payloads to send but we still need to send the ack.
@@ -58,12 +59,13 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	if downlinkPayload != nil {
-		g.logger.Debugf("sending downlink message")
 		err = g.sendDownlink(ctx, downlinkPayload, false, packetTime)
 		if err != nil {
 			// don't return error if the downlink fails, we still want to parse the uplink.
 			g.logger.Errorf("failed to send downlink: %w", err)
 		}
+
+		g.logger.Debugf("sent downlink packet to %s", device.NodeName)
 	}
 
 	// Frame control byte contains various settings
