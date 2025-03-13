@@ -518,8 +518,8 @@ func TestNativeConfig(t *testing.T) {
 		cfg, err := getNativeConfig(validConf)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
-		test.That(t, cfg.ResetPin, test.ShouldEqual, resetPin)
-		test.That(t, cfg.BoardName, test.ShouldEqual, powerPin)
+		test.That(t, &cfg.ResetPin, test.ShouldEqual, resetPin)
+		test.That(t, &cfg.PowerPin, test.ShouldEqual, powerPin)
 	})
 	t.Run("Test WaveshareHat Config", func(t *testing.T) {
 		validConf := resource.Config{
@@ -532,8 +532,8 @@ func TestNativeConfig(t *testing.T) {
 		cfg, err := getNativeConfig(validConf)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
-		test.That(t, cfg.ResetPin, test.ShouldEqual, waveshareHatResetPin)
-		test.That(t, cfg.BoardName, test.ShouldEqual, waveshareHatPowerPin)
+		test.That(t, &cfg.ResetPin, test.ShouldEqual, waveshareHatResetPin)
+		test.That(t, &cfg.PowerPin, test.ShouldEqual, waveshareHatPowerPin)
 	})
 	t.Run("Test some random Config", func(t *testing.T) {
 		validConf := resource.Config{
@@ -541,7 +541,7 @@ func TestNativeConfig(t *testing.T) {
 			ConvertedAttributes: &node.Config{},
 		}
 		cfg, err := getNativeConfig(validConf)
-		test.That(t, err, test.ShouldContainSubstring, "does not match a supported config type")
+		test.That(t, err.Error(), test.ShouldContainSubstring, "does not match a supported config type")
 		test.That(t, cfg, test.ShouldBeNil)
 	})
 }
