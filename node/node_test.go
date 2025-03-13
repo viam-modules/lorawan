@@ -660,7 +660,6 @@ func TestDoCommand(t *testing.T) {
 		req := map[string]interface{}{DownlinkKey: false}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "Error parsing payload, expected string")
+		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected string")
 	})
-
 }

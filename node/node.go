@@ -293,7 +293,7 @@ func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[s
 		if payloadString, payloadOk := payload.(string); payloadOk {
 			return n.SendDownlink(ctx, payloadString, testOnly)
 		}
-		return map[string]interface{}{}, fmt.Errorf("Error parsing payload, expected string got %v", payload)
+		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected string got %v", payload)
 	}
 
 	return resp, nil

@@ -167,7 +167,7 @@ func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (
 		if intervalFloat, floatOk := interval.(float64); floatOk {
 			return n.addIntervalToQueue(ctx, intervalFloat, testOnly)
 		}
-		return map[string]interface{}{}, fmt.Errorf("Error parsing payload, expected float got %v", interval)
+		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", interval)
 	}
 	if _, ok := cmd[resetKey]; ok {
 		return n.addRestartToQueue(ctx, testOnly)

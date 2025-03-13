@@ -160,7 +160,7 @@ func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map
 		if intervalFloat, floatOk := interval.(float64); floatOk {
 			return n.addIntervalToQueue(ctx, intervalFloat, testOnly)
 		}
-		return map[string]interface{}{}, fmt.Errorf("Error parsing payload, expected float got %v", interval)
+		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", interval)
 	}
 
 	// do generic node if no sensor specific key was found

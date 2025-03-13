@@ -20,6 +20,7 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
+// TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
 const TestKey = "test_only"
 
 // NewSensor creates a new Node struct. This can be used by external implementers.

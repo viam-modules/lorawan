@@ -25,8 +25,10 @@ const (
 	testGatewayName = "gateway"
 )
 
-var testNodeReadings = map[string]interface{}{"reading": 1}
-var testInterval = 5.0
+var (
+	testNodeReadings = map[string]interface{}{"reading": 1}
+	testInterval     = 5.0
+)
 
 func createMockGateway() *inject.Sensor {
 	mockGateway := &inject.Sensor{}
@@ -263,7 +265,7 @@ func TestDoCommand(t *testing.T) {
 		req := map[string]interface{}{intervalKey: false}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "Error parsing payload, expected float")
+		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected float")
 	})
 
 	t.Run("Test nil DoCommand returns empty", func(t *testing.T) {
@@ -271,7 +273,6 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err, test.ShouldBeNil)
 	})
-
 }
 
 func TestConfigValidate(t *testing.T) {
