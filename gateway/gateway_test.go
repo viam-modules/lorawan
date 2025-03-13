@@ -501,3 +501,47 @@ func TestClose(t *testing.T) {
 		test.That(t, err, test.ShouldNotBeNil)
 	}
 }
+
+func TestNativeConfig(t *testing.T) {
+	t.Run("Test Default Config", func(t *testing.T) {
+		resetPin := 85
+		powerPin := 74
+		validConf := resource.Config{
+			Name: "test-default",
+			ConvertedAttributes: &Config{
+				BoardName: "pi",
+				ResetPin:  &resetPin,
+				Bus:       1,
+				PowerPin:  &powerPin,
+			},
+		}
+		cfg, err := getNativeConfig(validConf)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
+		test.That(t, cfg.ResetPin, test.ShouldEqual, resetPin)
+		test.That(t, cfg.BoardName, test.ShouldEqual, powerPin)
+	})
+	t.Run("Test WaveshareHat Config", func(t *testing.T) {
+		validConf := resource.Config{
+			Name: "test-default",
+			ConvertedAttributes: &ConfigSX1302WaveshareHAT{
+				BoardName: "pi",
+				Bus:       1,
+			},
+		}
+		cfg, err := getNativeConfig(validConf)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
+		test.That(t, cfg.ResetPin, test.ShouldEqual, waveshareHatResetPin)
+		test.That(t, cfg.BoardName, test.ShouldEqual, waveshareHatPowerPin)
+	})
+	t.Run("Test some random Config", func(t *testing.T) {
+		validConf := resource.Config{
+			Name:                "test-default",
+			ConvertedAttributes: &node.Config{},
+		}
+		cfg, err := getNativeConfig(validConf)
+		test.That(t, err, test.ShouldContainSubstring, "does not match a supported config type")
+		test.That(t, cfg, test.ShouldBeNil)
+	})
+}

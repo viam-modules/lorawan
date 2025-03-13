@@ -54,6 +54,12 @@ var (
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
+// ModelGenericHat represents a lorawan gateway hat model.
+var ModelGenericHat = node.LorawanFamily.WithModel("sx1302-hat-generic")
+
+// ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
+var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel("sx1302-waveshare-hat")
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -83,6 +89,18 @@ func init() {
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
 			Constructor: NewGateway,
+		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelGenericHat,
+		resource.Registration[sensor.Sensor, *Config]{
+			Constructor: NewGateway,
+		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelSX1302WaveshareHat,
+		resource.Registration[sensor.Sensor, *ConfigSX1302WaveshareHAT]{
+			Constructor: newSX1302WaveshareHAT,
 		})
 }
 
@@ -161,6 +179,20 @@ func NewGateway(
 	return g, nil
 }
 
+func getNativeConfig(conf resource.Config) (*Config, error) {
+	// check if we are the generic config
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err == nil {
+		return cfg, nil
+	}
+	// check if we are the waveshare hat
+	waveshareHatCfg, err := resource.NativeConfig[*ConfigSX1302WaveshareHAT](conf)
+	if err != nil {
+		return nil, fmt.Errorf("the config %v does not match a supported config type", conf)
+	}
+	return waveshareHatCfg.getGatewayConfig(), nil
+}
+
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	g.mu.Lock()
@@ -178,7 +210,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		}
 	}
 
-	cfg, err := resource.NativeConfig[*Config](conf)
+	cfg, err := getNativeConfig(conf)
 	if err != nil {
 		return err
 	}
