@@ -14,7 +14,7 @@ const (
 	waveshareHatPowerPin = 18
 )
 
-// ConfigSX1302HAT describes the configuration of the gateway
+// ConfigSX1302WaveshareHAT describes the configuration of the gateway.
 type ConfigSX1302WaveshareHAT struct {
 	Bus       int    `json:"spi_bus,omitempty"`
 	BoardName string `json:"board"`
@@ -32,6 +32,7 @@ func (conf *ConfigSX1302WaveshareHAT) Validate(path string) ([]string, error) {
 	return gatewayConf.Validate(path)
 }
 
-func newSX1302WaveshareHAT(ctx context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
+func newSX1302WaveshareHAT(ctx context.Context, deps resource.Dependencies,
+	conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
 	return NewGateway(ctx, deps, conf, logger)
 }
