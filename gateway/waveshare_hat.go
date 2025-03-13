@@ -33,6 +33,7 @@ func (conf *ConfigSX1302WaveshareHAT) Validate(path string) ([]string, error) {
 }
 
 func newSX1302WaveshareHAT(ctx context.Context, deps resource.Dependencies,
-	conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
+	conf resource.Config, logger logging.Logger,
+) (sensor.Sensor, error) {
 	return NewGateway(ctx, deps, conf, logger)
 }
