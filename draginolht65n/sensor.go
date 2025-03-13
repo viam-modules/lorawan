@@ -155,8 +155,12 @@ func (n *LHT65N) Readings(ctx context.Context, extra map[string]interface{}) (ma
 // DoCommand implements the DoCommand for the LHT65N.
 func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	testOnly := node.CheckTestKey(cmd)
-	if interval, ok := cmd[intervalKey].(float64); ok {
-		return n.addIntervalToQueue(ctx, interval, testOnly)
+
+	if interval, intervalSet := cmd[intervalKey]; intervalSet {
+		if intervalFloat, floatOk := interval.(float64); floatOk {
+			return n.addIntervalToQueue(ctx, intervalFloat, testOnly)
+		}
+		return map[string]interface{}{}, fmt.Errorf("Error parsing payload, expected float got %v", interval)
 	}
 
 	// do generic node if no sensor specific key was found
@@ -169,7 +173,7 @@ func (n *LHT65N) addIntervalToQueue(ctx context.Context, interval float64, testO
 	// 01 byte is the header for the downlink. six bytes are for data.
 	intervalString := fmt.Sprintf("01%06x", convertToSeconds)
 	if testOnly {
-		return map[string]interface{}{node.DownlinkKey: intervalString}, nil
+		return map[string]interface{}{intervalKey: intervalString}, nil
 	}
 
 	return n.node.SendDownlink(ctx, intervalString, false)

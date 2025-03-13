@@ -20,7 +20,7 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
-const testKey = "test_only"
+const TestKey = "test_only"
 
 // NewSensor creates a new Node struct. This can be used by external implementers.
 func NewSensor(conf resource.Config, logger logging.Logger) Node {
@@ -268,7 +268,7 @@ func isValidFilePath(path string) error {
 
 // CheckTestKey checks if a map has the testKey set.
 func CheckTestKey(cmd map[string]interface{}) bool {
-	_, ok := cmd[testKey]
+	_, ok := cmd[TestKey]
 	return ok
 }
 

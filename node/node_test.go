@@ -412,7 +412,7 @@ func TestReadings(t *testing.T) {
 	// If lastReadings is empty and the call is not from data manager, return no error.
 	readings, err = n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, noReadings)
+	test.That(t, readings, test.ShouldResemble, NoReadings)
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
 	_, err = n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
@@ -421,7 +421,7 @@ func TestReadings(t *testing.T) {
 	// If data.FromDmString is false, return no error
 	_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, noReadings)
+	test.That(t, readings, test.ShouldResemble, NoReadings)
 }
 
 type ctrl struct {
@@ -631,7 +631,7 @@ func TestDoCommand(t *testing.T) {
 	})
 	t.Run("Test successful downlink DoCommand that returns the node response", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{testKey: "", DownlinkKey: "bytes"}
+		req := map[string]interface{}{TestKey: "", DownlinkKey: "bytes"}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)

@@ -50,7 +50,8 @@ const (
 	GatewaySendDownlinkKey = "add_downlink_to_queue"
 )
 
-var noReadings = map[string]interface{}{"": "no readings available yet"}
+// NoReadings is the return for a sensor that has not received data.
+var NoReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config defines the node's config.
 type Config struct {
@@ -276,7 +277,7 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 			if extra[data.FromDMString] == true {
 				return map[string]interface{}{}, data.ErrNoCaptureToStore
 			}
-			return noReadings, nil
+			return NoReadings, nil
 		}
 		return reading.(map[string]interface{}), nil
 	}

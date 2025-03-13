@@ -163,8 +163,11 @@ func (n *em310Tilt) Readings(ctx context.Context, extra map[string]interface{}) 
 // DoCommand implements the DoCommand for the em310Tilt.
 func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	testOnly := node.CheckTestKey(cmd)
-	if interval, ok := cmd[intervalKey].(float64); ok {
-		return n.addIntervalToQueue(ctx, interval, testOnly)
+	if interval, intervalSet := cmd[intervalKey]; intervalSet {
+		if intervalFloat, floatOk := interval.(float64); floatOk {
+			return n.addIntervalToQueue(ctx, intervalFloat, testOnly)
+		}
+		return map[string]interface{}{}, fmt.Errorf("Error parsing payload, expected float got %v", interval)
 	}
 	if _, ok := cmd[resetKey]; ok {
 		return n.addRestartToQueue(ctx, testOnly)
@@ -189,7 +192,7 @@ func (n *em310Tilt) addIntervalToQueue(ctx context.Context, interval float64, te
 	}
 
 	if testOnly {
-		return map[string]interface{}{node.DownlinkKey: intervalString}, nil
+		return map[string]interface{}{intervalKey: intervalString}, nil
 	}
 
 	return n.node.SendDownlink(ctx, intervalString, false)
@@ -199,7 +202,7 @@ func (n *em310Tilt) addRestartToQueue(ctx context.Context, testOnly bool) (map[s
 	// ff byte is the channel, 10 is the message type and ff is the command for the downlink.
 	intervalString := "ff10ff"
 	if testOnly {
-		return map[string]interface{}{node.DownlinkKey: intervalString}, nil
+		return map[string]interface{}{resetKey: intervalString}, nil
 	}
 
 	return n.node.SendDownlink(ctx, intervalString, false)
