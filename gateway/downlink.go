@@ -164,17 +164,16 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
 	if framePayload != nil {
+		if device.FPort == 0 {
+			return nil, errors.New("invalid downlink fport, ensure fport attribute is correctly set in the node config")
+		}
 		payload = append(payload, device.FPort)
 		encrypted, err := crypto.EncryptDownlink(
 			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
 		if err != nil {
 			return nil, err
 		}
-
 		payload = append(payload, encrypted...)
-	} else {
-		// just an ACK downlink will have 0 for fPort
-		payload = append(payload, 0x00)
 	}
 
 	mic, err := crypto.ComputeLegacyDownlinkMIC(

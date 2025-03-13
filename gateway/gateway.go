@@ -396,7 +396,6 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 		}
 		g.updateReadings(name, readings)
 	case 0x80:
-		g.logger.Debugf("received confirmed data uplink")
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
