@@ -116,10 +116,14 @@ int setUpGateway(int bus) {
     struct lgw_tx_gain_lut_s lut;
     struct lgw_tx_gain_s txGain[16];
 
+    // power amplifier gain, 0 means low power gain, 1 mean high power gain.
     uint8_t paGain [16] =  {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1};
+    // rf power in dbm - represents all power levels the device can transmit at.
     int8_t rf_power [16] = {12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27};
+    // maps the rf power levels to sx1302 chip specific power control registers.
     uint8_t pwr_idx [16] = {15,16,17,19,20,22,1,2,3,4,5,6,7,9,11,14};
 
+    // sx1302 supports 16 power levels
     for(int i = 0; i<16; i++) {
         txGain[i].pa_gain = paGain[i];
         txGain[i].rf_power = rf_power[i];

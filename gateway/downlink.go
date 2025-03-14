@@ -32,7 +32,7 @@ const (
 	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
 )
 
-func (g *gateway) sendDownlink(ctx context.Context, payload []byte, join bool, packetTime time.Time) error {
+func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:     C.uint32_t(rx2Frequency),
 		freq_offset: C.int8_t(0),
@@ -59,7 +59,7 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, join bool, p
 	txPkt.payload = cPayload
 
 	var waitDuration time.Duration
-	switch join {
+	switch isJoinAccept {
 	case true:
 		// 47709/32*time.Microsecond is the internal delay of sending a packet
 		waitDuration = (joinDelay * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
@@ -156,6 +156,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 
 	payload = append(payload, device.FPort)
 
+	// TODO (om) commented for future testing
 	// 30 seconds
 	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
 	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
@@ -188,13 +189,10 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 		FCntDown: device.FCntDown,
 	}
 
-	err = g.searchAndRemove(g.dataFile, device.DevEui)
-	if err != nil {
+	if err = g.searchAndRemove(g.dataFile, device.DevEui); err != nil {
 		return nil, fmt.Errorf("failed to remove device info from file: %w", err)
 	}
-
-	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
-	if err != nil {
+	if err = g.addDeviceInfoToFile(g.dataFile, deviceInfo); err != nil {
 		return nil, fmt.Errorf("failed to add device info to file: %w", err)
 	}
 
@@ -202,6 +200,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 }
 
 // Helper function to calculate the downlink freq to be used for RX1.
+// Not currently being used
 func findDownLinkFreq(uplinkFreq int) int {
 	// channel number between 0-64
 	upLinkFreqNum := (uplinkFreq - 902300000) / 200000
