@@ -29,22 +29,25 @@ Hardware Required:
 
 See [Hardware Tested Section](https://github.com/viam-modules/lorawan?tab=readme-ov-file#hardware-tested) for hardware we have used this module with successfully.
 
-## Configure the `viam:sensor:sx1302-gateway`
+## Setup the `viam:sensor:sx1302-gateway`
 
 Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
 [Add sx1302-gateway to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
 
-### Attributes
+## Configure the `viam:sensor:sx1302-gateway`
 
 Example gateway configuration:
 ```json
 {
     "board": "rpi",
     "spi_bus": 0,
-    "reset_pin": 17,
-    "power_en_pin": 27
+    "reset_pin": int,
+    "power_en_pin": int
 }
 ```
+
+### Attributes
+
 
 The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 
@@ -54,6 +57,58 @@ The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 | reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1) |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+
+## Setup the `viam:sensor:sx1302-hat-generic`
+
+Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
+[Add sx1302-hat-generic to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
+
+## Configure the `viam:sensor:sx1302-hat-generic`
+
+Example gateway configuration - note - the gpio pins MUST be set to the gpio pin numbers on your board connected to the reset and power-enable pins of the sx1302 hat to avoid a 15-minute reset loop.
+```json
+{
+    "board": "rpi",
+    "spi_bus": 0,
+    "reset_pin": int,
+    "power_en_pin": int
+}
+```
+
+### Attributes
+
+The following attributes are available for `viam:sensor:sx1302-hat-generic` sensors:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
+| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
+| spi_bus | int | no | 0 | SPI bus number  |
+| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+
+## Setup the `viam:sensor:sx1302-waveshare-hat`
+
+Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
+[Add sx1302-waveshare-hat to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
+
+## Configure the `viam:sensor:sx1302-waveshare-hat`
+
+Example gateway configuration:
+```json
+{
+    "board": "rpi",
+    "spi_bus": 0
+}
+```
+
+### Attributes
+
+The following attributes are available for `viam:sensor:sx1302-waveshare-hat` sensors:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
+| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
 
 ## Set up the  `viam:sensor:node`
 
