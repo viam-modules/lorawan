@@ -179,6 +179,8 @@ func NewGateway(
 	return g, nil
 }
 
+// look at the resource.Config to determine which model is being used.
+// Alternatively, we could add an enum to the gateway struct and let the NewGateway functions specify which model is being used.
 func getNativeConfig(conf resource.Config) (*Config, error) {
 	// check if we are the generic config
 	cfg, err := resource.NativeConfig[*Config](conf)
