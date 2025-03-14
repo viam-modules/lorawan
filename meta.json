@@ -15,7 +15,7 @@
           "api": "rdk:component:sensor",
           "model": "viam:lorawan:sx1302-hat-generic",
           "markdown_link": "README.md#configure-the-sx1302-hat-generic",
-          "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT."
+          "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT connected by SPI to a single board computer."
         },
         {
           "api": "rdk:component:sensor",
