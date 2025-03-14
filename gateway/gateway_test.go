@@ -223,7 +223,7 @@ func TestDoCommand(t *testing.T) {
 	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
 		"unknown-node": testDownLinkPayload,
 	}
-	resp, err = s.DoCommand(context.Background(), downlinkCmd)
+	_, err = s.DoCommand(context.Background(), downlinkCmd)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "not found")
 
@@ -231,7 +231,7 @@ func TestDoCommand(t *testing.T) {
 	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
 		testNodeName: "olf",
 	}
-	resp, err = s.DoCommand(context.Background(), downlinkCmd)
+	_, err = s.DoCommand(context.Background(), downlinkCmd)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to decode")
 
