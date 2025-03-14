@@ -153,11 +153,6 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 
 	payload = append(payload, device.FPort)
 
-	// TODO (om) commented for future testing
-	// 30 seconds
-	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
-
 	encrypted, err := crypto.EncryptDownlink(
 		types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
 	if err != nil {
