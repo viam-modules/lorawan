@@ -12,6 +12,7 @@ package gateway
 import "C"
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -134,8 +135,25 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 
 	payload = append(payload, devAddrLE...)
 
-	// 3. FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0)
-	payload = append(payload, 0x00)
+	fopts := make([]byte, 0)
+	if device.SendDeviceTimeAns.Load() {
+		g.logger.Debugf("sending device time answer to %s", device.NodeName)
+		deviceTimeAns := g.createDeviceTimeAns()
+		fopts = append(fopts, deviceTimeAns...)
+		device.SendDeviceTimeAns.Store(false)
+	}
+
+	fOptslen := len(fopts)
+	g.logger.Warnf("fopts length: %d", fOptslen)
+
+	fopts4 := fOptslen & 0x0F
+
+	g.logger.Warnf("fopts length 4 bits: %d", fopts4)
+
+	// FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0000)
+	fctrl := 0x20 | byte(fopts4)
+	g.logger.Warnf("ctrl: %x", fctrl)
+	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
@@ -151,21 +169,23 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 
 	// fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
 
-	// payload = append(payload, fopts...)
+	payload = append(payload, fopts...)
 
-	payload = append(payload, device.FPort)
+	if framePayload != nil {
+		payload = append(payload, device.FPort)
 
-	// 30 seconds
-	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
+		// 30 seconds
+		// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
+		// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
-	encrypted, err := crypto.EncryptDownlink(
-		types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
-	if err != nil {
-		return nil, err
+		encrypted, err := crypto.EncryptDownlink(
+			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
+		if err != nil {
+			return nil, err
+		}
+
+		payload = append(payload, encrypted...)
 	}
-
-	payload = append(payload, encrypted...)
 
 	mic, err := crypto.ComputeLegacyDownlinkMIC(
 		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
@@ -197,6 +217,8 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 		return nil, fmt.Errorf("failed to add device info to file: %w", err)
 	}
 
+	g.logger.Warnf("downlink full payload %x", payload)
+
 	return payload, nil
 }
 
@@ -207,4 +229,33 @@ func findDownLinkFreq(uplinkFreq int) int {
 	downLinkChan := upLinkFreqNum % 8
 	downLinkFreq := downLinkChan*600000 + 923300000
 	return downLinkFreq
+}
+
+func (g *gateway) createDeviceTimeAns() []byte {
+	// Create buffer for the complete PHYPayload
+	payload := make([]byte, 0)
+
+	// add command identifier
+	payload = append(payload, 0x0D)
+
+	// Create frame payload
+	// Time is represented as seconds since GPS epoch
+	gpsEpoch := time.Date(1980, 1, 6, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
+	secondsSinceGPSEpoch := uint32(now.Sub(gpsEpoch).Seconds())
+
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch)
+	payload = append(payload, buf.Bytes()...)
+
+	//Calculate fractional seconds (1/256 resolution)
+	// nanoseconds := now.Nanosecond()
+	// fractionalSeconds := byte(float64(nanoseconds) / float64(1e9) * 255) // Convert ms to 1/256 resolution
+	// payload = append(payload, fractionalSeconds)
+
+	payload = append(payload, 0)
+
+	g.logger.Infof("devicetimeans: %x", payload)
+
+	return payload
 }

@@ -33,25 +33,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	g.logger.Debugf("received uplink from %s", device.NodeName)
 
-	// we will send one device downlink from the do command per uplink.
-	if len(device.Downlinks) > 0 {
-		g.logger.Debugf("sending downlink message")
-		payload, err := g.createDownlink(device, device.Downlinks[0])
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
-		}
-
-		err = g.sendDownlink(ctx, payload, false, packetTime)
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
-		}
-
-		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
-
-		// remove the downlink we just sent from the queue
-		device.Downlinks = device.Downlinks[1:]
-	}
-
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
@@ -62,7 +43,47 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	// fopts not supported in this module yet.
 	if foptsLength != 0 {
-		_ = phyPayload[8 : 8+foptsLength]
+		fopts := phyPayload[8 : 8+foptsLength]
+		for _, b := range fopts {
+			switch b {
+			case 0x0D:
+				g.logger.Warnf("GOT DEVICE TIME REQ")
+				device.SendDeviceTimeAns.Store(true)
+			default:
+				//unsupported mac command
+				g.logger.Debugf("got unsupported mac command %x", b)
+			}
+
+		}
+	}
+
+	// we will send one device downlink from the do command per uplink.
+	var payload []byte
+	sendDownlink := false
+	if len(device.Downlinks) > 0 {
+		sendDownlink = true
+		g.logger.Debugf("sending downlink message")
+		payload, err = g.createDownlink(device, device.Downlinks[0])
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+		}
+
+		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
+
+		// remove the downlink we just sent from the queue
+		device.Downlinks = device.Downlinks[1:]
+	} else if device.SendDeviceTimeAns.Load() {
+		sendDownlink = true
+		payload, err = g.createDownlink(device, nil)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+		}
+	}
+	if sendDownlink {
+		err = g.sendDownlink(ctx, payload, false, packetTime)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
+		}
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
