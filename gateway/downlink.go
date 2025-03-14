@@ -138,7 +138,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
-	//TODO (om) commented for future testing
+	// TODO (om) commented for future testing
 	// fopts are used for the MAC commands
 	// fopts := []byte{
 	// 	0b00111001, // data rate and tx power
