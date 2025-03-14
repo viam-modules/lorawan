@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"encoding/hex"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"testing"
