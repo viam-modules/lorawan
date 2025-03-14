@@ -41,9 +41,14 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	var downlinkPayload []byte
 	if len(device.Downlinks) > 0 {
+<<<<<<< HEAD
 		// we will send one device downlink from the do command per uplink.
 		var err error
 		downlinkPayload, err = g.createDownlink(device, device.Downlinks[0], sendAck)
+=======
+		g.logger.Debugf("sending downlink message to %s", device.NodeName)
+		payload, err := g.createDownlink(device, device.Downlinks[0])
+>>>>>>> confirmeddata
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}

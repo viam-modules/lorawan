@@ -323,9 +323,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
-		g.mu.Lock()
 		numPackets := int(C.receive(p))
-		g.mu.Unlock()
 		t := time.Now()
 		switch numPackets {
 		case 0:
@@ -376,8 +374,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 	switch payload[0] {
 	case 0x0:
 		g.logger.Debugf("received join request")
-		err := g.handleJoin(ctx, payload, packetTime)
-		if err != nil {
+		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
 				return
