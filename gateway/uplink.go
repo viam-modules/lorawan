@@ -19,7 +19,7 @@ import (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (string, map[string]interface{}, error) {
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -29,6 +29,27 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte) (strin
 	if err != nil {
 		g.logger.Debugf("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, errNoDevice
+	}
+
+	g.logger.Debugf("received uplink from %s", device.NodeName)
+
+	// we will send one device downlink from the do command per uplink.
+	if len(device.Downlinks) > 0 {
+		g.logger.Debugf("sending downlink message to %s", device.NodeName)
+		payload, err := g.createDownlink(device, device.Downlinks[0])
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+		}
+
+		err = g.sendDownlink(ctx, payload, false, packetTime)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
+		}
+
+		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
+
+		// remove the downlink we just sent from the queue
+		device.Downlinks = device.Downlinks[1:]
 	}
 
 	// Frame control byte contains various settings

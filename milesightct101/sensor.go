@@ -74,6 +74,7 @@ func (conf *Config) getNodeConfig() node.Config {
 		NwkSKey:  nwkSKey,
 		DevAddr:  conf.DevAddr,
 		Gateways: conf.Gateways,
+		FPort:    "55", // in hex, 85 in decimal
 	}
 }
 

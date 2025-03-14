@@ -19,9 +19,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +54,8 @@ var (
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
+const sendDownlinkKey = "senddown"
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -72,9 +74,11 @@ type Config struct {
 // deviceInfo is a struct containing OTAA device information.
 // This info is saved across module restarts for each device.
 type deviceInfo struct {
-	DevEUI  string `json:"dev_eui"`
-	DevAddr string `json:"dev_addr"`
-	AppSKey string `json:"app_skey"`
+	DevEUI   string `json:"dev_eui"`
+	DevAddr  string `json:"dev_addr"`
+	AppSKey  string `json:"app_skey"`
+	NwkSKey  string `json:"nwk_skey"`
+	FCntDown uint32 `json:"fcnt_down"`
 }
 
 func init() {
@@ -243,6 +247,10 @@ func parseErrorCode(errCode int) string {
 	case 4:
 		return "error setting the intermediate frequency chain config"
 	case 5:
+		return "error configuring the lora STD channel"
+	case 6:
+		return "error configuring the tx gain settings"
+	case 7:
 		return "error starting the gateway"
 	default:
 		return "unknown error"
@@ -316,7 +324,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 		numPackets := int(C.receive(p))
-
+		t := time.Now()
 		switch numPackets {
 		case 0:
 			// no packet received, wait 10 ms to receive again.
@@ -338,67 +346,68 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				}
 
 				// don't process duplicates
-				if numPackets > 1 && i > 0 {
-					if isSamePacket(packets[i-1], packets[i]) {
+				isDuplicate := false
+				for j := i - 1; j >= 0; j-- {
+					if isSamePacket(packets[j], packets[i]) {
 						g.logger.Debugf("skipped duplicate packet")
-						continue
+						isDuplicate = true
+						break
 					}
+				}
+				if isDuplicate {
+					continue
 				}
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
-					g.handlePacket(ctx, payload)
+					g.handlePacket(ctx, payload, t)
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte) {
-	g.receivingWorker.Add(func(ctx context.Context) {
-		// first byte is MHDR - specifies message type
-		switch payload[0] {
-		case 0x0:
-			g.logger.Debugf("received join request")
-			err := g.handleJoin(ctx, payload, time.Now())
-			if err != nil {
-				// don't log as error if it was a request from unknown device.
-				if errors.Is(errNoDevice, err) {
-					return
-				}
-				g.logger.Errorf("couldn't handle join request: %s", err)
-			}
-		case 0x40:
-			g.logger.Debugf("received data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload)
-			if err != nil {
-				// don't log as error if it was a request from unknown device.
-				if errors.Is(errNoDevice, err) {
-					return
-				}
-				g.logger.Errorf("error parsing uplink message: %s", err)
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
+	// first byte is MHDR - specifies message type
+	switch payload[0] {
+	case 0x0:
+		g.logger.Debugf("received join request")
+		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
+			// don't log as error if it was a request from unknown device.
+			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.updateReadings(name, readings)
-		case 0x80:
-			g.logger.Debugf("received confirmed data uplink")
-			name, readings, err := g.parseDataUplink(ctx, payload)
-			if err != nil {
-				// don't log as error if it was a request from unknown device.
-				if errors.Is(errNoDevice, err) {
-					return
-				}
-				g.logger.Errorf("error parsing uplink message: %s", err)
-				return
-			}
-			g.updateReadings(name, readings)
-
-		default:
-			g.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
+			g.logger.Errorf("couldn't handle join request: %s", err)
 		}
-	})
+	case 0x40:
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		if err != nil {
+			// don't log as error if it was a request from unknown device.
+			if errors.Is(errNoDevice, err) {
+				return
+			}
+			g.logger.Errorf("error parsing uplink message: %s", err)
+			return
+		}
+		g.updateReadings(name, readings)
+	case 0x80:
+		g.logger.Debugf("received confirmed data uplink")
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		if err != nil {
+			// don't log as error if it was a request from unknown device.
+			if errors.Is(errNoDevice, err) {
+				return
+			}
+			g.logger.Errorf("error parsing uplink message: %s", err)
+			return
+		}
+		g.updateReadings(name, readings)
+
+	default:
+		g.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
+	}
 }
 
 func (g *gateway) updateReadings(name string, newReadings map[string]interface{}) {
@@ -475,22 +484,41 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
+	if payload, ok := cmd[sendDownlinkKey]; ok {
+		downlinks, ok := payload.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
+		}
+
+		for name, payload := range downlinks {
+			dev, ok := g.devices[name]
+			if !ok {
+				return nil, fmt.Errorf("node with name %s not found", name)
+			}
+
+			strPayload, ok := payload.(string)
+			if !ok {
+				return nil, fmt.Errorf("expected a string value but got %v", reflect.TypeOf(strPayload))
+			}
+
+			payloadBytes, err := hex.DecodeString(strPayload)
+			if err != nil {
+				return nil, errors.New("failed to decode string to bytes")
+			}
+
+			dev.Downlinks = append(dev.Downlinks, payloadBytes)
+		}
+
+		return map[string]interface{}{sendDownlinkKey: "downlink added"}, nil
+	}
 
 	return map[string]interface{}{}, nil
 }
 
-// Criteria to determine if packets are identical:
-//
-//	-- count_us should be equal or can have up to 24µs of difference (3 samples)
-//	-- freq should be same
-//	-- datarate should be same
-//	-- payload should be same
+// Classifying two packets as the same if they have identifical payloads.
 func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
-	if math.Abs(float64(p1.count_us-p2.count_us)) <= 24 &&
-		p1.freq_hz == p2.freq_hz &&
-		p1.datarate == p2.datarate &&
-		//nolint:gocritic
-		C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
+	//nolint
+	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
 		return true
 	}
 	return false
@@ -533,8 +561,15 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 		return fmt.Errorf("failed to decode file's dev addr: %w", err)
 	}
 
+	nwksKey, err := hex.DecodeString(d.NwkSKey)
+	if err != nil {
+		return fmt.Errorf("failed to decode file's nwk session key: %w", err)
+	}
+
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
+	device.NwkSKey = nwksKey
+	device.FCntDown = d.FCntDown
 
 	// Update the device in the map.
 	g.devices[device.NodeName] = device
@@ -547,6 +582,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.DecoderPath = newNode.DecoderPath
 	mergedNode.NodeName = newNode.NodeName
 	mergedNode.JoinType = newNode.JoinType
+	mergedNode.FPort = newNode.FPort
 
 	switch mergedNode.JoinType {
 	case "OTAA":
@@ -592,6 +628,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 		return nil, err
 	}
 
+	node.FPort = byte(mapNode["FPort"].(float64))
 	node.NodeName = mapNode["NodeName"].(string)
 	node.JoinType = mapNode["JoinType"].(string)
 
