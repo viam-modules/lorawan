@@ -41,8 +41,8 @@ Example gateway configuration:
 {
     "board": "rpi",
     "spi_bus": 0,
-    "reset_pin": 17,
-    "power_en_pin": 27
+    "reset_pin": int,
+    "power_en_pin": int
 }
 ```
 
@@ -70,8 +70,8 @@ Example gateway configuration - note - the gpio pins MUST be set to the gpio pin
 {
     "board": "rpi",
     "spi_bus": 0,
-    "reset_pin": 17,
-    "power_en_pin": 27
+    "reset_pin": int,
+    "power_en_pin": int
 }
 ```
 
