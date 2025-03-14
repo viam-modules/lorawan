@@ -37,6 +37,13 @@ import (
 	"go.viam.com/utils"
 )
 
+// defining model names here to be reused in getNativeConfig
+const (
+	oldModelName = "sx1302-gateway"
+	genericHat   = "sx1302-hat-generic"
+	waveshareHat = "sx1302-waveshare-hat"
+)
+
 // Error variables for validation and operations
 var (
 	// Config validation errors
@@ -52,13 +59,13 @@ var (
 )
 
 // Model represents a lorawan gateway model.
-var Model = node.LorawanFamily.WithModel("sx1302-gateway")
+var Model = node.LorawanFamily.WithModel(string(oldModelName))
 
 // ModelGenericHat represents a lorawan gateway hat model.
-var ModelGenericHat = node.LorawanFamily.WithModel("sx1302-hat-generic")
+var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
-var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel("sx1302-waveshare-hat")
+var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
 const sendDownlinkKey = "senddown"
 
@@ -184,19 +191,19 @@ func NewGateway(
 }
 
 // look at the resource.Config to determine which model is being used.
-// Alternatively, we could add an enum to the gateway struct and let the NewGateway functions specify which model is being used.
 func getNativeConfig(conf resource.Config) (*Config, error) {
-	// check if we are the generic config
-	cfg, err := resource.NativeConfig[*Config](conf)
-	if err == nil {
-		return cfg, nil
+	switch conf.Model.Name {
+	case genericHat, oldModelName:
+		return resource.NativeConfig[*Config](conf)
+	case waveshareHat:
+		waveshareHatCfg, err := resource.NativeConfig[*ConfigSX1302WaveshareHAT](conf)
+		if err != nil {
+			return nil, fmt.Errorf("the config %v does not match a supported config type", conf)
+		}
+		return waveshareHatCfg.getGatewayConfig(), nil
+	default:
+		return nil, errors.New("build error in module. Unsupported Gateway model")
 	}
-	// check if we are the waveshare hat
-	waveshareHatCfg, err := resource.NativeConfig[*ConfigSX1302WaveshareHAT](conf)
-	if err != nil {
-		return nil, fmt.Errorf("the config %v does not match a supported config type", conf)
-	}
-	return waveshareHatCfg.getGatewayConfig(), nil
 }
 
 // Reconfigure reconfigures the gateway.

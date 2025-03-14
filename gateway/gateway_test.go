@@ -568,6 +568,7 @@ func TestNativeConfig(t *testing.T) {
 				Bus:       1,
 				PowerPin:  &powerPin,
 			},
+			Model: ModelGenericHat,
 		}
 		cfg, err := getNativeConfig(validConf)
 		test.That(t, err, test.ShouldBeNil)
@@ -582,6 +583,7 @@ func TestNativeConfig(t *testing.T) {
 				BoardName: "pi",
 				Bus:       1,
 			},
+			Model: ModelSX1302WaveshareHat,
 		}
 		cfg, err := getNativeConfig(validConf)
 		test.That(t, err, test.ShouldBeNil)
@@ -595,7 +597,7 @@ func TestNativeConfig(t *testing.T) {
 			ConvertedAttributes: &node.Config{},
 		}
 		cfg, err := getNativeConfig(validConf)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "does not match a supported config type")
+		test.That(t, err.Error(), test.ShouldContainSubstring, "build error in module. Unsupported Gateway model")
 		test.That(t, cfg, test.ShouldBeNil)
 	})
 }
