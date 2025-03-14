@@ -17,7 +17,7 @@ import (
 
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
-// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
+// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
@@ -31,13 +31,14 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-	g.logger.Debugf("received uplink from %s", device.NodeName)
-
-	sendAck := false
-	// confirmed data up, send ACK bit in downlink
+	uplinkType := "unconfirmed"
 	if phyPayload[0] == 0x80 {
-		sendAck = true
+		uplinkType = "confirmed"
 	}
+	g.logger.Debugf("received %s uplink from %s", uplinkType, device.NodeName)
+
+	// confirmed data up, send ACK bit in downlink
+	sendAck := phyPayload[0] == 0x80
 
 	var downlinkFramePayload []byte
 	if len(device.Downlinks) > 0 {
@@ -52,8 +53,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}
-		err = g.sendDownlink(ctx, downlinkPayload, false, packetTime)
-		if err != nil {
+		if err = g.sendDownlink(ctx, downlinkPayload, false, packetTime); err != nil {
 			// don't return error if the downlink fails, we still want to parse the uplink.
 			g.logger.Errorf("failed to send downlink: %w", err)
 		}
