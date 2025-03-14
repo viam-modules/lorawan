@@ -94,10 +94,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		deps = append(deps, gateway)
 	}
 
-	if len(conf.FPort) > 2 {
-		return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
-	}
-
 	if conf.FPort != "" {
 		fPort, err := hex.DecodeString(conf.FPort)
 		if err != nil {
