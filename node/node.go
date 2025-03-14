@@ -168,9 +168,8 @@ type Node struct {
 	gateway     sensor.Sensor
 	JoinType    string
 
-	FCntDown uint32
-	FPort    byte // for downlinks, only required when frame payload exists.
-
+	FCntDown  uint32
+	FPort     byte     // for downlinks, only required when frame payload exists.
 	Downlinks [][]byte // list of downlink frame payloads to send
 }
 
