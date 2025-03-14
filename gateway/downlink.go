@@ -59,13 +59,10 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	}
 	txPkt.payload = cPayload
 
-	var waitDuration time.Duration
-	switch isJoinAccept {
-	case true:
-		// 47709/32*time.Microsecond is the internal delay of sending a packet
+	// 47709/32*time.Microsecond is the internal delay of sending a packet
+	waitDuration := (downlinkDelay * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
+	if isJoinAccept {
 		waitDuration = (joinDelay * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
-	default:
-		waitDuration = (downlinkDelay * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
 	}
 
 	if !accurateSleep(ctx, waitDuration) {
