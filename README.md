@@ -141,7 +141,8 @@ Example ABP node configuration:
   "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
   "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
   "uplink_interval_mins": 10,
-  "gateways": ["gateway-1"]
+  "gateways": ["gateway-1"],
+  "fport": "55"
 }
 ```
 ### Common Attributes
@@ -152,6 +153,7 @@ Example ABP node configuration:
 | join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
 | uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
 | gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
+| fport | string | no | port (in hex) to send downlinks to the device. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 

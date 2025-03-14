@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -181,6 +182,59 @@ func TestDoCommand(t *testing.T) {
 	removeCmd["remove_device"] = n.NodeName
 	doOverWire(s, removeCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 0)
+
+	// test sendDownlink command
+	testDownLinkPayload := "ff03"
+
+	//Clear devices and add a device for testing
+	g.devices = map[string]*node.Node{}
+	g.devices[testNodeName] = &node.Node{
+		NodeName:    testNodeName,
+		DecoderPath: testDecoderPath,
+		JoinType:    "OTAA",
+		DevEui:      testDevEUI,
+		AppKey:      testAppKey,
+	}
+
+	downlinkCmd := make(map[string]interface{})
+	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
+		testNodeName: testDownLinkPayload,
+	}
+
+	resp, err = s.DoCommand(context.Background(), downlinkCmd)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Verify response
+	retVal, ok = resp[sendDownlinkKey]
+	test.That(t, ok, test.ShouldBeTrue)
+	test.That(t, retVal, test.ShouldEqual, "downlink added")
+
+	// Verify the downlink was added to the node
+	node, ok := g.devices[testNodeName]
+	test.That(t, ok, test.ShouldBeTrue)
+	test.That(t, len(node.Downlinks), test.ShouldEqual, 1)
+
+	// Verify the downlink payload matches (after hex decoding)
+	expectedPayload, err := hex.DecodeString(testDownLinkPayload)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, node.Downlinks[0], test.ShouldResemble, expectedPayload)
+
+	// Unknown device name should error
+	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
+		"unknown-node": testDownLinkPayload,
+	}
+	_, err = s.DoCommand(context.Background(), downlinkCmd)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "not found")
+
+	// invalid byte encoding should error
+	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
+		testNodeName: "olf",
+	}
+	_, err = s.DoCommand(context.Background(), downlinkCmd)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to decode")
+
 }
 
 func TestMergeNodes(t *testing.T) {

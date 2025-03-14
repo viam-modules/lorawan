@@ -60,6 +60,7 @@ func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 		NwkSKey:  conf.NwkSKey,
 		DevAddr:  conf.DevAddr,
 		Gateways: conf.Gateways,
+		FPort:    "01",
 	}
 }
 

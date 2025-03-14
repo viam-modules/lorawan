@@ -3,47 +3,12 @@ package gateway
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/viam-modules/gateway/node"
-	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
 
-// setupTestGateway creates a test gateway with a configured test device.
-func setupUplinkGateway(t *testing.T) *gateway {
-	// Create a temp device data file for testing
-	file := createDataFile(t)
-
-	testDevices := make(map[string]*node.Node)
-	testNode := &node.Node{
-		Addr:        testDeviceAddr,
-		AppSKey:     testAppSKey,
-		NodeName:    testNodeName,
-		DecoderPath: testDecoderPath,
-		JoinType:    "OTAA",
-		DevEui:      testDevEUI,
-	}
-	testDevices[testNodeName] = testNode
-
-	return &gateway{
-		logger:   logging.NewTestLogger(t),
-		devices:  testDevices,
-		dataFile: file,
-	}
-}
-
 var (
-	// Test device configuration.
-	testDeviceAddr = []byte{0xe2, 0x73, 0x65, 0x66} // BE
-	testAppSKey    = []byte{
-		0x55, 0x72, 0x40, 0x4C,
-		0x69, 0x6E, 0x6B, 0x4C,
-		0x6F, 0x52, 0x61, 0x32,
-		0x30, 0x31, 0x38, 0x23,
-	}
-	testNodeName    = "testNode"
-	testDecoderPath = "./mockdecoder.js"
-
 	// Valid uplink payload.
 	validUplinkData = []byte{
 		0x40,                   // MHDR: data uplink
@@ -106,10 +71,10 @@ func createUnknownDevicePayload() []byte {
 }
 
 func TestParseDataUplink(t *testing.T) {
-	g := setupUplinkGateway(t)
+	g := createTestGateway(t)
 
 	// Test valid data uplink
-	deviceName, readings, err := g.parseDataUplink(context.Background(), validUplinkData)
+	deviceName, readings, err := g.parseDataUplink(context.Background(), validUplinkData, time.Now())
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldNotBeNil)
 	test.That(t, deviceName, test.ShouldEqual, testNodeName)
@@ -128,12 +93,12 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, current, test.ShouldEqual, expectedCurrent)
 
 	// Test unparsable data
-	_, _, err = g.parseDataUplink(context.Background(), createInvalidPayload())
+	_, _, err = g.parseDataUplink(context.Background(), createInvalidPayload(), time.Now())
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "data received by node testNode was not parsable")
+	test.That(t, err.Error(), test.ShouldContainSubstring, "data received by node test-device was not parsable")
 
 	// Test unknown device
-	_, _, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload())
+	_, _, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload(), time.Now())
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
 

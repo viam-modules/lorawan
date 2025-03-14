@@ -89,6 +89,14 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		n.JoinType = "OTAA"
 	}
 
+	if cfg.FPort != "" {
+		val, err := hex.DecodeString(cfg.FPort)
+		if err != nil {
+			return err
+		}
+		n.FPort = val[0]
+	}
+
 	gateway, err := getGateway(ctx, deps)
 	if err != nil {
 		return err
