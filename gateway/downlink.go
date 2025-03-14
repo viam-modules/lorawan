@@ -131,7 +131,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 
 	payload = append(payload, devAddrLE...)
 
-	// 3. FCtrl: ADR (0), RFU (0), ACK(1), FPending (0), FOptsLen (0000)
+	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
 	fctrl := 0x00
 	if sendAck {
 		fctrl = 0x20
