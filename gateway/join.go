@@ -208,6 +208,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		g.logger.Errorf("failed to write device info to file: %v", err)
 	}
 
+	// return the encrypted join accept message
 	return ja, nil
 }
 
