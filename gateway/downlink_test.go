@@ -116,7 +116,7 @@ func TestCreateDownLink(t *testing.T) {
 
 				expectedFctrl := 0x0
 				if tt.ack {
-					expectedFctrl = 0x10
+					expectedFctrl = 0x20
 				}
 				test.That(t, payload[5], test.ShouldEqual, expectedFctrl)
 
