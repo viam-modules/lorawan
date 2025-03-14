@@ -37,6 +37,7 @@ var (
 	ErrDevAddrLength       = errors.New("device address must be 4 bytes")
 	ErrBadDecoderURL       = "Error Retreiving decoder url is invalid, please report to maintainer: " +
 		"Status Code %v"
+	ErrFPortTooLong = errors.New("fport must be one byte long")
 )
 
 const (
@@ -91,6 +92,10 @@ func (conf *Config) Validate(path string) ([]string, error) {
 			return nil, resource.NewConfigValidationError(path, ErrGatewayEmpty)
 		}
 		deps = append(deps, gateway)
+	}
+
+	if len(conf.FPort) > 2 {
+		return nil, resource.NewConfigValidationError(path, ErrFPortTooLong)
 	}
 
 	var err error

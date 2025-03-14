@@ -41,47 +41,24 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
-	// fopts not supported in this module yet.
-	if foptsLength != 0 {
-		fopts := phyPayload[8 : 8+foptsLength]
-		for _, b := range fopts {
-			switch b {
-			case 0x0D:
-				g.logger.Warnf("GOT DEVICE TIME REQ")
-				device.SendDeviceTimeAns.Store(true)
-			default:
-				//unsupported mac command
-				g.logger.Debugf("got unsupported mac command %x", b)
-			}
+	fopts := phyPayload[8 : 8+foptsLength]
 
-		}
+	g.logger.Infof("FOPTS: %x", fopts)
+	g.logger.Info("FOPTS LENGTH %d", foptsLength)
+	// we will send one device downlink from the do command per uplink.
+	var downlinkPayload []byte
+	if len(device.Downlinks) > 0 {
+		downlinkPayload = device.Downlinks[0]
+
+		// remove the downlink we are about to send to the queue
+		device.Downlinks = device.Downlinks[1:]
 	}
 
-	// we will send one device downlink from the do command per uplink.
-	var payload []byte
-	sendDownlink := false
-	if len(device.Downlinks) > 0 {
-		sendDownlink = true
-		g.logger.Debugf("sending downlink message")
-		payload, err = g.createDownlink(device, device.Downlinks[0])
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
-		}
+	if downlinkPayload != nil || foptsLength > 0 {
+		payload, err := g.createDownlink(device, downlinkPayload, fopts)
 
 		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
-
-		// remove the downlink we just sent from the queue
-		device.Downlinks = device.Downlinks[1:]
-	} else if device.SendDeviceTimeAns.Load() {
-		sendDownlink = true
-		payload, err = g.createDownlink(device, nil)
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
-		}
-	}
-	if sendDownlink {
-		err = g.sendDownlink(ctx, payload, false, packetTime)
-		if err != nil {
+		if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 		}
 	}

@@ -28,12 +28,12 @@ import (
 const (
 	joinDelay     = 6         // rx2 delay in seconds for sending join accept message.
 	downlinkDelay = 2         // rx2 delay in seconds for downlink messages.
-	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window
-	rx2SF         = 12        // spreading factor for rx2 window
-	rx2Bandwidth  = 0x06      // 500k bandwidth
+	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
+	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
+	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
 )
 
-func (g *gateway) sendDownlink(ctx context.Context, payload []byte, join bool, packetTime time.Time) error {
+func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:     C.uint32_t(rx2Frequency),
 		freq_offset: C.int8_t(0),
@@ -60,7 +60,7 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, join bool, p
 	txPkt.payload = cPayload
 
 	var waitDuration time.Duration
-	switch join {
+	switch isJoinAccept {
 	case true:
 		// 47709/32*time.Microsecond is the internal delay of sending a packet
 		waitDuration = (joinDelay * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
@@ -125,7 +125,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkFopts []byte) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
@@ -136,47 +136,36 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 	payload = append(payload, devAddrLE...)
 
 	fopts := make([]byte, 0)
-	if device.SendDeviceTimeAns.Load() {
-		g.logger.Debugf("sending device time answer to %s", device.NodeName)
-		deviceTimeAns := g.createDeviceTimeAns()
-		fopts = append(fopts, deviceTimeAns...)
-		device.SendDeviceTimeAns.Store(false)
+
+	if len(uplinkFopts) != 0 {
+		for _, b := range uplinkFopts {
+			switch b {
+			case 0x0D:
+				g.logger.Debugf("got device time request from %s", device.NodeName)
+				deviceTimeAns := g.createDeviceTimeAns()
+				fopts = append(fopts, deviceTimeAns...)
+			default:
+				//unsupported mac command
+				g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
+			}
+		}
 	}
 
-	fOptslen := len(fopts)
-	g.logger.Warnf("fopts length: %d", fOptslen)
+	// get 4 bit length
+	fOptsLength := len(fopts) & 0x0F
 
-	fopts4 := fOptslen & 0x0F
-
-	g.logger.Warnf("fopts length 4 bits: %d", fopts4)
-
-	// FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0000)
-	fctrl := 0x20 | byte(fopts4)
-	g.logger.Warnf("ctrl: %x", fctrl)
+	// FCtrl: ADR (1 bit), RFU (1), ACK (1), FPending (1), FOptsLen (4)
+	fctrl := 0x20 | byte(fOptsLength)
 	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
-	// fopts are used for the MAC commands
-	// fopts := []byte{
-	// 	0b00111001, // data rate and tx power
-	// 	0xFF,
-	// 	0x00,
-	// 	0x01,
-	// }
-
-	// fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
-
 	payload = append(payload, fopts...)
 
 	if framePayload != nil {
 		payload = append(payload, device.FPort)
-
-		// 30 seconds
-		// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-		// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
 		encrypted, err := crypto.EncryptDownlink(
 			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
@@ -207,13 +196,10 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 		FCntDown: device.FCntDown,
 	}
 
-	err = g.searchAndRemove(g.dataFile, device.DevEui)
-	if err != nil {
+	if err = g.searchAndRemove(g.dataFile, device.DevEui); err != nil {
 		return nil, fmt.Errorf("failed to remove device info from file: %w", err)
 	}
-
-	err = g.addDeviceInfoToFile(g.dataFile, deviceInfo)
-	if err != nil {
+	if err = g.addDeviceInfoToFile(g.dataFile, deviceInfo); err != nil {
 		return nil, fmt.Errorf("failed to add device info to file: %w", err)
 	}
 
@@ -223,6 +209,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 }
 
 // Helper function to calculate the downlink freq to be used for RX1.
+// Not currently being used
 func findDownLinkFreq(uplinkFreq int) int {
 	// channel number between 0-64
 	upLinkFreqNum := (uplinkFreq - 902300000) / 200000
