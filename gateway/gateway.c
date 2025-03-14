@@ -108,19 +108,23 @@ int setUpGateway(int bus) {
     ifconf.implicit_crc_en = false;
     ifconf.implicit_payload_length = 17;
     ifconf.implicit_hdr = false;
-
     if (lgw_rxif_setconf(8, &ifconf) != LGW_HAL_SUCCESS) {
-        return 4;
+        return 5;
     }
 
-
+    // the tx gain config contains transmission gain settings for downlinks.
+    // Using the same values as basic station
     struct lgw_tx_gain_lut_s lut;
     struct lgw_tx_gain_s txGain[16];
 
+    // power amplifier gain, 0 means low power gain, 1 mean high power gain.
     uint8_t paGain [16] =  {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1};
+    // rf power in dbm - represents all power levels the device can transmit at.
     int8_t rf_power [16] = {12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27};
+    // maps the rf power levels to sx1302 chip specific power control registers.
     uint8_t pwr_idx [16] = {15,16,17,19,20,22,1,2,3,4,5,6,7,9,11,14};
 
+    // sx1302 supports 16 power levels
     for(int i = 0; i<16; i++) {
         txGain[i].pa_gain = paGain[i];
         txGain[i].rf_power = rf_power[i];
@@ -134,13 +138,13 @@ int setUpGateway(int bus) {
     lut.size = 16;
 
     if(lgw_txgain_setconf(0, &lut) != LGW_HAL_SUCCESS) {
-        return 4;
+        return 6;
     }
 
     // start the gateway.
     int res = lgw_start();
     if (res != LGW_HAL_SUCCESS) {
-        return 5;
+        return 7;
     }
     return 0;
  }
@@ -164,9 +168,6 @@ int send(struct lgw_pkt_tx_s* packet) {
 void disableBuffering() {
     setbuf(stdout, NULL);
 }
-
-
-
 
 #ifdef TESTING
 void redirectToPipe(int fd) {

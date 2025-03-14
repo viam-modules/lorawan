@@ -37,13 +37,6 @@ type joinRequest struct {
 	mic      []byte
 }
 
-const (
-	joinRx2WindowSec = 6         // rx2 delay for sending join accept message.
-	rx2Frequenecy    = 923300000 // Frequency to send downlinks on rx2 window
-	rx2SF            = 12        // spreading factor for rx2 window
-	rx2Bandwidth     = 0x06      // 500k bandwidth
-)
-
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
@@ -60,7 +53,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime tim
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	return g.sendDownLink(ctx, joinAccept, true, packetTime)
+	return g.sendDownlink(ctx, joinAccept, true, packetTime)
 }
 
 // payload of join request consists of
@@ -141,27 +134,30 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Bit 7: OptNeg (0)
 	// Bits 6-4: RX1DROffset
 	// Bits 3-0: RX2DR
-	payload = append(payload, 0x08) // Use data rate 8 for rx2 downlinks
+	// Use data rate 8 for rx2 downlinks
+	// DR8 = SF12 BW 500K
+	// See lorawan1.0.3 regional specs doc 2.5.3 for a table of data rates to SF/BW
+	payload = append(payload, 0x08)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
 	// CFList for US915 using Channel Mask
 	// This tells the device to only transmit on channels 0-7
 	cfList := []byte{
-		0xFF, // Enable channels 0-7 ff
-		0x00, // Disable channels 8-15 0
-		0x00, // Disable channels 16-23 0
-		0x00, // Disable channels 24-31 0
-		0x00, // Disable channels 32-39 0
-		0x00, // Disable channels 40-47 0
-		0x00, // Disable channels 48-55 0
-		0x00, // Disable channels 56-63 0
+		0xFF, // Enable channels 0-7
+		0x00, // Disable channels 8-15
+		0x00, // Disable channels 16-23
+		0x00, // Disable channels 24-31
+		0x00, // Disable channels 32-39
+		0x00, // Disable channels 40-47
+		0x00, // Disable channels 48-55
+		0x00, // Disable channels 56-63
 		0x01, // Enable channel 64, disable 65-71
-		0x00, // Disable channels 72-79 0
-		0x00, // RFU (reserved for future use) 0
-		0x00, // RFU 0
-		0x00, // RFU 0
-		0x00, // RFU 0
-		0x00, // RFU 0
+		0x00, // Disable channels 72-79
+		0x00, // RFU (reserved for future use)
+		0x00, // RFU
+		0x00, // RFU
+		0x00, // RFU
+		0x00, // RFU
 		0x01, // CFList Type = 1 (Channel Mask)
 	}
 

@@ -5,33 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viam-modules/gateway/node"
-	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
-
-// setupTestGateway creates a test gateway with a configured test device.
-func setupUplinkGateway(t *testing.T) *gateway {
-	// Create a temp device data file for testing
-	file := createDataFile(t)
-
-	testDevices := make(map[string]*node.Node)
-	testNode := &node.Node{
-		Addr:        testDeviceAddr,
-		AppSKey:     testAppSKey,
-		NodeName:    testNodeName,
-		DecoderPath: testDecoderPath,
-		JoinType:    "OTAA",
-		DevEui:      testDevEUI,
-	}
-	testDevices[testNodeName] = testNode
-
-	return &gateway{
-		logger:   logging.NewTestLogger(t),
-		devices:  testDevices,
-		dataFile: file,
-	}
-}
 
 var (
 	// Valid uplink payload.
@@ -96,7 +71,7 @@ func createUnknownDevicePayload() []byte {
 }
 
 func TestParseDataUplink(t *testing.T) {
-	g := setupUplinkGateway(t)
+	g := createTestGateway(t)
 
 	// Test valid data uplink
 	deviceName, readings, err := g.parseDataUplink(context.Background(), validUplinkData, time.Now())

@@ -54,6 +54,8 @@ var (
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
+const sendDownlinkKey = "senddown"
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -245,6 +247,10 @@ func parseErrorCode(errCode int) string {
 	case 4:
 		return "error setting the intermediate frequency chain config"
 	case 5:
+		return "error configuring the lora STD channel"
+	case 6:
+		return "error configuring the tx gain settings"
+	case 7:
 		return "error starting the gateway"
 	default:
 		return "unknown error"
@@ -319,7 +325,6 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		}
 		g.mu.Lock()
 		numPackets := int(C.receive(p))
-		g.mu.Unlock()
 		t := time.Now()
 		switch numPackets {
 		case 0:
@@ -370,8 +375,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 	switch payload[0] {
 	case 0x0:
 		g.logger.Debugf("received join request")
-		err := g.handleJoin(ctx, payload, packetTime)
-		if err != nil {
+		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
 				return
@@ -512,12 +516,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// Criteria to determine if packets are identical:
-//
-//	-- count_us should be equal or can have up to 24µs of difference (3 samples)
-//	-- freq should be same
-//	-- datarate should be same
-//	-- payload should be same
+// Classifying two packets as the same if they have identifical payloads.
 func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
 	//nolint
 	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
@@ -584,6 +583,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.DecoderPath = newNode.DecoderPath
 	mergedNode.NodeName = newNode.NodeName
 	mergedNode.JoinType = newNode.JoinType
+	mergedNode.FPort = newNode.FPort
 
 	switch mergedNode.JoinType {
 	case "OTAA":
