@@ -321,7 +321,6 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			return
 		default:
 		}
-		g.mu.Lock()
 		numPackets := int(C.receive(p))
 		t := time.Now()
 		switch numPackets {

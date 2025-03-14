@@ -77,7 +77,6 @@ int setUpGateway(int bus) {
     }
 
     rfconf.freq_hz = RADIO_1_FREQ;
-   // rfconf.tx_enable = false;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
         return 3;
 
