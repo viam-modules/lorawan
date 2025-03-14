@@ -27,9 +27,9 @@ import (
 const (
 	joinDelay     = 6         // rx2 delay in seconds for sending join accept message.
 	downlinkDelay = 2         // rx2 delay in seconds for downlink messages.
-	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window
-	rx2SF         = 12        // spreading factor for rx2 window
-	rx2Bandwidth  = 0x06      // 500k bandwidth
+	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
+	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
+	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, join bool, packetTime time.Time) error {
@@ -134,13 +134,14 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 
 	payload = append(payload, devAddrLE...)
 
-	// 3. FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0)
+	// FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0000)
 	payload = append(payload, 0x00)
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
+	//TODO (om) commented for future testing
 	// fopts are used for the MAC commands
 	// fopts := []byte{
 	// 	0b00111001, // data rate and tx power
