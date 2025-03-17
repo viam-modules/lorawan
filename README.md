@@ -125,7 +125,7 @@ The sensor node model uses DoCommands to send downlinks to sensors from the gate
 
 #### Send a downlink
 
-This command will send a generic downlink payload to the gateway. the string is expected to be a set of bytes in hex.
+This command will send a generic downlink payload to the gateway. The string is expected to be a set of bytes in hex.
 
 ```json
 {
@@ -184,7 +184,7 @@ The node registers itself with the gateway so the gateway will recognize message
 
 The milesight models uses DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
 
-#### Update the interval
+#### Update the uplink interval
 
 This command will update the interval the milesight sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
 
@@ -196,7 +196,7 @@ This command will update the interval the milesight sends data at. This can also
 
 #### Restart the device
 
-This command will restart the milesight sensor.
+This command will restart the milesight sensor, triggering a new join request.
 
 ```json
 {
@@ -266,7 +266,7 @@ The node registers itself with the gateway so the gateway will recognize message
 
 The dragino model uses DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
 
-#### Update the interval
+#### Update the uplink interval
 
 This command will update the interval the dragino sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
 
