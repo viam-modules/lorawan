@@ -54,7 +54,7 @@ var (
 // constants for MHDRs of different message types/
 const (
 	joinRequestMHdr         = 0x00
-	joinAcceptMdr           = 0x20
+	joinAcceptMHdr          = 0x20
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
@@ -381,7 +381,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
-	case joinAcceptMdr:
+	case joinRequestMHdr:
 		g.logger.Debugf("received join request")
 		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
 			// don't log as error if it was a request from unknown device.
