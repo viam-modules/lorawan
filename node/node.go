@@ -3,6 +3,7 @@ package node
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 
 	"go.viam.com/rdk/components/sensor"
@@ -36,7 +37,7 @@ var (
 	ErrDevAddrLength       = errors.New("device address must be 4 bytes")
 	ErrBadDecoderURL       = "Error Retreiving decoder url is invalid, please report to maintainer: " +
 		"Status Code %v"
-	ErrFPortTooLong = errors.New("fport must be one byte long")
+	ErrInvalidFPort = errors.New("invalid fport value, must be one byte hex value between 01-DF. Value can be found in device's user manual")
 )
 
 const (
@@ -93,8 +94,15 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		deps = append(deps, gateway)
 	}
 
-	if len(conf.FPort) > 2 {
-		return nil, resource.NewConfigValidationError(path, ErrFPortTooLong)
+	if conf.FPort != "" {
+		fPort, err := hex.DecodeString(conf.FPort)
+		if err != nil {
+			return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
+		}
+		// Valid lorawan frame ports are 1-254.
+		if fPort[0] <= byte(0x00) || fPort[0] > byte(0xDF) || len(fPort) > 1 {
+			return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
+		}
 	}
 
 	var err error

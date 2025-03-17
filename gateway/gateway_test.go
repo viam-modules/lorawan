@@ -186,7 +186,7 @@ func TestDoCommand(t *testing.T) {
 	// test sendDownlink command
 	testDownLinkPayload := "ff03"
 
-	//Clear devices and add a device for testing
+	// Clear devices and add a device for testing
 	g.devices = map[string]*node.Node{}
 	g.devices[testNodeName] = &node.Node{
 		NodeName:    testNodeName,
@@ -234,7 +234,6 @@ func TestDoCommand(t *testing.T) {
 	_, err = s.DoCommand(context.Background(), downlinkCmd)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to decode")
-
 }
 
 func TestMergeNodes(t *testing.T) {

@@ -121,24 +121,28 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
-	payload = append(payload, 0x60)
+	payload = append(payload, unconfirmedDownLinkMHdr)
 
 	devAddrLE := reverseByteArray(device.Addr)
 
 	payload = append(payload, devAddrLE...)
 
-	// FCtrl: ADR (0), RFU (0), ACK (0), FPending (0), FOptsLen (0000)
-	payload = append(payload, 0x00)
+	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
+	fctrl := 0x00
+	if sendAck {
+		fctrl = 0x20
+	}
+	payload = append(payload, byte(fctrl))
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
-	//TODO (om) commented for future testing
+	// TODO (om) commented for future testing
 	// fopts are used for the MAC commands
 	// fopts := []byte{
 	// 	0b00111001, // data rate and tx power
@@ -150,21 +154,23 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte) ([]byte
 	// fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
 
 	// payload = append(payload, fopts...)
-
-	payload = append(payload, device.FPort)
-
 	// TODO (om) commented for future testing
 	// 30 seconds
 	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
 	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
-	encrypted, err := crypto.EncryptDownlink(
-		types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
-	if err != nil {
-		return nil, err
+	if framePayload != nil {
+		if device.FPort == 0 {
+			return nil, errors.New("invalid downlink fport, ensure fport attribute is correctly set in the node config")
+		}
+		payload = append(payload, device.FPort)
+		encrypted, err := crypto.EncryptDownlink(
+			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
+		if err != nil {
+			return nil, err
+		}
+		payload = append(payload, encrypted...)
 	}
-
-	payload = append(payload, encrypted...)
 
 	mic, err := crypto.ComputeLegacyDownlinkMIC(
 		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
