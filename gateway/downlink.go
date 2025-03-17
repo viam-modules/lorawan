@@ -33,6 +33,16 @@ const (
 	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
 )
 
+// Define the map of SF to minimum SNR values
+var sfToSNRMin = map[int]float64{
+	7:  -7.5,  // SF7 minimum SNR in dB
+	8:  -8.5,  // SF8 minimum SNR in dB
+	9:  -9.5,  // SF9 minimum SNR in dB
+	10: -10.5, // SF10 minimum SNR in dB
+	11: -11.5, // SF11 minimum SNR in dB
+	12: -12.5, // SF12 minimum SNR in dB
+}
+
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
 	txPkt := C.struct_lgw_pkt_tx_s{
 		freq_hz:     C.uint32_t(rx2Frequency),
@@ -247,6 +257,18 @@ func (g *gateway) createLinkCheckAns(snr float64, sf int) []byte {
 	payload = append(payload, 0x02)
 
 	// calculate margin value
-	
+	minSNR := sfToSNRMin[sf]
+
+	// margin represents the margin above which the last uplink from the demodulation floor.
+	margin := snr - minSNR
+	gwCnt := 1
+
+	ans := make([]byte, 0)
+
+	ans = append(ans, byte(margin))
+
+	ans = append(ans, byte(gwCnt))
+
+	return ans
 
 }
