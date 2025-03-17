@@ -63,7 +63,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	if downlinkPayload != nil || foptsLength > 0 {
-		payload, err := g.createDownlink(device, downlinkPayload, fopts, snr)
+		payload, err := g.createDownlink(device, downlinkPayload, fopts, snr, sf)
 
 		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
 		if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {

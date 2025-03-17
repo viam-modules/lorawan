@@ -56,6 +56,17 @@ var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
 const sendDownlinkKey = "senddown"
 
+// Define the map of SF to minimum SNR values
+// Any packet received below the minumum demodulation value will not be parsed.
+var sfToSNRMin = map[int]float64{
+	7:  -7.5,  // SF7 minimum SNR in dB
+	8:  -8.5,  // SF8 minimum SNR in dB
+	9:  -9.5,  // SF9 minimum SNR in dB
+	10: -10.5, // SF10 minimum SNR in dB
+	11: -11.5, // SF11 minimum SNR in dB
+	12: -12.5, // SF12 minimum SNR in dB
+}
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -362,6 +373,13 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				g.logger.Infof("RSSI: %v", packets[i].rssic)
 				g.logger.Infof("RSSI: %v", packets[i].rssis)
 				g.logger.Infof("SF: %v", packets[i].datarate)
+
+				minSNR := sfToSNRMin[int(packets[i].datarate)]
+
+				if float64(packets[i].snr) < minSNR {
+					g.logger.Debugf("packet skipped due to low signal noise ratio")
+					//continue
+				}
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
