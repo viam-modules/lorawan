@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/components/encoder"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
@@ -58,7 +58,7 @@ func NewNodeTestEnv(t *testing.T, gateways, nodes []string, decoderFilename stri
 	})
 	deps := make(resource.Dependencies)
 	for _, gateway := range gateways {
-		deps[sensor.Named(gateway)] = createMockGateway(nodes)
+		deps[encoder.Named(gateway)] = createMockGateway(nodes)
 	}
 	return deps, tmpDir
 }
