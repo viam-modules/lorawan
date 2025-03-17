@@ -51,6 +51,15 @@ var (
 	errSendJoinAccept     = errors.New("failed to send join accept packet")
 )
 
+// constants for MHDRs of different message types/
+const (
+	joinRequestMHdr         = 0x00
+	joinAcceptMdr           = 0x20
+	unconfirmedUplinkMHdr   = 0x40
+	unconfirmedDownLinkMHdr = 0x60
+	confirmedUplinkMHdr     = 0x80
+)
+
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel("sx1302-gateway")
 
@@ -372,7 +381,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
-	case 0x0:
+	case joinAcceptMdr:
 		g.logger.Debugf("received join request")
 		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
 			// don't log as error if it was a request from unknown device.
@@ -381,7 +390,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			}
 			g.logger.Errorf("couldn't handle join request: %s", err)
 		}
-	case 0x40:
+	case unconfirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
@@ -392,7 +401,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			return
 		}
 		g.updateReadings(name, readings)
-	case 0x80:
+	case confirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.

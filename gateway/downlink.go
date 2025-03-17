@@ -125,7 +125,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
-	payload = append(payload, 0x60)
+	payload = append(payload, unconfirmedDownLinkMHdr)
 
 	devAddrLE := reverseByteArray(device.Addr)
 

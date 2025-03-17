@@ -32,13 +32,13 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	uplinkType := "unconfirmed"
-	if phyPayload[0] == 0x80 {
+	if phyPayload[0] == confirmedUplinkMHdr {
 		uplinkType = "confirmed"
 	}
 	g.logger.Debugf("received %s uplink from %s", uplinkType, device.NodeName)
 
 	// confirmed data up, send ACK bit in downlink
-	sendAck := phyPayload[0] == 0x80
+	sendAck := phyPayload[0] == confirmedUplinkMHdr
 
 	var downlinkFramePayload []byte
 	if len(device.Downlinks) > 0 {

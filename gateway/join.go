@@ -122,7 +122,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	dAddrLE := reverseByteArray(d.Addr)
 
 	payload := make([]byte, 0)
-	payload = append(payload, 0x20)
+	payload = append(payload, joinAcceptMdr)
 	//nolint:all
 	payload = append(payload, jnLE[:]...)
 	//nolint:all
@@ -180,7 +180,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	}
 	ja := make([]byte, 0)
 	// add back mhdr
-	ja = append(ja, 0x20)
+	ja = append(ja, joinAcceptMdr)
 	ja = append(ja, enc...)
 
 	// generate the session keys
