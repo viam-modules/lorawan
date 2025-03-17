@@ -122,11 +122,11 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkFopts []byte) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
-	payload = append(payload, 0x60)
+	payload = append(payload, unconfirmedDownLinkMHdr)
 
 	devAddrLE := reverseByteArray(device.Addr)
 
@@ -154,22 +154,44 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkF
 	// FCtrl: ADR (1 bit), RFU (1), ACK (1), FPending (1), FOptsLen (4)
 	fctrl := 0x20 | byte(fOptsLength)
 	payload = append(payload, fctrl)
+	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
+	fctrl := 0x00
+	if sendAck {
+		fctrl = 0x20
+	}
+	payload = append(payload, byte(fctrl))
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
-	payload = append(payload, fopts...)
+	// TODO (om) commented for future testing
+	// fopts are used for the MAC commands
+	// fopts := []byte{
+	// 	0b00111001, // data rate and tx power
+	// 	0xFF,
+	// 	0x00,
+	// 	0x01,
+	// }
+
+	// fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
+
+	// payload = append(payload, fopts...)
+	// TODO (om) commented for future testing
+	// 30 seconds
+	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
+	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
 
 	if framePayload != nil {
+		if device.FPort == 0 {
+			return nil, errors.New("invalid downlink fport, ensure fport attribute is correctly set in the node config")
+		}
 		payload = append(payload, device.FPort)
-
 		encrypted, err := crypto.EncryptDownlink(
 			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
 		if err != nil {
 			return nil, err
 		}
-
 		payload = append(payload, encrypted...)
 	}
 
@@ -199,8 +221,6 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkF
 	if err = g.addDeviceInfoToFile(g.dataFile, deviceInfo); err != nil {
 		return nil, fmt.Errorf("failed to add device info to file: %w", err)
 	}
-
-	g.logger.Warnf("downlink full payload %x", payload)
 
 	return payload, nil
 }
@@ -232,11 +252,7 @@ func (g *gateway) createDeviceTimeAns() []byte {
 	binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch)
 	payload = append(payload, buf.Bytes()...)
 
-	//Calculate fractional seconds (1/256 resolution)
-	// nanoseconds := now.Nanosecond()
-	// fractionalSeconds := byte(float64(nanoseconds) / float64(1e9) * 255) // Convert ms to 1/256 resolution
-	// payload = append(payload, fractionalSeconds)
-
+	// using zero for fractional seconds
 	payload = append(payload, 0)
 
 	g.logger.Infof("devicetimeans: %x", payload)
