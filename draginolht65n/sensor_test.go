@@ -78,7 +78,7 @@ func TestReadings(t *testing.T) {
 
 		readings, err := n.Readings(ctx, nil)
 		test.That(t, err, test.ShouldBeNil)
-		test.That(t, readings, test.ShouldEqual, testNodeReadings)
+		test.That(t, readings, test.ShouldResemble, testNodeReadings)
 	})
 	t.Run("Test Bad Readings", func(t *testing.T) {
 		// Test OTAA config

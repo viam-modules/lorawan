@@ -30,7 +30,7 @@ var (
 	nodes    = []string{testNodeName}
 )
 
-func TestNewLHT65N(t *testing.T) {
+func TestNewEM310(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
@@ -54,7 +54,7 @@ func TestNewLHT65N(t *testing.T) {
 	// Readings should behave the same
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+	test.That(t, readings, test.ShouldResemble, testNodeReadings)
 }
 
 func TestReadings(t *testing.T) {
@@ -81,7 +81,7 @@ func TestReadings(t *testing.T) {
 
 		readings, err := n.Readings(ctx, nil)
 		test.That(t, err, test.ShouldBeNil)
-		test.That(t, readings, test.ShouldEqual, testNodeReadings)
+		test.That(t, readings, test.ShouldResemble, testNodeReadings)
 	})
 	t.Run("Test Bad Readings", func(t *testing.T) {
 		// Test OTAA config

@@ -37,13 +37,14 @@ func createMockGateway(devices []string) *inject.Sensor {
 	return mockGateway
 }
 
-func NewNodeTestEnv(t *testing.T, gateways []string, nodes []string, decoderFilename string) (resource.Dependencies, string) {
-	// t.Helper()
+// NewNodeTestEnv creates mock gateway dependencies and a temp decoder file for testing Node functions.
+func NewNodeTestEnv(t *testing.T, gateways, nodes []string, decoderFilename string) (resource.Dependencies, string) {
+	t.Helper()
 	tmpDir := t.TempDir()
 
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
+	testDecoderPath := filepath.Clean(fmt.Sprintf("%s/%s", tmpDir, decoderFilename))
 	path := filepath.Dir(testDecoderPath)
-	err := os.MkdirAll(path, 0o755)
+	err := os.MkdirAll(path, 0o700)
 	test.That(t, err, test.ShouldBeNil)
 
 	t.Setenv("VIAM_MODULE_DATA", tmpDir)
@@ -53,7 +54,7 @@ func NewNodeTestEnv(t *testing.T, gateways []string, nodes []string, decoderFile
 	test.That(t, err, test.ShouldBeNil)
 	// swallow the error for closing the file.
 	t.Cleanup(func() {
-		file.Close()
+		test.That(t, file.Close(), test.ShouldBeNil)
 	})
 	deps := make(resource.Dependencies)
 	for _, gateway := range gateways {

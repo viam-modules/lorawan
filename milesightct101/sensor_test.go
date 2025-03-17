@@ -46,11 +46,6 @@ func TestNewCT101(t *testing.T) {
 			AppKey:   testAppKey,
 		},
 	}
-	cfg, ok := validConf.ConvertedAttributes.(interface{})
-	test.That(t, ok, test.ShouldBeTrue)
-	cfg2, ok := cfg.(*Config)
-	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, len(cfg2.Gateways), test.ShouldEqual, 1)
 
 	n, err := newCT101(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
@@ -59,7 +54,7 @@ func TestNewCT101(t *testing.T) {
 	// Readings should behave the same
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+	test.That(t, readings, test.ShouldResemble, testNodeReadings)
 }
 
 func TestReadings(t *testing.T) {
@@ -86,7 +81,7 @@ func TestReadings(t *testing.T) {
 
 		readings, err := n.Readings(ctx, nil)
 		test.That(t, err, test.ShouldBeNil)
-		test.That(t, readings, test.ShouldEqual, testNodeReadings)
+		test.That(t, readings, test.ShouldResemble, testNodeReadings)
 	})
 	t.Run("Test Bad Readings", func(t *testing.T) {
 		// Test OTAA config
