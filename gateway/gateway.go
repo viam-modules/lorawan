@@ -37,6 +37,13 @@ import (
 	"go.viam.com/utils"
 )
 
+// defining model names here to be reused in getNativeConfig
+const (
+	oldModelName = "sx1302-gateway"
+	genericHat   = "sx1302-hat-generic"
+	waveshareHat = "sx1302-waveshare-hat"
+)
+
 // Error variables for validation and operations
 var (
 	// Config validation errors
@@ -51,8 +58,23 @@ var (
 	errSendJoinAccept     = errors.New("failed to send join accept packet")
 )
 
+// constants for MHDRs of different message types/
+const (
+	joinRequestMHdr         = 0x00
+	joinAcceptMHdr          = 0x20
+	unconfirmedUplinkMHdr   = 0x40
+	unconfirmedDownLinkMHdr = 0x60
+	confirmedUplinkMHdr     = 0x80
+)
+
 // Model represents a lorawan gateway model.
-var Model = node.LorawanFamily.WithModel("sx1302-gateway")
+var Model = node.LorawanFamily.WithModel(string(oldModelName))
+
+// ModelGenericHat represents a lorawan gateway hat model.
+var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
+
+// ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
+var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
@@ -85,6 +107,18 @@ func init() {
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
 			Constructor: NewGateway,
+		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelGenericHat,
+		resource.Registration[sensor.Sensor, *Config]{
+			Constructor: NewGateway,
+		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelSX1302WaveshareHat,
+		resource.Registration[sensor.Sensor, *ConfigSX1302WaveshareHAT]{
+			Constructor: newSX1302WaveshareHAT,
 		})
 }
 
@@ -163,6 +197,22 @@ func NewGateway(
 	return g, nil
 }
 
+// look at the resource.Config to determine which model is being used.
+func getNativeConfig(conf resource.Config) (*Config, error) {
+	switch conf.Model.Name {
+	case genericHat, oldModelName:
+		return resource.NativeConfig[*Config](conf)
+	case waveshareHat:
+		waveshareHatCfg, err := resource.NativeConfig[*ConfigSX1302WaveshareHAT](conf)
+		if err != nil {
+			return nil, fmt.Errorf("the config %v does not match a supported config type", conf)
+		}
+		return waveshareHatCfg.getGatewayConfig(), nil
+	default:
+		return nil, errors.New("build error in module. Unsupported Gateway model")
+	}
+}
+
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	g.mu.Lock()
@@ -180,7 +230,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		}
 	}
 
-	cfg, err := resource.NativeConfig[*Config](conf)
+	cfg, err := getNativeConfig(conf)
 	if err != nil {
 		return err
 	}
@@ -370,7 +420,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
-	case 0x0:
+	case joinRequestMHdr:
 		g.logger.Debugf("received join request")
 		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
 			// don't log as error if it was a request from unknown device.
@@ -379,7 +429,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			}
 			g.logger.Errorf("couldn't handle join request: %s", err)
 		}
-	case 0x40:
+	case unconfirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
@@ -390,8 +440,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			return
 		}
 		g.updateReadings(name, readings)
-	case 0x80:
-		g.logger.Debugf("received confirmed data uplink")
+	case confirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
