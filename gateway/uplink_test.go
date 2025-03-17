@@ -13,9 +13,8 @@ var (
 	validUplinkData = []byte{
 		0x40,                   // MHDR: data uplink
 		0x66, 0x65, 0x73, 0xe2, // Device address
-		0x81,       // FCTL
+		0x80,       // FCTL
 		0x29, 0x00, // Frame count
-		0x0d, // FOPT
 		0x55, // FPORT
 		// Frame payload
 		0xd6, 0x02, 0x25, 0x00,
@@ -37,9 +36,8 @@ func createInvalidPayload() []byte {
 	return []byte{
 		0x40,                   // MHDR: data uplink
 		0x66, 0x65, 0x73, 0xe2, // Device address
-		0x81,       // FCTL
+		0x80,       // FCTL
 		0x29, 0x00, // Frame count
-		0x0d, // FOPT
 		0x55, // FPORT
 		// Invalid frame payload
 		0x00, 0x02, 0x25, 0x00,
@@ -56,9 +54,9 @@ func createUnknownDevicePayload() []byte {
 	return []byte{
 		0x40,                   // MHDR: data uplink
 		0x61, 0x65, 0x73, 0xe2, // Unknown device address
-		0x81,       // FCTL
+		0x80,       // FCTL
 		0x29, 0x00, // Frame count
-		0x0d, // FOPT
+		0x00, // FOPTs
 		0x55, // FPORT
 		// Frame payload
 		0x00, 0x02, 0x25, 0x00,

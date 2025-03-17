@@ -31,6 +31,7 @@ const (
 	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
 	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
 	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
+	deviceTimeCID = 0x0D      // command identifier for device time request
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
@@ -122,7 +123,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool, uplinkFopts []byte) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
@@ -137,9 +138,9 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 	if len(uplinkFopts) != 0 {
 		for _, b := range uplinkFopts {
 			switch b {
-			case 0x0D:
+			case deviceTimeCID:
 				g.logger.Debugf("got device time request from %s", device.NodeName)
-				deviceTimeAns := g.createDeviceTimeAns()
+				deviceTimeAns := createDeviceTimeAns()
 				fopts = append(fopts, deviceTimeAns...)
 			default:
 				//unsupported mac command
@@ -151,36 +152,20 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 	// get 4 bit length
 	fOptsLength := len(fopts) & 0x0F
 
-	// FCtrl: ADR (1 bit), RFU (1), ACK (1), FPending (1), FOptsLen (4)
-	fctrl := 0x20 | byte(fOptsLength)
-	payload = append(payload, fctrl)
 	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
-	fctrl := 0x00
+	fctrl := byte(0x00)
 	if sendAck {
 		fctrl = 0x20
 	}
-	payload = append(payload, byte(fctrl))
+
+	fctrl = fctrl | byte(fOptsLength)
+	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
 	payload = append(payload, fCntBytes...)
 
-	// TODO (om) commented for future testing
-	// fopts are used for the MAC commands
-	// fopts := []byte{
-	// 	0b00111001, // data rate and tx power
-	// 	0xFF,
-	// 	0x00,
-	// 	0x01,
-	// }
-
-	// fopts := []byte{0x3A, 0xFF, 0x00, 0x01}
-
-	// payload = append(payload, fopts...)
-	// TODO (om) commented for future testing
-	// 30 seconds
-	// framePayload := []byte{0x01, 0x00, 0x00, 0x1E} //  dragino
-	// framePayload := []byte{0xff, 0x10, 0xff} //tilt reset
+	payload = append(payload, fopts...)
 
 	if framePayload != nil {
 		if device.FPort == 0 {
@@ -235,12 +220,12 @@ func findDownLinkFreq(uplinkFreq int) int {
 	return downLinkFreq
 }
 
-func (g *gateway) createDeviceTimeAns() []byte {
+func createDeviceTimeAns() []byte {
 	// Create buffer for the complete PHYPayload
 	payload := make([]byte, 0)
 
 	// add command identifier
-	payload = append(payload, 0x0D)
+	payload = append(payload, deviceTimeCID)
 
 	// Create frame payload
 	// Time is represented as seconds since GPS epoch
@@ -254,8 +239,6 @@ func (g *gateway) createDeviceTimeAns() []byte {
 
 	// using zero for fractional seconds
 	payload = append(payload, 0)
-
-	g.logger.Infof("devicetimeans: %x", payload)
 
 	return payload
 }
