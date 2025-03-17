@@ -37,6 +37,13 @@ import (
 	"go.viam.com/utils"
 )
 
+// defining model names here to be reused in getNativeConfig
+const (
+	oldModelName = "sx1302-gateway"
+	genericHat   = "sx1302-hat-generic"
+	waveshareHat = "sx1302-waveshare-hat"
+)
+
 // Error variables for validation and operations
 var (
 	// Config validation errors
@@ -52,7 +59,13 @@ var (
 )
 
 // Model represents a lorawan gateway model.
-var Model = node.LorawanFamily.WithModel("sx1302-gateway")
+var Model = node.LorawanFamily.WithModel(string(oldModelName))
+
+// ModelGenericHat represents a lorawan gateway hat model.
+var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
+
+// ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
+var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
 const sendDownlinkKey = "senddown"
 
@@ -87,6 +100,18 @@ func init() {
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
 			Constructor: NewGateway,
+		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelGenericHat,
+		resource.Registration[sensor.Sensor, *Config]{
+			Constructor: NewGateway,
+		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelSX1302WaveshareHat,
+		resource.Registration[sensor.Sensor, *ConfigSX1302WaveshareHAT]{
+			Constructor: newSX1302WaveshareHAT,
 		})
 }
 
@@ -165,6 +190,22 @@ func NewGateway(
 	return g, nil
 }
 
+// look at the resource.Config to determine which model is being used.
+func getNativeConfig(conf resource.Config) (*Config, error) {
+	switch conf.Model.Name {
+	case genericHat, oldModelName:
+		return resource.NativeConfig[*Config](conf)
+	case waveshareHat:
+		waveshareHatCfg, err := resource.NativeConfig[*ConfigSX1302WaveshareHAT](conf)
+		if err != nil {
+			return nil, fmt.Errorf("the config %v does not match a supported config type", conf)
+		}
+		return waveshareHatCfg.getGatewayConfig(), nil
+	default:
+		return nil, errors.New("build error in module. Unsupported Gateway model")
+	}
+}
+
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	g.mu.Lock()
@@ -182,7 +223,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		}
 	}
 
-	cfg, err := resource.NativeConfig[*Config](conf)
+	cfg, err := getNativeConfig(conf)
 	if err != nil {
 		return err
 	}
