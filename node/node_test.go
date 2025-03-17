@@ -11,17 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"go.viam.com/rdk/components/encoder"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 )
 
 const (
 	// Common test values.
-	testDecoderPath = "/path/to/decoder"
+	testDecoderPath = "/path/to/decoder.js"
 
 	// OTAA test values.
 	testDevEUI = "0123456789ABCDEF"
@@ -34,6 +32,7 @@ const (
 
 	// Gateway dependency.
 	testGatewayName = "gateway"
+	testNodeName    = "test-node"
 )
 
 var (
@@ -41,26 +40,9 @@ var (
 	testNodeReadings = map[string]interface{}{"reading": 1}
 	testDecoderURL   = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/40e844fedbcf9a8c3b279142672fab1c89bee2e0/" +
 		"CT_Series/CT101/CT101_Decoder.js"
+	nodeNames    = []string{testNodeName}
+	gatewayNames = []string{testGatewayName}
 )
-
-func createMockGateway() *inject.Sensor {
-	mockGateway := &inject.Sensor{}
-	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		if _, ok := cmd["validate"]; ok {
-			return map[string]interface{}{"validate": 1.0}, nil
-		}
-		if _, ok := cmd[GatewaySendDownlinkKey]; ok {
-			return map[string]interface{}{GatewaySendDownlinkKey: "downlink added"}, nil
-		}
-		return map[string]interface{}{}, nil
-	}
-	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		readings := make(map[string]interface{})
-		readings["test-node"] = testNodeReadings
-		return readings, nil
-	}
-	return mockGateway
-}
 
 func TestConfigValidate(t *testing.T) {
 	// valid config
@@ -252,21 +234,13 @@ func TestNewNode(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
-
-	// Create the file
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, tmpDir := NewNodeTestEnv(t, gatewayNames, nodeNames, testDecoderPath)
+	// copy the path to the tmpDir
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, testDecoderPath)
 
 	// Test OTAA config
 	validConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
@@ -281,7 +255,7 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	node := n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
+	test.That(t, node.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
 
@@ -319,7 +293,7 @@ func TestNewNode(t *testing.T) {
 
 	// Decoder can be URL
 	validConf = resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderURL,
 			Interval: &testInterval,
@@ -329,13 +303,12 @@ func TestNewNode(t *testing.T) {
 		},
 	}
 
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
 	n, err = newNode(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
 	node = n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
+	test.That(t, node.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, node.DecoderPath, test.ShouldEqual, expectedPath)
@@ -343,7 +316,7 @@ func TestNewNode(t *testing.T) {
 
 	// Invalid decoder file should error
 	invalidDecoderConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  "/worong/path",
 			Interval: &testInterval,
@@ -362,20 +335,12 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
+	deps, tmpDir := NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	// copy the path to the tmpDir
 	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
 
-	// Create the file
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
-
 	validConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
@@ -391,7 +356,7 @@ func TestReadings(t *testing.T) {
 
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+	test.That(t, readings, test.ShouldResemble, testNodeReadings)
 
 	// node for empty readings.
 	validConf = resource.Config{
@@ -586,20 +551,12 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
+	deps, tmpDir := NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	// copy the path to the tmpDir
 	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
 
-	// Create the file
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
-
 	validConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,

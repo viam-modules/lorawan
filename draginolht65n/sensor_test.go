@@ -2,16 +2,12 @@ package draginolht65n
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
-	"go.viam.com/rdk/components/encoder"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 )
 
@@ -22,52 +18,24 @@ const (
 
 	// Gateway dependency.
 	testGatewayName = "gateway"
+	testNodeName    = "test-lht65n"
 )
 
 var (
 	testNodeReadings = map[string]interface{}{"reading": 1}
 	testInterval     = 5.0
+	gateways         = []string{testGatewayName}
+	nodes            = []string{testNodeName}
 )
-
-func createMockGateway() *inject.Sensor {
-	mockGateway := &inject.Sensor{}
-	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		if _, ok := cmd["validate"]; ok {
-			return map[string]interface{}{"validate": 1.0}, nil
-		}
-		if _, ok := cmd[node.GatewaySendDownlinkKey]; ok {
-			return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
-		}
-		return map[string]interface{}{}, nil
-	}
-	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		readings := make(map[string]interface{})
-		readings["test-lht65n"] = testNodeReadings
-		return readings, nil
-	}
-	return mockGateway
-}
 
 func TestNewLHT65N(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
+	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
 
-	tmpDir := t.TempDir()
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
-	// Create the file, as http tests were already tested in node_test.go
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
-
-	// Test OTAA config
 	validConf := resource.Config{
-		Name: "test-lht65n",
+		Name: nodes[0],
 		ConvertedAttributes: &Config{
 			Interval: &testInterval,
 			JoinType: node.JoinTypeOTAA,
@@ -83,30 +51,19 @@ func TestNewLHT65N(t *testing.T) {
 	// Readings should behave the same
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+	test.That(t, readings, test.ShouldResemble, testNodeReadings)
 }
 
 func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
-	// Create the file, as http tests were already tested in node_test.go
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
 
 	t.Run("Test Good Readings", func(t *testing.T) {
 		// Test OTAA config
 		validConf := resource.Config{
-			Name: "test-lht65n",
+			Name: testNodeName,
 			ConvertedAttributes: &Config{
 				Interval: &testInterval,
 				JoinType: node.JoinTypeOTAA,
@@ -159,21 +116,10 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
-	// Create the file, as http tests were already tested in node_test.go
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
 
 	validConf := resource.Config{
-		Name: "test-lht65n",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Interval: &testInterval,
 			JoinType: node.JoinTypeOTAA,

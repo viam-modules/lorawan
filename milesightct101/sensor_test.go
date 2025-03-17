@@ -2,17 +2,13 @@ package milesightct101
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
-	"go.viam.com/rdk/components/encoder"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 )
 
@@ -23,53 +19,26 @@ const (
 
 	// Gateway dependency.
 	testGatewayName = "gateway"
+	testNodeName    = "test-ct101"
 )
 
 var (
 	testNodeReadings = map[string]interface{}{"reading": 1}
 	testInterval     = 5.0
+
+	gateways = []string{testGatewayName}
+	nodes    = []string{testNodeName}
 )
 
-func createMockGateway() *inject.Sensor {
-	mockGateway := &inject.Sensor{}
-	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		if _, ok := cmd["validate"]; ok {
-			return map[string]interface{}{"validate": 1.0}, nil
-		}
-		if _, ok := cmd[node.GatewaySendDownlinkKey]; ok {
-			return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
-		}
-		return map[string]interface{}{}, nil
-	}
-	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		readings := make(map[string]interface{})
-		readings["test-ct101"] = testNodeReadings
-		return readings, nil
-	}
-	return mockGateway
-}
-
-func TestNewLHT65N(t *testing.T) {
+func TestNewCT101(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	decoderFilename := path.Base(decoderURL)
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
-	// Create the file, as http tests were already tested in node_test.go
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	// Test OTAA config
 	validConf := resource.Config{
-		Name: "test-ct101",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Interval: &testInterval,
 			JoinType: node.JoinTypeOTAA,
@@ -77,6 +46,11 @@ func TestNewLHT65N(t *testing.T) {
 			AppKey:   testAppKey,
 		},
 	}
+	cfg, ok := validConf.ConvertedAttributes.(interface{})
+	test.That(t, ok, test.ShouldBeTrue)
+	cfg2, ok := cfg.(*Config)
+	test.That(t, ok, test.ShouldBeTrue)
+	test.That(t, len(cfg2.Gateways), test.ShouldEqual, 1)
 
 	n, err := newCT101(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
@@ -92,24 +66,12 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	decoderFilename := path.Base(decoderURL)
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
-	// Create the file, as http tests were already tested in node_test.go
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	t.Run("Test Good Readings", func(t *testing.T) {
 		// Test OTAA config
 		validConf := resource.Config{
-			Name: "test-ct101",
+			Name: testNodeName,
 			ConvertedAttributes: &Config{
 				Interval: &testInterval,
 				JoinType: node.JoinTypeOTAA,
@@ -162,22 +124,10 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	decoderFilename := path.Base(decoderURL)
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, decoderFilename)
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
-
-	// Create the file, as http tests were already tested in node_test.go
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	validConf := resource.Config{
-		Name: "test-ct101",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Interval: &testInterval,
 			JoinType: node.JoinTypeOTAA,
