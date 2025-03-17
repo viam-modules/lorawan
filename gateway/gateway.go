@@ -357,19 +357,24 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				if isDuplicate {
 					continue
 				}
+
+				g.logger.Infof("SNR: %v", packets[i].snr)
+				g.logger.Infof("RSSI: %v", packets[i].rssic)
+				g.logger.Infof("RSSI: %v", packets[i].rssis)
+				g.logger.Infof("SF: %v", packets[i].datarate)
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
-					g.handlePacket(ctx, payload, t)
+					g.handlePacket(ctx, payload, t, float64(packets[i].snr), int(packets[i].datarate))
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
 	case 0x0:
@@ -382,7 +387,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			g.logger.Errorf("couldn't handle join request: %s", err)
 		}
 	case 0x40:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -394,7 +399,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 		g.updateReadings(name, readings)
 	case 0x80:
 		g.logger.Debugf("received confirmed data uplink")
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {

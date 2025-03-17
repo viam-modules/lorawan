@@ -19,7 +19,7 @@ import (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time) (string, map[string]interface{}, error) {
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -41,10 +41,18 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
+	// Validate the MIC
+	mic, err := crypto.ComputeLegacyUplinkMIC(types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
+	if err != nil {
+		return "", map[string]interface{}{}, err
+	}
+
+	if !bytes.Equal(phyPayload[len(phyPayload)-4:], mic[:]) {
+		return "", map[string]interface{}{}, errInvalidMIC
+	}
+
 	fopts := phyPayload[8 : 8+foptsLength]
 
-	g.logger.Infof("FOPTS: %x", fopts)
-	g.logger.Info("FOPTS LENGTH %d", foptsLength)
 	// we will send one device downlink from the do command per uplink.
 	var downlinkPayload []byte
 	if len(device.Downlinks) > 0 {
@@ -55,7 +63,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	if downlinkPayload != nil || foptsLength > 0 {
-		payload, err := g.createDownlink(device, downlinkPayload, fopts)
+		payload, err := g.createDownlink(device, downlinkPayload, fopts, snr)
 
 		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
 		if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {

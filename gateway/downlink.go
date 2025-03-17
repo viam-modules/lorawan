@@ -122,7 +122,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkFopts []byte) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkFopts []byte, snr float64) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
@@ -141,6 +141,9 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkF
 				g.logger.Debugf("got device time request from %s", device.NodeName)
 				deviceTimeAns := g.createDeviceTimeAns()
 				fopts = append(fopts, deviceTimeAns...)
+			case 0x02:
+				g.logger.Debugf("got link check request from %s", device.NodeName)
+
 			default:
 				//unsupported mac command
 				g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
@@ -152,7 +155,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkF
 	fOptsLength := len(fopts) & 0x0F
 
 	// FCtrl: ADR (1 bit), RFU (1), ACK (1), FPending (1), FOptsLen (4)
-	fctrl := 0x20 | byte(fOptsLength)
+	fctrl := 0xA | byte(fOptsLength)
 	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
@@ -232,14 +235,18 @@ func (g *gateway) createDeviceTimeAns() []byte {
 	binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch)
 	payload = append(payload, buf.Bytes()...)
 
-	//Calculate fractional seconds (1/256 resolution)
-	// nanoseconds := now.Nanosecond()
-	// fractionalSeconds := byte(float64(nanoseconds) / float64(1e9) * 255) // Convert ms to 1/256 resolution
-	// payload = append(payload, fractionalSeconds)
-
 	payload = append(payload, 0)
 
 	g.logger.Infof("devicetimeans: %x", payload)
 
 	return payload
+}
+
+func (g *gateway) createLinkCheckAns(snr float64, sf int) []byte {
+	payload := make([]byte, 0)
+	payload = append(payload, 0x02)
+
+	// calculate margin value
+	
+
 }
