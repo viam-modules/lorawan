@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -305,7 +306,7 @@ func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[s
 		if payloadString, payloadOk := payload.(string); payloadOk {
 			return n.SendDownlink(ctx, payloadString, testOnly)
 		}
-		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected string got %v", payload)
+		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected string got %v", reflect.TypeOf(payload))
 	}
 
 	return resp, nil
