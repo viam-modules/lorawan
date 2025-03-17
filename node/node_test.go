@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/viam-modules/gateway/testutils"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -234,7 +235,7 @@ func TestNewNode(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, tmpDir := NewNodeTestEnv(t, gatewayNames, nodeNames, testDecoderPath)
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, testDecoderPath)
 	// copy the path to the tmpDir
 	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, testDecoderPath)
 
@@ -335,7 +336,7 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, tmpDir := NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
 	// copy the path to the tmpDir
 	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
 
@@ -551,7 +552,7 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, tmpDir := NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
 	// copy the path to the tmpDir
 	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
 

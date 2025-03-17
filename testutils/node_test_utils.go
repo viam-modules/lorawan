@@ -1,4 +1,5 @@
-package node
+// Package testutils creates helper functions for tests
+package testutils
 
 import (
 	"context"
@@ -13,14 +14,16 @@ import (
 	"go.viam.com/test"
 )
 
+const gatewaySendDownlinkKey = "add_downlink_to_queue"
+
 func createMockGateway(devices []string) *inject.Sensor {
 	mockGateway := &inject.Sensor{}
 	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 		if _, ok := cmd["validate"]; ok {
 			return map[string]interface{}{"validate": 1.0}, nil
 		}
-		if _, ok := cmd[GatewaySendDownlinkKey]; ok {
-			return map[string]interface{}{GatewaySendDownlinkKey: "downlink added"}, nil
+		if _, ok := cmd[gatewaySendDownlinkKey]; ok {
+			return map[string]interface{}{gatewaySendDownlinkKey: "downlink added"}, nil
 		}
 		return map[string]interface{}{}, nil
 	}

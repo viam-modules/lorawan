@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/testutils"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -34,7 +35,7 @@ func TestNewCT101(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	// Test OTAA config
 	validConf := resource.Config{
@@ -61,7 +62,7 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	t.Run("Test Good Readings", func(t *testing.T) {
 		// Test OTAA config
@@ -119,7 +120,7 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := node.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	validConf := resource.Config{
 		Name: testNodeName,
