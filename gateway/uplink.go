@@ -15,6 +15,14 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
 
+type UplinkType string
+
+// Define constant strings for uplink types
+const (
+	Unconfirmed UplinkType = "unconfirmed"
+	Confirmed   UplinkType = "confirmed"
+)
+
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
@@ -31,9 +39,9 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-	uplinkType := "unconfirmed"
+	var uplinkType UplinkType = Unconfirmed
 	if phyPayload[0] == confirmedUplinkMHdr {
-		uplinkType = "confirmed"
+		uplinkType = Confirmed
 	}
 	g.logger.Debugf("received %s uplink from %s", uplinkType, device.NodeName)
 

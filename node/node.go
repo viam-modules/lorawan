@@ -99,7 +99,8 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		if err != nil {
 			return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
 		}
-		if fPort[0] == byte(0x00) || fPort[0] > byte(0xDF) || len(fPort) > 1 {
+		// Valid lorawan frame ports are 1-254.
+		if fPort[0] <= byte(0x00) || fPort[0] > byte(0xDF) || len(fPort) > 1 {
 			return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
 		}
 	}
