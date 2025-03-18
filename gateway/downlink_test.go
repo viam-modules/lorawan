@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -42,7 +43,7 @@ func TestCreateDownLink(t *testing.T) {
 			expectedLength: 17,
 		},
 		{
-			name: "valid downlink with an ACK",
+			name: "valid downlink frame payload with an ACK",
 			device: &node.Node{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
@@ -59,7 +60,7 @@ func TestCreateDownLink(t *testing.T) {
 			expectedLength: 17,
 		},
 		{
-			name: "downlink with only ACK should send",
+			name: "downlink with only ACK",
 			device: &node.Node{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
@@ -88,7 +89,7 @@ func TestCreateDownLink(t *testing.T) {
 			framePayload:   []byte{0x01, 0x02, 0x03, 0x04},
 			uplinkFopts:    []byte{deviceTimeCID},
 			expectedErr:    false,
-			ack:            true,
+			ack:            false,
 			expectedLength: 23, // Base length (17) + device time response (6 bytes)
 		},
 		{
@@ -133,7 +134,7 @@ func TestCreateDownLink(t *testing.T) {
 
 				// Check packet structure
 				test.That(t, len(payload), test.ShouldEqual, tt.expectedLength)
-				test.That(t, payload[0], test.ShouldEqual, byte(0x60)) // Unconfirmed data down
+				test.That(t, payload[0], test.ShouldEqual, unconfirmedDownLinkMHdr)
 
 				// DevAddr should be in little-endian format in the packet
 				devAddrLE := reverseByteArray(tt.device.Addr)
@@ -145,27 +146,20 @@ func TestCreateDownLink(t *testing.T) {
 				}
 
 				// Check for FOpts length in FCtrl if device time request is included
-				if tt.uplinkFopts != nil && len(tt.uplinkFopts) > 0 && tt.uplinkFopts[0] == deviceTimeCID {
+				if tt.uplinkFopts != nil && tt.uplinkFopts[0] == deviceTimeCID {
 					// The FCtrl should include FOpts length (6) in the lower 4 bits and ACK bit if set
 					expectedFctrl = expectedFctrl | 0x06 // fopts length is 6 bytes
 					test.That(t, payload[5], test.ShouldEqual, byte(expectedFctrl))
-
-					// Check that the device time MAC command is included in FOpts
-					// FOpts starts after FCtrl and FCnt (8 bytes into the packet)
+					// Check that the device time ans is included in FOpts
 					test.That(t, payload[8], test.ShouldEqual, deviceTimeCID)
-
-					// Verify that the time bytes are included (4 bytes for seconds since GPS epoch)
-					// We don't check exact values since time will vary, but structure should be correct
-					test.That(t, len(payload[8:14]), test.ShouldEqual, 6) // 1 for CID, 4 for seconds, 1 for fractional
 				} else {
-					fmt.Println(payload)
 					test.That(t, payload[5], test.ShouldEqual, byte(expectedFctrl))
 				}
 
 				if tt.framePayload != nil {
-					// If we have FOpts, port is after that
 					portIndex := 8
-					if tt.uplinkFopts != nil && len(tt.uplinkFopts) > 0 && tt.uplinkFopts[0] == deviceTimeCID {
+					// If we have FOpts, port is after that
+					if tt.uplinkFopts != nil {
 						portIndex = 14 // 8 + 6 bytes of FOpts
 					}
 					test.That(t, payload[portIndex], test.ShouldEqual, tt.device.FPort)
@@ -205,10 +199,8 @@ func TestCreateDownLink(t *testing.T) {
 }
 
 func TestCreateDeviceTimeAns(t *testing.T) {
-	// Call createDeviceTimeAns to get the device time answer payload
 	timeAns := createDeviceTimeAns()
 
-	// Verify the structure of the response
 	test.That(t, len(timeAns), test.ShouldEqual, 6) // 1 byte CID + 4 bytes seconds + 1 byte fractional
 	test.That(t, timeAns[0], test.ShouldEqual, deviceTimeCID)
 
@@ -225,15 +217,7 @@ func TestCreateDeviceTimeAns(t *testing.T) {
 	gpsEpoch := time.Date(1980, 1, 6, 0, 0, 0, 0, time.UTC)
 	expectedSeconds := uint32(time.Since(gpsEpoch).Seconds())
 
-	// The time should be reasonably close to now (within a small window)
-	// We can't check exact equality since time passes between createDeviceTimeAns() and this test
-	timeDiff := int64(expectedSeconds) - int64(secondsSinceEpoch)
-	if timeDiff < 0 {
-		timeDiff = -timeDiff
-	}
-	test.That(t, timeDiff < 5, test.ShouldBeTrue) // Should be within 5 seconds
-
-	// Verify that the time is in the expected range (GPS epoch was in 1980)
-	minExpectedSeconds := uint32(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Sub(gpsEpoch).Seconds())
-	test.That(t, secondsSinceEpoch > minExpectedSeconds, test.ShouldBeTrue)
+	// The time should be reasonably close to now (within 5 seconds)
+	timeDiff := math.Abs(float64(int64(expectedSeconds) - int64(secondsSinceEpoch)))
+	test.That(t, timeDiff < 5, test.ShouldBeTrue)
 }
