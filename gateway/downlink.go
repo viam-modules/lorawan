@@ -135,30 +135,34 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 
 	fopts := make([]byte, 0)
 
+	// Handle any mac commands sent in the uplink fopts.
 	if len(uplinkFopts) != 0 {
 		for _, b := range uplinkFopts {
 			switch b {
 			case deviceTimeCID:
 				g.logger.Debugf("got device time request from %s", device.NodeName)
-				deviceTimeAns := createDeviceTimeAns()
+				deviceTimeAns, err := createDeviceTimeAns()
+				if err != nil {
+					g.logger.Errorf("failed to create device time answer: %w", err)
+				}
 				fopts = append(fopts, deviceTimeAns...)
 			default:
-				//unsupported mac command
+				// unsupported mac command
 				g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
 			}
 		}
 	}
 
-	// get 4 bit length
-	fOptsLength := len(fopts) & 0x0F
-
 	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
+	// get 4 bit length
 	fctrl := byte(0x00)
 	if sendAck {
 		fctrl = 0x20
 	}
 
-	fctrl = fctrl | byte(fOptsLength)
+	// append 4 bit foptsLength to first 4 bits of fctrl.
+	fOptsLength := len(fopts) & 0x0F
+	fctrl |= byte(fOptsLength)
 	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
@@ -167,6 +171,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 
 	payload = append(payload, fopts...)
 
+	// If there is a framePayload to send, add it to the downlink.
 	if framePayload != nil {
 		if device.FPort == 0 {
 			return nil, errors.New("invalid downlink fport, ensure fport attribute is correctly set in the node config")
@@ -220,7 +225,7 @@ func findDownLinkFreq(uplinkFreq int) int {
 	return downLinkFreq
 }
 
-func createDeviceTimeAns() []byte {
+func createDeviceTimeAns() ([]byte, error) {
 	// Create buffer for the complete PHYPayload
 	payload := make([]byte, 0)
 
@@ -234,11 +239,14 @@ func createDeviceTimeAns() []byte {
 	secondsSinceGPSEpoch := uint32(now.Sub(gpsEpoch).Seconds())
 
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch)
+	if err := binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch); err != nil {
+		return nil, err
+	}
+
 	payload = append(payload, buf.Bytes()...)
 
-	// using zero for fractional seconds
+	// using zero for fractional seconds to match chirpstack's behavior.
 	payload = append(payload, 0)
 
-	return payload
+	return payload, nil
 }

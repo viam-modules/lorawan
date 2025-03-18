@@ -148,7 +148,7 @@ func TestCreateDownLink(t *testing.T) {
 				// Check for FOpts length in FCtrl if device time request is included
 				if tt.uplinkFopts != nil && tt.uplinkFopts[0] == deviceTimeCID {
 					// The FCtrl should include FOpts length (6) in the lower 4 bits and ACK bit if set
-					expectedFctrl = expectedFctrl | 0x06 // fopts length is 6 bytes
+					expectedFctrl |= 0x06 // fopts length is 6 bytes
 					test.That(t, payload[5], test.ShouldEqual, byte(expectedFctrl))
 					// Check that the device time ans is included in FOpts
 					test.That(t, payload[8], test.ShouldEqual, deviceTimeCID)
@@ -199,8 +199,9 @@ func TestCreateDownLink(t *testing.T) {
 }
 
 func TestCreateDeviceTimeAns(t *testing.T) {
-	timeAns := createDeviceTimeAns()
+	timeAns, err := createDeviceTimeAns()
 
+	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(timeAns), test.ShouldEqual, 6) // 1 byte CID + 4 bytes seconds + 1 byte fractional
 	test.That(t, timeAns[0], test.ShouldEqual, deviceTimeCID)
 
@@ -210,7 +211,7 @@ func TestCreateDeviceTimeAns(t *testing.T) {
 	// Extract the seconds since GPS epoch
 	secondsBytes := timeAns[1:5]
 	var secondsSinceEpoch uint32
-	err := binary.Read(bytes.NewReader(secondsBytes), binary.LittleEndian, &secondsSinceEpoch)
+	err = binary.Read(bytes.NewReader(secondsBytes), binary.LittleEndian, &secondsSinceEpoch)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Calculate the expected time (roughly)
