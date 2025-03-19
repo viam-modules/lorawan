@@ -95,10 +95,12 @@ func TestParseDataUplink(t *testing.T) {
 
 	// Test unparsable data
 	// Invalid frame payload
-	invalidText := []byte{0x00, 0x02, 0x25, 0x00,
+	invalidText := []byte{
+		0x00, 0x02, 0x25, 0x00,
 		0x2b, 0xc4, 0xdf, 0x00,
 		0x9c, 0x00, 0xaa, 0x00,
-		0x00, 0xbe}
+		0x00, 0xbe,
+	}
 
 	invalidPayload, err := createUplinkData(testDeviceAddr, invalidText)
 	test.That(t, err, test.ShouldBeNil)
@@ -126,7 +128,6 @@ func TestParseDataUplink(t *testing.T) {
 
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
-
 }
 
 func TestConvertTo32Bit(t *testing.T) {

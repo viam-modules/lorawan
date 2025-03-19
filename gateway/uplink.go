@@ -27,7 +27,8 @@ const (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (string, map[string]interface{}, error) {
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
+	string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -65,7 +66,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		default:
 			// unsupported mac command
 			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
-
 		}
 	}
 
@@ -73,7 +73,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
 	// Validate the MIC
-	mic, err := crypto.ComputeLegacyUplinkMIC(types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
+	mic, err := crypto.ComputeLegacyUplinkMIC(
+		types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
 	if err != nil {
 		return "", map[string]interface{}{}, err
 	}

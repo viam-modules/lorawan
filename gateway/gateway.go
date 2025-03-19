@@ -79,7 +79,7 @@ var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 const sendDownlinkKey = "senddown"
 
 // Define the map of SF to minimum SNR values
-// Any packet received below the minumum demodulation value will not be parsed.
+// Any packet received below the minimum demodulation value will not be parsed.
 var sfToSNRMin = map[int]float64{
 	7:  -7.5,  // SF7 minimum SNR in dB
 	8:  -8.5,  // SF8 minimum SNR in dB
@@ -428,7 +428,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 
 				if float64(packets[i].snr) < minSNR {
 					g.logger.Debugf("packet skipped due to low signal noise ratio")
-					//continue
+					// continue
 				}
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {

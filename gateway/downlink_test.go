@@ -199,7 +199,7 @@ func TestCreateDownLink(t *testing.T) {
 				// DevAddr should be in little-endian format in the packet
 				devAddrLE := reverseByteArray(tt.device.Addr)
 				test.That(t, payload[1:5], test.ShouldResemble, devAddrLE)
-				test.That(t, payload[5], test.ShouldEqual, byte(tt.expectedFctrl))
+				test.That(t, payload[5], test.ShouldEqual, tt.expectedFctrl)
 
 				currentPos := 8 // Start after MHDR(1) + DevAddr(4) + FCtrl(1) + FCnt(2)
 				if tt.uplinkFopts != nil {

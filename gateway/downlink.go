@@ -124,7 +124,8 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool, uplinkFopts []byte, snr float64, sf int) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool, uplinkFopts []byte, snr float64, sf int) (
+	[]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
@@ -270,5 +271,4 @@ func createLinkCheckAns(snr float64, sf int) []byte {
 	payload = append(payload, byte(gwCnt))
 
 	return payload
-
 }
