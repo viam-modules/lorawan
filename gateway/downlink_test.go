@@ -43,7 +43,7 @@ func TestCreateDownLink(t *testing.T) {
 			ack:            false,
 			uplinkFopts:    nil,
 			expectedLength: 17,
-			expectedFctrl:  0x00,
+			expectedFctrl:  0x80,
 		},
 		{
 			name: "valid downlink frame payload with an ACK",
@@ -61,7 +61,7 @@ func TestCreateDownLink(t *testing.T) {
 			ack:            true,
 			uplinkFopts:    nil,
 			expectedLength: 17,
-			expectedFctrl:  0x20,
+			expectedFctrl:  0xA0,
 		},
 		{
 			name: "downlink with only ACK",
@@ -78,7 +78,7 @@ func TestCreateDownLink(t *testing.T) {
 			ack:            true,
 			uplinkFopts:    nil,
 			expectedLength: 12,
-			expectedFctrl:  0x20,
+			expectedFctrl:  0xA0,
 		},
 		{
 			name: "downlink with device time request",
@@ -95,7 +95,7 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:         false,
 			ack:                 false,
 			expectedLength:      18, // Base length (12) + device time response (6 bytes)
-			expectedFctrl:       0x06,
+			expectedFctrl:       0x86,
 			expectedFOptsLength: 6,
 		},
 		{
@@ -114,7 +114,7 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:         false,
 			ack:                 false,
 			expectedLength:      20, // Base length (17) + link check answer (3 bytes)
-			expectedFctrl:       0x03,
+			expectedFctrl:       0x83,
 			expectedFOptsLength: 3,
 		},
 		{
@@ -132,7 +132,7 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:   true,
 			ack:           true,
 			uplinkFopts:   nil,
-			expectedFctrl: 0x20,
+			expectedFctrl: 0xA0,
 		},
 		{
 			name: "downlink with devicetimeans, linkcheckans, and ignore unknown command",
@@ -149,7 +149,7 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:         false,
 			ack:                 false,
 			expectedLength:      21, // Base length (12) + link check answer (3 bytes) + device time ans (6 bytes)
-			expectedFctrl:       0x09,
+			expectedFctrl:       0x89,
 			expectedFOptsLength: 9,
 		},
 	}
