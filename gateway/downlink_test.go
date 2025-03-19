@@ -42,8 +42,6 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:    false,
 			ack:            false,
 			uplinkFopts:    nil,
-			snr:            10.0,
-			sf:             7,
 			expectedLength: 17,
 			expectedFctrl:  0x00,
 		},
@@ -62,8 +60,6 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:    false,
 			ack:            true,
 			uplinkFopts:    nil,
-			snr:            10.0,
-			sf:             7,
 			expectedLength: 17,
 			expectedFctrl:  0x20,
 		},
@@ -81,8 +77,6 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:    false,
 			ack:            true,
 			uplinkFopts:    nil,
-			snr:            10.0,
-			sf:             7,
 			expectedLength: 12,
 			expectedFctrl:  0x20,
 		},
@@ -100,8 +94,6 @@ func TestCreateDownLink(t *testing.T) {
 			uplinkFopts:         []byte{deviceTimeCID},
 			expectedErr:         false,
 			ack:                 false,
-			snr:                 10.0,
-			sf:                  7,
 			expectedLength:      18, // Base length (12) + device time response (6 bytes)
 			expectedFctrl:       0x06,
 			expectedFOptsLength: 6,
@@ -121,9 +113,7 @@ func TestCreateDownLink(t *testing.T) {
 			uplinkFopts:         []byte{linkCheckCID},
 			expectedErr:         false,
 			ack:                 false,
-			snr:                 -5.0, // SNR value for testing
-			sf:                  12,   // SF12 has minimum SNR of -12.5
-			expectedLength:      20,   // Base length (17) + link check answer (3 bytes)
+			expectedLength:      20, // Base length (17) + link check answer (3 bytes)
 			expectedFctrl:       0x03,
 			expectedFOptsLength: 3,
 		},
@@ -158,9 +148,7 @@ func TestCreateDownLink(t *testing.T) {
 			uplinkFopts:         []byte{deviceTimeCID, linkCheckCID, 0x01},
 			expectedErr:         false,
 			ack:                 false,
-			snr:                 -5.0, // SNR value for testing
-			sf:                  12,   // SF12 has minimum SNR of -12.5
-			expectedLength:      21,   // Base length (12) + link check answer (3 bytes) + device time ans (6 bytes)
+			expectedLength:      21, // Base length (12) + link check answer (3 bytes) + device time ans (6 bytes)
 			expectedFctrl:       0x09,
 			expectedFOptsLength: 9,
 		},
