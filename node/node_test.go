@@ -653,7 +653,7 @@ func TestIntervalDownlink(t *testing.T) {
 		numBytes          int
 		useLittleEndian   bool
 		header            string
-		expectedPayload   string
+		expectedReturn    string
 		testGatewayReturn bool
 		expectedErr       string
 	}{
@@ -664,7 +664,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          2,
 			useLittleEndian:   false,
 			header:            "01",
-			expectedPayload:   "01003C",
+			expectedReturn:    "01003C",
 			testGatewayReturn: false,
 		},
 		{
@@ -674,17 +674,17 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          2,
 			useLittleEndian:   false,
 			header:            "01",
-			expectedPayload:   "downlink added",
+			expectedReturn:    "downlink added",
 			testGatewayReturn: true,
 		},
 		{
 			name:              "valid interval in seconds with a size of 4",
-			interval:          1,
+			interval:          10,
 			payloadUnits:      Seconds,
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "01",
-			expectedPayload:   "010000003C",
+			expectedReturn:    "0100000258",
 			testGatewayReturn: false,
 		},
 		{
@@ -694,7 +694,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          3,
 			useLittleEndian:   true,
 			header:            "01",
-			expectedPayload:   "013C0000",
+			expectedReturn:    "013C0000",
 			testGatewayReturn: false,
 		},
 		{
@@ -704,7 +704,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedPayload:   "0200000001",
+			expectedReturn:    "0200000001",
 			testGatewayReturn: false,
 		},
 		{
@@ -714,7 +714,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "ff8e",
-			expectedPayload:   "FF8E0000001E",
+			expectedReturn:    "FF8E0000001E",
 			testGatewayReturn: false,
 		},
 		{
@@ -723,7 +723,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "",
-			expectedPayload:   "",
+			expectedReturn:    "",
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, downlink header is empty",
 		},
@@ -733,7 +733,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedPayload:   "",
+			expectedReturn:    "",
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, units unspecified",
 		},
@@ -744,7 +744,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedPayload:   "",
+			expectedReturn:    "",
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, unit 3 unsupported",
 		},
@@ -755,7 +755,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          9,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedPayload:   "",
+			expectedReturn:    "",
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, NumBytes must be between 1 and 8, got 9",
 		},
@@ -766,7 +766,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          -1,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedPayload:   "",
+			expectedReturn:    "",
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, NumBytes must be between 1 and 8, got -1",
 		},
@@ -777,7 +777,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          1,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedPayload:   "0200000001",
+			expectedReturn:    "0200000001",
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, interval of 256 minutes exceeds maximum number of bytes 1",
 		},
@@ -800,7 +800,7 @@ func TestIntervalDownlink(t *testing.T) {
 					// we should receive a success from the gateway
 					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
 					test.That(t, gatewayOk, test.ShouldBeTrue)
-					test.That(t, gatewayResp, test.ShouldEqual, tt.expectedPayload)
+					test.That(t, gatewayResp, test.ShouldEqual, tt.expectedReturn)
 
 					// we should not receive a interval success message
 					nodeResp, nodeOk := resp[IntervalKey].(string)
@@ -815,7 +815,7 @@ func TestIntervalDownlink(t *testing.T) {
 					// we should receive a interval payload message
 					nodeResp, nodeOk := resp[IntervalKey].(string)
 					test.That(t, nodeOk, test.ShouldBeTrue)
-					test.That(t, nodeResp, test.ShouldEqual, tt.expectedPayload)
+					test.That(t, nodeResp, test.ShouldEqual, tt.expectedReturn)
 				}
 			}
 		})

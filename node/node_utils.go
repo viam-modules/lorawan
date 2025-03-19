@@ -357,7 +357,7 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 			intervalString = fmt.Sprintf("%s%02X", intervalString, bs[i])
 		}
 	} else {
-		// is not little endian
+		// the request wants the interval bytes to be big endian
 		intervalString += fmt.Sprintf(formatStringWithBytes(req.NumBytes), formattedInterval)
 	}
 
