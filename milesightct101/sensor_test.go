@@ -186,7 +186,7 @@ func TestDoCommand(t *testing.T) {
 		// we should receive a ct101 success message
 		nodeResp, nodeOk := resp[node.IntervalKey].(string)
 		test.That(t, nodeOk, test.ShouldBeTrue)
-		test.That(t, nodeResp, test.ShouldEqual, "ff8e001400") // 20 minutes
+		test.That(t, nodeResp, test.ShouldEqual, "FF8E001400") // 20 minutes
 	})
 	t.Run("Test successful reset downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
@@ -204,7 +204,7 @@ func TestDoCommand(t *testing.T) {
 		// we should receive a ct101 success message
 		nodeResp, nodeOk := resp[resetKey].(string)
 		test.That(t, nodeOk, test.ShouldBeTrue)
-		test.That(t, nodeResp, test.ShouldEqual, "ff10ff") // reset
+		test.That(t, nodeResp, test.ShouldEqual, "FF10FF") // reset
 	})
 	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
 		req := map[string]interface{}{node.IntervalKey: false}

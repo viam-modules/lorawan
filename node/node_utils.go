@@ -338,10 +338,12 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 		return nil, fmt.Errorf("cannot send interval downlink, request %v bytes exceeds allowed number of bytes(8)", req.NumBytes)
 	}
 	if formattedInterval >= uint64(math.Pow(2, 8*float64(req.NumBytes))) {
-		return nil, fmt.Errorf("cannot send interval downlink, interval %v exceeds maximum number of bytes %v", req.IntervalMin, req.NumBytes)
+		return nil, fmt.Errorf("cannot send interval downlink, interval of %v minutes exceeds maximum number of bytes %v",
+			req.IntervalMin, req.NumBytes)
 	}
 
-	intervalString := req.Header
+	// we format the hex with uppercase, ensure the header is too.
+	intervalString := strings.ToUpper(req.Header)
 	if req.UseLittleEndian {
 		// 8 is def not the max technically but sensors really shouldn't go that big
 		bs := make([]byte, 8)

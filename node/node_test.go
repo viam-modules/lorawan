@@ -707,18 +707,72 @@ func TestIntervalDownlink(t *testing.T) {
 			expectedPayload:   "0200000001",
 			testGatewayReturn: false,
 		},
+		{
+			name:              "valid interval with the payload in uppercase",
+			interval:          0.5,
+			payloadUnits:      Seconds,
+			numBytes:          4,
+			useLittleEndian:   false,
+			header:            "ff8e",
+			expectedPayload:   "FF8E0000001E",
+			testGatewayReturn: false,
+		},
+		{
+			name:              "fail due to unspecified units",
+			interval:          1,
+			numBytes:          4,
+			useLittleEndian:   false,
+			header:            "02",
+			expectedPayload:   "",
+			testGatewayReturn: false,
+			expectedErr:       "cannot send interval downlink, units unspecified",
+		},
+		{
+			name:              "fail due to invalid units",
+			interval:          1,
+			payloadUnits:      3,
+			numBytes:          4,
+			useLittleEndian:   false,
+			header:            "02",
+			expectedPayload:   "",
+			testGatewayReturn: false,
+			expectedErr:       "cannot send interval downlink, unit 3 unsupported",
+		},
+		{
+			name:              "fail due to unsupported interval because too many bytes",
+			interval:          1,
+			payloadUnits:      Minutes,
+			numBytes:          9,
+			useLittleEndian:   false,
+			header:            "02",
+			expectedPayload:   "",
+			testGatewayReturn: false,
+			expectedErr:       "cannot send interval downlink, request 9 bytes exceeds allowed number of bytes(8)",
+		},
+		{
+			name:              "fail due to interval is too large for number of bytes",
+			interval:          256,
+			payloadUnits:      Minutes,
+			numBytes:          1,
+			useLittleEndian:   false,
+			header:            "02",
+			expectedPayload:   "0200000001",
+			testGatewayReturn: false,
+			expectedErr:       "cannot send interval downlink, interval of 256 minutes exceeds maximum number of bytes 1",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := IntervalRequest{IntervalMin: tt.interval, PayloadUnits: tt.payloadUnits, NumBytes: tt.numBytes,
-				UseLittleEndian: tt.useLittleEndian, Header: tt.header, TestOnly: !tt.testGatewayReturn}
+			req := IntervalRequest{
+				IntervalMin: tt.interval, PayloadUnits: tt.payloadUnits, NumBytes: tt.numBytes,
+				UseLittleEndian: tt.useLittleEndian, Header: tt.header, TestOnly: !tt.testGatewayReturn,
+			}
 			resp, err := testNode.SendIntervalDownlink(ctx, req)
 			if tt.expectedErr != "" {
 				test.That(t, resp, test.ShouldBeNil)
-				test.That(t, err, test.ShouldBeNil)
+				test.That(t, err.Error(), test.ShouldContainSubstring, tt.expectedErr)
 			} else {
 				test.That(t, err, test.ShouldBeNil)
-				logger.Info(resp)
 
 				// receive a response from the gateway
 				if tt.testGatewayReturn {
@@ -740,11 +794,9 @@ func TestIntervalDownlink(t *testing.T) {
 					// we should receive a interval payload message
 					nodeResp, nodeOk := resp[IntervalKey].(string)
 					test.That(t, nodeOk, test.ShouldBeTrue)
-					test.That(t, nodeResp, test.ShouldEqual, tt.expectedPayload) // 20 minutes
+					test.That(t, nodeResp, test.ShouldEqual, tt.expectedPayload)
 				}
-
 			}
 		})
 	}
-
 }

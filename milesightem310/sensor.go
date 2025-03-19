@@ -165,7 +165,7 @@ func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
 			req := node.IntervalRequest{
-				IntervalMin: intervalFloat, PayloadUnits: node.Seconds, Header: "ff03",
+				IntervalMin: intervalFloat, PayloadUnits: node.Seconds, Header: "FF03",
 				UseLittleEndian: true, NumBytes: 2, TestOnly: testOnly,
 			}
 			return n.node.SendIntervalDownlink(ctx, req)
@@ -182,7 +182,7 @@ func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (
 
 func (n *em310Tilt) addRestartToQueue(ctx context.Context, testOnly bool) (map[string]interface{}, error) {
 	// ff byte is the channel, 10 is the message type and ff is the command for the downlink.
-	intervalString := "ff10ff"
+	intervalString := "FF10FF"
 	if testOnly {
 		return map[string]interface{}{resetKey: intervalString}, nil
 	}
