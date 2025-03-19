@@ -133,6 +133,7 @@ Example OTAA node configuration:
 ```
 
 Example ABP node configuration:
+
 ```json
 {
   "join_type": "ABP",
@@ -145,6 +146,7 @@ Example ABP node configuration:
   "fport": "55"
 }
 ```
+
 ### Common Attributes
 
 | Name | Type | Required | Description |
@@ -171,6 +173,20 @@ The node registers itself with the gateway so the gateway will recognize message
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+
+### DoCommand
+
+The sensor node model uses DoCommands to send downlinks to sensors from the gateway.
+
+#### Send a downlink
+
+This command will send a generic downlink payload to the gateway. The string is expected to be a set of bytes in hex.
+
+```json
+{
+  "send_downlink": "<BYTESINHEX>"
+}
+```
 
 ## Configure your milesight sensor
 
@@ -219,6 +235,40 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | no | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
 | network_s_key | string | no | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
 
+### DoCommand
+
+The milesight models uses DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
+
+#### Update the uplink interval
+
+This command will update the interval the milesight sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
+
+```json
+{
+  "set_interval": 1.0
+}
+```
+
+#### Restart the device
+
+This command will restart the milesight sensor, triggering a new join request.
+
+```json
+{
+  "restart_sensor": ""
+}
+```
+
+#### Send a generic downlink
+
+This command will send a generic downlink payload to the gateway. the string is expected to be a set of bytes in hex. See the [em310 tilt sensor user guide](https://resource.milesight.com/milesight/iot/document/em310-tilt-user-guide-en.pdf) or the [ct101 user guide](https://resource.milesight.com/milesight/iot/document/ct10x-user-guide-en.pdf) for their respective downlink commands.
+
+```json
+{
+  "send_downlink": "<BYTESINHEX>"
+}
+```
+
 ## Configure your `viam:lorawan:dragino-LHT65N`
 
 Example OTAA node configuration:
@@ -266,6 +316,30 @@ The node registers itself with the gateway so the gateway will recognize message
 | dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
 | app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+
+### DoCommand
+
+The dragino model uses DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
+
+#### Update the uplink interval
+
+This command will update the interval the dragino sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
+
+```json
+{
+  "set_interval": 1.0
+}
+```
+
+#### Send a generic downlink
+
+This command will send a generic downlink payload to the gateway. the string is expected to be a set of bytes in hex. See the [LHT64 temperature sensor user guide](https://www.dragino.com/downloads/downloads/LHT65/UserManual/LHT65_Temperature_Humidity_Sensor_UserManual_v1.3.pdf) for other downlink commands.
+
+```json
+{
+  "send_downlink": "<BYTESINHEX>"
+}
+```
 
 
 ## Troubleshooting Notes

@@ -20,6 +20,9 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
+// TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
+const TestKey = "test_only"
+
 // NewSensor creates a new Node struct. This can be used by external implementers.
 func NewSensor(conf resource.Config, logger logging.Logger) Node {
 	return Node{
@@ -262,4 +265,29 @@ func isValidFilePath(path string) error {
 		return errors.New("decoder must be a .js file")
 	}
 	return nil
+}
+
+// CheckTestKey checks if a map has the testKey set.
+func CheckTestKey(cmd map[string]interface{}) bool {
+	_, ok := cmd[TestKey]
+	return ok
+}
+
+// SendDownlink sends a downlink command to the gateway via the gateway's DoCommand.
+func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) (map[string]interface{}, error) {
+	req := map[string]interface{}{}
+	downlinks := map[string]interface{}{}
+	downlinks[n.NodeName] = payload
+	// return the expected message if testOnly is set.
+	if testOnly {
+		req[DownlinkKey] = downlinks
+		return req, nil
+	}
+
+	// lock to prevent sending downlinks to the gateway while reconfigure occurs.
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
+
+	req[GatewaySendDownlinkKey] = downlinks
+	return n.gateway.DoCommand(ctx, req)
 }

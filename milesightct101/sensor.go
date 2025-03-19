@@ -3,6 +3,10 @@ package milesightct101
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
+	"math"
+	"reflect"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
@@ -18,6 +22,9 @@ const (
 	// ABP defaults.
 	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
 	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
+
+	intervalKey = "set_interval"
+	resetKey    = "restart_sensor"
 )
 
 // defaultIntervalMin is how often the CT101 will send an uplink.
@@ -129,6 +136,15 @@ func (n *CT101) Reconfigure(ctx context.Context, deps resource.Dependencies, con
 		return err
 	}
 
+	// set the interval if one was provided
+	// we do not send a default in case the user has already set an interval they prefer
+	if cfg.Interval != nil && *cfg.Interval != 0 {
+		_, err = n.addIntervalToQueue(ctx, *nodeCfg.Interval, false)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger)
 	if err != nil {
 		return err
@@ -145,4 +161,51 @@ func (n *CT101) Close(ctx context.Context) error {
 // Readings returns the node's readings.
 func (n *CT101) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	return n.node.Readings(ctx, extra)
+}
+
+// DoCommand implements the DoCommand for the CT101.
+func (n *CT101) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	testOnly := node.CheckTestKey(cmd)
+	if interval, intervalSet := cmd[intervalKey]; intervalSet {
+		if intervalFloat, floatOk := interval.(float64); floatOk {
+			return n.addIntervalToQueue(ctx, intervalFloat, testOnly)
+		}
+		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
+	}
+	if _, ok := cmd[resetKey]; ok {
+		return n.addRestartToQueue(ctx, testOnly)
+	}
+
+	// do generic node if no sensor specific key was found
+	return n.node.DoCommand(ctx, cmd)
+}
+
+func (n *CT101) addIntervalToQueue(ctx context.Context, interval float64, testOnly bool) (map[string]interface{}, error) {
+	// round to nearest minute
+	roundMinutes := uint16(math.Round(interval))
+
+	// create a byte array of size 2 and put the payload in as little endian.
+	bs := make([]byte, 2)
+	binary.LittleEndian.PutUint16(bs, roundMinutes)
+
+	// ff byte is the channel, 8e is the message type byte for the downlink, and 00 is 00.
+	intervalString := "ff8e00"
+	intervalString += fmt.Sprintf("%04x", bs)
+
+	if testOnly {
+		return map[string]interface{}{intervalKey: intervalString}, nil
+	}
+
+	return n.node.SendDownlink(ctx, intervalString, false)
+}
+
+func (n *CT101) addRestartToQueue(ctx context.Context, testOnly bool) (map[string]interface{}, error) {
+	// ff byte is the channel, 10 is the message type and ff is the command for the downlink.
+	// time is 2 bytes of data.
+	intervalString := "ff10ff"
+	if testOnly {
+		return map[string]interface{}{resetKey: intervalString}, nil
+	}
+
+	return n.node.SendDownlink(ctx, intervalString, false)
 }
