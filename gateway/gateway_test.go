@@ -139,7 +139,7 @@ func TestDoCommand(t *testing.T) {
 	// clear devices
 	g.devices = map[string]*node.Node{}
 	registerCmd := make(map[string]interface{})
-	registerCmd["register_device"] = n
+	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 1)
 	dev, ok := g.devices[testNodeName]
@@ -150,7 +150,7 @@ func TestDoCommand(t *testing.T) {
 
 	// Test that if the device reconfigures, fields get updated
 	n.DecoderPath = "/newpath"
-	registerCmd["register_device"] = n
+	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 1)
 	dev, ok = g.devices[testNodeName]
@@ -197,7 +197,7 @@ func TestDoCommand(t *testing.T) {
 	}
 
 	downlinkCmd := make(map[string]interface{})
-	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
+	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]interface{}{
 		testNodeName: testDownLinkPayload,
 	}
 
@@ -205,22 +205,22 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 
 	// Verify response
-	retVal, ok = resp[sendDownlinkKey]
+	retVal, ok = resp[node.GatewaySendDownlinkKey]
 	test.That(t, ok, test.ShouldBeTrue)
 	test.That(t, retVal, test.ShouldEqual, "downlink added")
 
 	// Verify the downlink was added to the node
-	node, ok := g.devices[testNodeName]
+	testNode, ok := g.devices[testNodeName]
 	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, len(node.Downlinks), test.ShouldEqual, 1)
+	test.That(t, len(testNode.Downlinks), test.ShouldEqual, 1)
 
 	// Verify the downlink payload matches (after hex decoding)
 	expectedPayload, err := hex.DecodeString(testDownLinkPayload)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, node.Downlinks[0], test.ShouldResemble, expectedPayload)
+	test.That(t, testNode.Downlinks[0], test.ShouldResemble, expectedPayload)
 
 	// Unknown device name should error
-	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
+	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]interface{}{
 		"unknown-node": testDownLinkPayload,
 	}
 	_, err = s.DoCommand(context.Background(), downlinkCmd)
@@ -228,7 +228,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, err.Error(), test.ShouldContainSubstring, "not found")
 
 	// invalid byte encoding should error
-	downlinkCmd[sendDownlinkKey] = map[string]interface{}{
+	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]interface{}{
 		testNodeName: "olf",
 	}
 	_, err = s.DoCommand(context.Background(), downlinkCmd)

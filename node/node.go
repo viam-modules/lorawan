@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"reflect"
+	"sync"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -45,9 +48,14 @@ const (
 	JoinTypeOTAA = "OTAA"
 	// JoinTypeABP is the ABP Join type.
 	JoinTypeABP = "ABP"
+	// DownlinkKey is the DoCommand Key to send a payload to the gateway.
+	DownlinkKey = "send_downlink"
+	// GatewaySendDownlinkKey is the DoCommand Key for the gateway model to queue a downlink.
+	GatewaySendDownlinkKey = "add_downlink_to_queue"
 )
 
-var noReadings = map[string]interface{}{"": "no readings available yet"}
+// NoReadings is the return for a sensor that has not received data.
+var NoReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config defines the node's config.
 type Config struct {
@@ -171,10 +179,11 @@ type Node struct {
 	Addr   []byte
 	DevEui []byte
 
-	DecoderPath string
-	NodeName    string
-	gateway     sensor.Sensor
-	JoinType    string
+	DecoderPath   string
+	NodeName      string
+	gateway       sensor.Sensor
+	JoinType      string
+	reconfigureMu sync.Mutex
 
 	FCntDown  uint32
 	FPort     byte     // for downlinks, only required when frame payload exists.
@@ -205,6 +214,8 @@ func newNode(
 
 // Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -283,9 +294,25 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 			if extra[data.FromDMString] == true {
 				return map[string]interface{}{}, data.ErrNoCaptureToStore
 			}
-			return noReadings, nil
+			return NoReadings, nil
 		}
 		return reading.(map[string]interface{}), nil
 	}
 	return map[string]interface{}{}, errors.New("node does not have gateway")
+}
+
+// DoCommand lets users send downlink commands from the node to the gateway.
+func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	resp := map[string]interface{}{}
+	testOnly := CheckTestKey(cmd)
+
+	if payload, payloadSet := cmd[DownlinkKey]; payloadSet {
+		if payloadString, payloadOk := payload.(string); payloadOk {
+			// SendDownlink locks to prevent commands from being sent during reconfigure.
+			return n.SendDownlink(ctx, payloadString, testOnly)
+		}
+		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected string got %v", reflect.TypeOf(payload))
+	}
+
+	return resp, nil
 }

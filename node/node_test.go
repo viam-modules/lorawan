@@ -11,17 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"go.viam.com/rdk/components/encoder"
+	"github.com/viam-modules/gateway/testutils"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 )
 
 const (
 	// Common test values.
-	testDecoderPath = "/path/to/decoder"
+	testDecoderPath = "/path/to/decoder.js"
 
 	// OTAA test values.
 	testDevEUI = "0123456789ABCDEF"
@@ -34,6 +33,7 @@ const (
 
 	// Gateway dependency.
 	testGatewayName = "gateway"
+	testNodeName    = "test-node"
 )
 
 var (
@@ -41,23 +41,9 @@ var (
 	testNodeReadings = map[string]interface{}{"reading": 1}
 	testDecoderURL   = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/40e844fedbcf9a8c3b279142672fab1c89bee2e0/" +
 		"CT_Series/CT101/CT101_Decoder.js"
+	nodeNames    = []string{testNodeName}
+	gatewayNames = []string{testGatewayName}
 )
-
-func createMockGateway() *inject.Sensor {
-	mockGateway := &inject.Sensor{}
-	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		if _, ok := cmd["validate"]; ok {
-			return map[string]interface{}{"validate": 1.0}, nil
-		}
-		return map[string]interface{}{}, nil
-	}
-	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		readings := make(map[string]interface{})
-		readings["test-node"] = testNodeReadings
-		return readings, nil
-	}
-	return mockGateway
-}
 
 func TestConfigValidate(t *testing.T) {
 	// valid config
@@ -249,21 +235,13 @@ func TestNewNode(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
-	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
-
-	// Create the file
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, testDecoderPath)
+	// copy the path to the tmpDir
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, testDecoderPath)
 
 	// Test OTAA config
 	validConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
@@ -278,7 +256,7 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	node := n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
+	test.That(t, node.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
 
@@ -316,7 +294,7 @@ func TestNewNode(t *testing.T) {
 
 	// Decoder can be URL
 	validConf = resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderURL,
 			Interval: &testInterval,
@@ -326,13 +304,12 @@ func TestNewNode(t *testing.T) {
 		},
 	}
 
-	t.Setenv("VIAM_MODULE_DATA", tmpDir)
 	n, err = newNode(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
 	node = n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, "test-node")
+	test.That(t, node.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, node.DecoderPath, test.ShouldEqual, expectedPath)
@@ -340,7 +317,7 @@ func TestNewNode(t *testing.T) {
 
 	// Invalid decoder file should error
 	invalidDecoderConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  "/worong/path",
 			Interval: &testInterval,
@@ -359,20 +336,12 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	mockGateway := createMockGateway()
-	deps := make(resource.Dependencies)
-	deps[encoder.Named(testGatewayName)] = mockGateway
-
-	tmpDir := t.TempDir()
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	// copy the path to the tmpDir
 	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
 
-	// Create the file
-	file, err := os.Create(testDecoderPath)
-	test.That(t, err, test.ShouldBeNil)
-	defer file.Close()
-
 	validConf := resource.Config{
-		Name: "test-node",
+		Name: testNodeName,
 		ConvertedAttributes: &Config{
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
@@ -388,7 +357,7 @@ func TestReadings(t *testing.T) {
 
 	readings, err := n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldEqual, testNodeReadings)
+	test.That(t, readings, test.ShouldResemble, testNodeReadings)
 
 	// node for empty readings.
 	validConf = resource.Config{
@@ -409,7 +378,7 @@ func TestReadings(t *testing.T) {
 	// If lastReadings is empty and the call is not from data manager, return no error.
 	readings, err = n.Readings(ctx, nil)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, noReadings)
+	test.That(t, readings, test.ShouldResemble, NoReadings)
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
 	_, err = n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
@@ -418,7 +387,7 @@ func TestReadings(t *testing.T) {
 	// If data.FromDmString is false, return no error
 	_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, noReadings)
+	test.That(t, readings, test.ShouldResemble, NoReadings)
 }
 
 type ctrl struct {
@@ -577,4 +546,78 @@ func TestIsValidFilePath(t *testing.T) {
 	err = isValidFilePath(invalidExtPath)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldEqual, "decoder must be a .js file")
+}
+
+func TestDoCommand(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	// copy the path to the tmpDir
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	validConf := resource.Config{
+		Name: testNodeName,
+		ConvertedAttributes: &Config{
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	n, err := newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+
+	t.Run("Test successful downlink DoCommand that sends to the gateway", func(t *testing.T) {
+		req := map[string]interface{}{DownlinkKey: "bytes"}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldNotBeNil)
+		test.That(t, err, test.ShouldBeNil)
+
+		// we should receive a success from the gateway
+		gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+		test.That(t, gatewayOk, test.ShouldBeTrue)
+		test.That(t, gatewayResp, test.ShouldEqual, "downlink added")
+
+		// we should not receive a node success message
+		nodeResp, nodeOk := resp[DownlinkKey].(map[string]interface{})
+		test.That(t, nodeOk, test.ShouldBeFalse)
+		test.That(t, nodeResp, test.ShouldBeNil)
+	})
+	t.Run("Test successful downlink DoCommand that returns the node response", func(t *testing.T) {
+		// testKey controls whether we send bytes to the gateway. used for debugging.
+		req := map[string]interface{}{TestKey: "", DownlinkKey: "bytes"}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldNotBeNil)
+		test.That(t, err, test.ShouldBeNil)
+
+		// we should receive a success from the gateway
+		gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+		test.That(t, gatewayOk, test.ShouldBeFalse)
+		test.That(t, gatewayResp, test.ShouldEqual, "")
+
+		// we should not receive a node success message
+		nodeResp, nodeOk := resp[DownlinkKey].(map[string]interface{})
+		test.That(t, nodeOk, test.ShouldBeTrue)
+		test.That(t, nodeResp, test.ShouldNotBeNil)
+		testNodeBytes, ok := nodeResp[n.Name().ShortName()]
+		test.That(t, ok, test.ShouldBeTrue)
+		test.That(t, testNodeBytes, test.ShouldEqual, req[DownlinkKey])
+	})
+
+	t.Run("Test nil DoCommand returns empty", func(t *testing.T) {
+		resp, err := n.DoCommand(ctx, nil)
+		test.That(t, resp, test.ShouldBeEmpty)
+		test.That(t, err, test.ShouldBeNil)
+	})
+
+	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
+		req := map[string]interface{}{DownlinkKey: false}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldBeEmpty)
+		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected string")
+	})
 }

@@ -76,8 +76,6 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
-const sendDownlinkKey = "senddown"
-
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -533,7 +531,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
-	if payload, ok := cmd[sendDownlinkKey]; ok {
+	if payload, ok := cmd[node.GatewaySendDownlinkKey]; ok {
 		downlinks, ok := payload.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
@@ -558,7 +556,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			dev.Downlinks = append(dev.Downlinks, payloadBytes)
 		}
 
-		return map[string]interface{}{sendDownlinkKey: "downlink added"}, nil
+		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
 	}
 
 	return map[string]interface{}{}, nil
