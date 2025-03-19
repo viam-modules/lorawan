@@ -153,7 +153,7 @@ func TestDoCommand(t *testing.T) {
 	t.Run("Test successful interval downlink DoCommand to Gateway", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
 		// req := map[string]interface{}{testKey: "", DownlinkKey: "bytes"}
-		req := map[string]interface{}{intervalKey: 10.0}
+		req := map[string]interface{}{node.IntervalKey: 10.0}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -164,13 +164,13 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, gatewayResp, test.ShouldEqual, "downlink added")
 
 		// we should not receive a dragino success message
-		nodeResp, nodeOk := resp[intervalKey].(string)
+		nodeResp, nodeOk := resp[node.IntervalKey].(string)
 		test.That(t, nodeOk, test.ShouldBeFalse)
 		test.That(t, nodeResp, test.ShouldEqual, "")
 	})
 	t.Run("Test successful interval downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{node.TestKey: "", intervalKey: 10.0}
+		req := map[string]interface{}{node.TestKey: "", node.IntervalKey: 10.0}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -182,12 +182,12 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, gatewayResp, test.ShouldEqual, "")
 
 		// we should receive a dragino success message
-		nodeResp, nodeOk := resp[intervalKey].(string)
+		nodeResp, nodeOk := resp[node.IntervalKey].(string)
 		test.That(t, nodeOk, test.ShouldBeTrue)
 		test.That(t, nodeResp, test.ShouldEqual, "01000258") // 600 seconds
 	})
 	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
-		req := map[string]interface{}{intervalKey: false}
+		req := map[string]interface{}{node.IntervalKey: false}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected float")

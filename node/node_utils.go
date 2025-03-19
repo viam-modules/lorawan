@@ -4,10 +4,12 @@ package node
 import (
 	"context"
 	"embed"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -290,4 +292,82 @@ func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) 
 
 	req[GatewaySendDownlinkKey] = downlinks
 	return n.gateway.DoCommand(ctx, req)
+}
+
+// IntervalRequest is the information needed to generate an interval downlink for a sensor.
+type IntervalRequest struct {
+	IntervalMin     float64
+	PayloadUnits    Units
+	UseLittleEndian bool
+	Header          string
+	NumBytes        int
+	TestOnly        bool
+}
+
+// Units is an enum to specify units to be used by a downlink.
+type Units int
+
+const (
+	unspecified Units = iota
+	// Seconds is seconds.
+	Seconds
+	// Minutes is minutes.
+	Minutes
+	// IntervalKey is the key for an interval DoCommand.
+	IntervalKey = "send_interval"
+)
+
+// SendIntervalDownlink formats a payload to send to the gateway using an IntervalRequest.
+// The function does not support interval downlinks with more than 8 bytes.
+func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]interface{}, error) {
+	var formattedInterval uint64
+	if req.Header == "" {
+		return nil, errors.New("cannot send interval downlink, downlink header is empty")
+	}
+	switch req.PayloadUnits {
+	case Minutes:
+		// round to nearest minute
+		formattedInterval = uint64(math.Round(req.IntervalMin))
+	case Seconds:
+		// convert to the nearest second.
+		formattedInterval = uint64(math.Round(req.IntervalMin * 60))
+	case unspecified:
+		return nil, errors.New("cannot send interval downlink, units unspecified")
+	default:
+		return nil, fmt.Errorf("cannot send interval downlink, unit %v unsupported", req.PayloadUnits)
+	}
+
+	if req.NumBytes > 8 || req.NumBytes < 1 {
+		return nil, fmt.Errorf("cannot send interval downlink, NumBytes must be between 1 and 8, got %v", req.NumBytes)
+	}
+	if formattedInterval >= uint64(math.Pow(2, 8*float64(req.NumBytes))) {
+		return nil, fmt.Errorf("cannot send interval downlink, interval of %v minutes exceeds maximum number of bytes %v",
+			req.IntervalMin, req.NumBytes)
+	}
+
+	// we format the hex with uppercase, ensure the header is too.
+	intervalString := strings.ToUpper(req.Header)
+	if req.UseLittleEndian {
+		// 8 is def not the max technically but sensors really shouldn't go that big
+		bs := make([]byte, 8)
+		binary.LittleEndian.PutUint64(bs, formattedInterval)
+
+		// only loop for the number of bytes we actually need
+		for i := range req.NumBytes {
+			intervalString = fmt.Sprintf("%s%02X", intervalString, bs[i])
+		}
+	} else {
+		// the request wants the interval bytes to be big endian
+		intervalString += fmt.Sprintf(formatStringWithBytes(req.NumBytes), formattedInterval)
+	}
+
+	if req.TestOnly {
+		return map[string]interface{}{IntervalKey: intervalString}, nil
+	}
+	return n.SendDownlink(ctx, intervalString, false)
+}
+
+func formatStringWithBytes(numBytes int) string {
+	// 2 hex digits per byte
+	return fmt.Sprintf("%%0%dX", 2*numBytes)
 }
