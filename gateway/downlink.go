@@ -31,7 +31,7 @@ const (
 	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
 	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
 	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
-	// command idendifiers of supported mac commands.
+	// command identifier of supported mac commands.
 	deviceTimeCID = 0x0D
 	linkCheckCID  = 0x02
 )
@@ -159,11 +159,10 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 		}
 	}
 
-	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
-	// get 4 bit length
-	fctrl := byte(0x00)
+	//  FCtrl: ADR (1), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
+	fctrl := byte(0x80)
 	if sendAck {
-		fctrl = 0x20
+		fctrl = 0xA0
 	}
 
 	// append 4 bit foptsLength to first 4 bits of fctrl.

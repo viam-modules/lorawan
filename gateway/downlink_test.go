@@ -23,8 +23,6 @@ func TestCreateDownLink(t *testing.T) {
 		expectedErr         bool
 		ack                 bool
 		uplinkFopts         []byte
-		snr                 float64
-		sf                  int
 		expectedLength      int
 		expectedFctrl       byte
 		expectedFOptsLength int
@@ -144,8 +142,6 @@ func TestCreateDownLink(t *testing.T) {
 			expectedErr:   true,
 			ack:           true,
 			uplinkFopts:   nil,
-			snr:           10.0,
-			sf:            7,
 			expectedFctrl: 0x20,
 		},
 		{
@@ -184,7 +180,7 @@ func TestCreateDownLink(t *testing.T) {
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.ack, tt.uplinkFopts, tt.snr, tt.sf)
+			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.ack, tt.uplinkFopts, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)

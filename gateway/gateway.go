@@ -420,17 +420,12 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					continue
 				}
 
-				g.logger.Infof("SNR: %v", packets[i].snr)
-				g.logger.Infof("RSSI: %v", packets[i].rssic)
-				g.logger.Infof("RSSI: %v", packets[i].rssis)
-				g.logger.Infof("SF: %v", packets[i].datarate)
-
 				minSNR := sfToSNRMin[int(packets[i].datarate)]
-
 				if float64(packets[i].snr) < minSNR {
 					g.logger.Debugf("packet skipped due to low signal noise ratio")
-					// continue
+					continue
 				}
+
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
