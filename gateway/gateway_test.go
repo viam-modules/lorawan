@@ -139,7 +139,7 @@ func TestDoCommand(t *testing.T) {
 	// clear devices
 	g.devices = map[string]*node.Node{}
 	registerCmd := make(map[string]interface{})
-	registerCmd["register_device"] = n
+	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 1)
 	dev, ok := g.devices[testNodeName]
@@ -150,7 +150,7 @@ func TestDoCommand(t *testing.T) {
 
 	// Test that if the device reconfigures, fields get updated
 	n.DecoderPath = "/newpath"
-	registerCmd["register_device"] = n
+	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 1)
 	dev, ok = g.devices[testNodeName]

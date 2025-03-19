@@ -284,6 +284,10 @@ func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) 
 		return req, nil
 	}
 
+	// lock to prevent sending downlinks to the gateway while reconfigure occurs.
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
+
 	req[GatewaySendDownlinkKey] = downlinks
 	return n.gateway.DoCommand(ctx, req)
 }

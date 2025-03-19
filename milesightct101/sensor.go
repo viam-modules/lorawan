@@ -190,9 +190,8 @@ func (n *CT101) addIntervalToQueue(ctx context.Context, interval float64, testOn
 
 	// ff byte is the channel, 8e is the message type byte for the downlink, and 00 is 00.
 	intervalString := "ff8e00"
-	for _, b := range bs {
-		intervalString = fmt.Sprintf("%s%02x", intervalString, b)
-	}
+	intervalString += fmt.Sprintf("%04x", bs)
+
 	if testOnly {
 		return map[string]interface{}{intervalKey: intervalString}, nil
 	}

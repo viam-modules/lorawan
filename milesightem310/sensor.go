@@ -188,9 +188,7 @@ func (n *em310Tilt) addIntervalToQueue(ctx context.Context, interval float64, te
 
 	// ff byte is the channel, 03 is the message type byte for the downlink.
 	intervalString := "ff03"
-	for _, b := range bs {
-		intervalString = fmt.Sprintf("%s%02x", intervalString, b)
-	}
+	intervalString += fmt.Sprintf("%04x", bs)
 
 	if testOnly {
 		return map[string]interface{}{intervalKey: intervalString}, nil

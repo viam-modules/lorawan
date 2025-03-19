@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -178,10 +179,11 @@ type Node struct {
 	Addr   []byte
 	DevEui []byte
 
-	DecoderPath string
-	NodeName    string
-	gateway     sensor.Sensor
-	JoinType    string
+	DecoderPath   string
+	NodeName      string
+	gateway       sensor.Sensor
+	JoinType      string
+	reconfigureMu sync.Mutex
 
 	FCntDown  uint32
 	FPort     byte     // for downlinks, only required when frame payload exists.
@@ -212,6 +214,8 @@ func newNode(
 
 // Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -304,6 +308,7 @@ func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[s
 
 	if payload, payloadSet := cmd[DownlinkKey]; payloadSet {
 		if payloadString, payloadOk := payload.(string); payloadOk {
+			// SendDownlink locks to prevent commands from being sent during reconfigure.
 			return n.SendDownlink(ctx, payloadString, testOnly)
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected string got %v", reflect.TypeOf(payload))
