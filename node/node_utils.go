@@ -321,6 +321,9 @@ const (
 // The function does not support interval downlinks with more than 8 bytes.
 func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]interface{}, error) {
 	var formattedInterval uint64
+	if req.Header == "" {
+		return nil, errors.New("cannot send interval downlink, downlink header is empty")
+	}
 	switch req.PayloadUnits {
 	case Minutes:
 		// round to nearest minute
@@ -334,8 +337,8 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 		return nil, fmt.Errorf("cannot send interval downlink, unit %v unsupported", req.PayloadUnits)
 	}
 
-	if req.NumBytes > 8 {
-		return nil, fmt.Errorf("cannot send interval downlink, request %v bytes exceeds allowed number of bytes(8)", req.NumBytes)
+	if req.NumBytes > 8 || req.NumBytes < 1 {
+		return nil, fmt.Errorf("cannot send interval downlink, NumBytes must be between 1 and 8, got %v", req.NumBytes)
 	}
 	if formattedInterval >= uint64(math.Pow(2, 8*float64(req.NumBytes))) {
 		return nil, fmt.Errorf("cannot send interval downlink, interval of %v minutes exceeds maximum number of bytes %v",
