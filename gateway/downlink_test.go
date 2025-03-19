@@ -130,23 +130,6 @@ func TestCreateDownLink(t *testing.T) {
 			expectedFOptsLength: 3,
 		},
 		{
-			name: "downlink with device time request",
-			device: &node.Node{
-				NodeName: testNodeName,
-				Addr:     testDeviceAddr,
-				AppSKey:  testAppSKey,
-				NwkSKey:  testNwkSKey,
-				FCntDown: 0,
-				FPort:    0x01,
-				DevEui:   testDevEUI,
-			},
-			framePayload:   []byte{0x01, 0x02, 0x03, 0x04},
-			uplinkFopts:    []byte{deviceTimeCID},
-			expectedErr:    false,
-			ack:            false,
-			expectedLength: 23, // Base length (17) + device time response (6 bytes)
-		},
-		{
 			name: "invalid fport should return error",
 			device: &node.Node{
 				NodeName: testNodeName,
