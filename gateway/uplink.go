@@ -15,9 +15,17 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
 
+type uplinkType string
+
+// Define constant strings for uplink types.
+const (
+	Unconfirmed uplinkType = "unconfirmed"
+	Confirmed   uplinkType = "confirmed"
+)
+
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
-// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |.
+// | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
@@ -31,12 +39,35 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		return "", map[string]interface{}{}, errNoDevice
 	}
 
-	g.logger.Debugf("received uplink from %s", device.NodeName)
+	uplinkType := Unconfirmed
+	if phyPayload[0] == confirmedUplinkMHdr {
+		uplinkType = Confirmed
+	}
+	g.logger.Debugf("received %s uplink from %s", uplinkType, device.NodeName)
+
+	// confirmed data up, send ACK bit in downlink
+	sendAck := phyPayload[0] == confirmedUplinkMHdr
 
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
 	foptsLength := fctrl & 0x0F
+	fopts := phyPayload[8 : 8+foptsLength]
+
+	// Check if there are mac commands supported by this module in FOPTS
+	requests := make([]byte, 0)
+	for _, b := range fopts {
+		switch b {
+		case deviceTimeCID:
+			requests = append(requests, b)
+		case linkCheckCID:
+			requests = append(requests, b)
+		default:
+			// unsupported mac command
+			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
+
+		}
+	}
 
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
@@ -51,24 +82,23 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		return "", map[string]interface{}{}, errInvalidMIC
 	}
 
-	fopts := phyPayload[8 : 8+foptsLength]
-
 	// we will send one device downlink from the do command per uplink.
 	var downlinkPayload []byte
 	if len(device.Downlinks) > 0 {
 		downlinkPayload = device.Downlinks[0]
-
 		// remove the downlink we are about to send to the queue
 		device.Downlinks = device.Downlinks[1:]
 	}
 
-	if downlinkPayload != nil || foptsLength > 0 {
-		payload, err := g.createDownlink(device, downlinkPayload, fopts, snr, sf)
-
-		g.logger.Infof("sent the downlink packet to %s", device.NodeName)
+	if downlinkPayload != nil || len(requests) > 0 || sendAck {
+		payload, err := g.createDownlink(device, downlinkPayload, sendAck, requests, snr, sf)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+		}
 		if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 		}
+		g.logger.Debugf("sent a downlink to %s", device.NodeName)
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.

@@ -5,26 +5,55 @@ import (
 	"testing"
 	"time"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/test"
 )
 
-var (
-	// Valid uplink payload.
-	validUplinkData = []byte{
-		0x40,                   // MHDR: data uplink
-		0x66, 0x65, 0x73, 0xe2, // Device address
-		0x81,       // FCTL
-		0x29, 0x00, // Frame count
-		0x0d, // FOPT
-		0x55, // FPORT
-		// Frame payload
-		0xd6, 0x02, 0x25, 0x00,
-		0x2b, 0xc4, 0xdf, 0x79,
-		0x9c, 0xf9, 0xaa, 0x25,
-		0x3b, 0xbe,
-		// MIC
-		0x7d, 0xfe, 0x35, 0xfd,
+func createUplinkData(devAddr, framePayload []byte) ([]byte, error) {
+	// Create the frame header
+	payload := []byte{unconfirmedUplinkMHdr}
+	payload = append(payload, reverseByteArray(devAddr)...)
+	// FCtrl: ADR enabled
+	payload = append(payload, 0x80)
+	// FCnt: 1 (little-endian)
+	fcnt := uint32(1)
+	fcntBytes := []byte{0x01, 0x00}
+	payload = append(payload, fcntBytes...)
+	// FPort: 85
+	fport := byte(0x55)
+	payload = append(payload, fport)
+
+	// Encrypt the payload using the AppSKey
+	encrypted, err := crypto.EncryptUplink(
+		types.AES128Key(testAppSKey),
+		*types.MustDevAddr(testDeviceAddr),
+		fcnt,
+		framePayload,
+	)
+	if err != nil {
+		return nil, err
 	}
+
+	payload = append(payload, encrypted...)
+
+	// Calculate MIC using NwkSKey
+	mic, err := crypto.ComputeLegacyUplinkMIC(
+		types.AES128Key(testNwkSKey),
+		*types.MustDevAddr(testDeviceAddr),
+		fcnt,
+		payload,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	payload = append(payload, mic[:]...)
+
+	return payload, nil
+}
+
+var (
 
 	// Expected decoded values.
 	expectedTemp     = -0.01
@@ -32,49 +61,21 @@ var (
 	expectedCurrent  = 0.0
 )
 
-// createInvalidPayload creates an invalid payload for testing error cases.
-func createInvalidPayload() []byte {
-	return []byte{
-		0x40,                   // MHDR: data uplink
-		0x66, 0x65, 0x73, 0xe2, // Device address
-		0x81,       // FCTL
-		0x29, 0x00, // Frame count
-		0x0d, // FOPT
-		0x55, // FPORT
-		// Invalid frame payload
-		0x00, 0x02, 0x25, 0x00,
-		0x2b, 0xc4, 0xdf, 0x00,
-		0x9c, 0x00, 0xaa, 0x00,
-		0x00, 0xbe,
-		// MIC
-		0x7d, 0xfe, 0x35, 0xfd,
-	}
-}
-
-// createUnknownDevicePayload creates a payload with unknown device address.
-func createUnknownDevicePayload() []byte {
-	return []byte{
-		0x40,                   // MHDR: data uplink
-		0x61, 0x65, 0x73, 0xe2, // Unknown device address
-		0x81,       // FCTL
-		0x29, 0x00, // Frame count
-		0x0d, // FOPT
-		0x55, // FPORT
-		// Frame payload
-		0x00, 0x02, 0x25, 0x00,
-		0x2b, 0xc4, 0xdf, 0x00,
-		0x9c, 0x00, 0xaa, 0x00,
-		0x00, 0xbe,
-		// MIC
-		0x7d, 0xfe, 0x35, 0xfd,
-	}
-}
-
 func TestParseDataUplink(t *testing.T) {
 	g := createTestGateway(t)
 
+	// Create the plaintext payload that will decode to the expected values
+	plainText := []byte{
+		0x09, 0x67, 0xFF, 0xFF, // Temperature: -0.01°C
+		0x03, 0x97, 0x00, 0xB4, 0x00, 0x00, // Humidity: 460.8%
+		0x04, 0x98, 0x00, 0x00, // Current: 0.0A
+	}
+
+	validPayload, err := createUplinkData(testDeviceAddr, plainText)
+	test.That(t, err, test.ShouldBeNil)
+
 	// Test valid data uplink
-	deviceName, readings, err := g.parseDataUplink(context.Background(), validUplinkData, time.Now())
+	deviceName, readings, err := g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldNotBeNil)
 	test.That(t, deviceName, test.ShouldEqual, testNodeName)
@@ -93,17 +94,39 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, current, test.ShouldEqual, expectedCurrent)
 
 	// Test unparsable data
-	_, _, err = g.parseDataUplink(context.Background(), createInvalidPayload(), time.Now())
+	// Invalid frame payload
+	invalidText := []byte{0x00, 0x02, 0x25, 0x00,
+		0x2b, 0xc4, 0xdf, 0x00,
+		0x9c, 0x00, 0xaa, 0x00,
+		0x00, 0xbe}
+
+	invalidPayload, err := createUplinkData(testDeviceAddr, invalidText)
+	test.That(t, err, test.ShouldBeNil)
+
+	_, _, err = g.parseDataUplink(context.Background(), invalidPayload, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "data received by node test-device was not parsable")
 
 	// Test unknown device
-	_, _, err = g.parseDataUplink(context.Background(), createUnknownDevicePayload(), time.Now())
+	unknownAddr := []byte{0x1, 0x2, 0x3, 0x3}
+	unknownPayload, err := createUplinkData(unknownAddr, plainText)
+	test.That(t, err, test.ShouldBeNil)
+	_, _, err = g.parseDataUplink(context.Background(), unknownPayload, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
 
+	// Test invalid MIC
+	validPayload, err = createUplinkData(testDeviceAddr, plainText)
+	test.That(t, err, test.ShouldBeNil)
+	validPayload[len(validPayload)-1] = 0x00
+	test.That(t, err, test.ShouldBeNil)
+	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, errInvalidMIC)
+
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
+
 }
 
 func TestConvertTo32Bit(t *testing.T) {

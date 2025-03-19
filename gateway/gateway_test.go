@@ -186,7 +186,7 @@ func TestDoCommand(t *testing.T) {
 	// test sendDownlink command
 	testDownLinkPayload := "ff03"
 
-	//Clear devices and add a device for testing
+	// Clear devices and add a device for testing
 	g.devices = map[string]*node.Node{}
 	g.devices[testNodeName] = &node.Node{
 		NodeName:    testNodeName,
@@ -234,7 +234,6 @@ func TestDoCommand(t *testing.T) {
 	_, err = s.DoCommand(context.Background(), downlinkCmd)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to decode")
-
 }
 
 func TestMergeNodes(t *testing.T) {
@@ -554,4 +553,50 @@ func TestClose(t *testing.T) {
 		_, err = g.dataFile.Read(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
+}
+
+func TestNativeConfig(t *testing.T) {
+	t.Run("Test Default Config", func(t *testing.T) {
+		resetPin := 85
+		powerPin := 74
+		validConf := resource.Config{
+			Name: "test-default",
+			ConvertedAttributes: &Config{
+				BoardName: "pi",
+				ResetPin:  &resetPin,
+				Bus:       1,
+				PowerPin:  &powerPin,
+			},
+			Model: ModelGenericHat,
+		}
+		cfg, err := getNativeConfig(validConf)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
+		test.That(t, *cfg.ResetPin, test.ShouldEqual, resetPin)
+		test.That(t, *cfg.PowerPin, test.ShouldEqual, powerPin)
+	})
+	t.Run("Test WaveshareHat Config", func(t *testing.T) {
+		validConf := resource.Config{
+			Name: "test-default",
+			ConvertedAttributes: &ConfigSX1302WaveshareHAT{
+				BoardName: "pi",
+				Bus:       1,
+			},
+			Model: ModelSX1302WaveshareHat,
+		}
+		cfg, err := getNativeConfig(validConf)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
+		test.That(t, *cfg.ResetPin, test.ShouldEqual, waveshareHatResetPin)
+		test.That(t, *cfg.PowerPin, test.ShouldEqual, waveshareHatPowerPin)
+	})
+	t.Run("Test some random Config", func(t *testing.T) {
+		validConf := resource.Config{
+			Name:                "test-default",
+			ConvertedAttributes: &node.Config{},
+		}
+		cfg, err := getNativeConfig(validConf)
+		test.That(t, err.Error(), test.ShouldContainSubstring, "build error in module. Unsupported Gateway model")
+		test.That(t, cfg, test.ShouldBeNil)
+	})
 }

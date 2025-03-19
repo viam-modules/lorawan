@@ -5,11 +5,17 @@
   "url": "https://github.com/oliviamiller/lorawan",
   "description": "A module to collect data from LoRaWAN sensors",
   "models": [
-      {
+        {
           "api": "rdk:component:sensor",
-          "model": "viam:lorawan:sx1302-gateway",
-          "markdown_link": "README.md#attributes",
-          "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT."
+          "model": "viam:lorawan:sx1302-hat-generic",
+          "markdown_link": "README.md#configure-the-sx1302-hat-generic",
+          "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT connected by SPI to a single board computer."
+        },
+        {
+          "api": "rdk:component:sensor",
+          "model": "viam:lorawan:sx1302-waveshare-hat",
+          "markdown_link": "README.md#configure-the-sx1302-waveshare-hat",
+          "short_description": "A sensor component for a Waveshare sx1302 LoRaWAN gateway HAT."
         },
        {
           "api": "rdk:component:sensor",
@@ -26,13 +32,13 @@
      {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:milesight-em310-tilt",
-      "markdown_link": "README.md#configure-your-milesight-sensor-viamlorawanmilesight-ct101-or-viamlorawanmilesight-em10-tilt",
+      "markdown_link": "README.md#configure-your-milesight-sensor",
       "short_description": "A sensor component for a milesight em310 tilt node."
      },
      {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:milesight-ct101",
-      "markdown_link": "README.md#configure-your-milesight-sensor-viamlorawanmilesight-ct101-or-viamlorawanmilesight-em10-tilt",
+      "markdown_link": "README.md#configure-your-milesight-sensor",
       "short_description": "A sensor component for a Milesight CT101 LoRaWAN node."
      }
   ],

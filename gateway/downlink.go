@@ -31,8 +31,9 @@ const (
 	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
 	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
 	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
+	deviceTimeCID = 0x0D      // command identifier for device time request
+	linkCheckCID  = 0x02
 )
-
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
 	txPkt := C.struct_lgw_pkt_tx_s{
@@ -123,11 +124,11 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
-func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkFopts []byte, snr float64, sf int) ([]byte, error) {
+func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck bool, uplinkFopts []byte, snr float64, sf int) ([]byte, error) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
-	payload = append(payload, 0x60)
+	payload = append(payload, unconfirmedDownLinkMHdr)
 
 	devAddrLE := reverseByteArray(device.Addr)
 
@@ -135,30 +136,37 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkF
 
 	fopts := make([]byte, 0)
 
+	// Handle any mac commands sent in the uplink fopts.
 	if len(uplinkFopts) != 0 {
 		for _, b := range uplinkFopts {
 			switch b {
-			case 0x0D:
+			case deviceTimeCID:
 				g.logger.Debugf("got device time request from %s", device.NodeName)
-				deviceTimeAns := createDeviceTimeAns()
+				deviceTimeAns, err := createDeviceTimeAns()
+				if err != nil {
+					g.logger.Errorf("failed to create device time answer: %w", err)
+				}
 				fopts = append(fopts, deviceTimeAns...)
-			case 0x02:
+			case linkCheckCID:
 				g.logger.Debugf("got link check request from %s", device.NodeName)
 				linkCheckAns := createLinkCheckAns(snr, sf)
 				fopts = append(fopts, linkCheckAns...)
 			default:
-				//unsupported mac command
-				g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
-
+				// unknown mac command - this shouldn't happen since we remove these in parseDataUplink.
 			}
 		}
 	}
 
+	//  FCtrl: ADR (0), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
 	// get 4 bit length
-	fOptsLength := len(fopts) & 0x0F
+	fctrl := byte(0x00)
+	if sendAck {
+		fctrl = 0x20
+	}
 
-	// FCtrl: ADR (1 bit), RFU (1), ACK (1), FPending (1), FOptsLen (4)
-	fctrl := 0xA | byte(fOptsLength)
+	// append 4 bit foptsLength to first 4 bits of fctrl.
+	fOptsLength := len(fopts) & 0x0F
+	fctrl |= byte(fOptsLength)
 	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
@@ -167,15 +175,17 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, uplinkF
 
 	payload = append(payload, fopts...)
 
+	// If there is a framePayload to send, add it to the downlink.
 	if framePayload != nil {
+		if device.FPort == 0 {
+			return nil, errors.New("invalid downlink fport, ensure fport attribute is correctly set in the node config")
+		}
 		payload = append(payload, device.FPort)
-
 		encrypted, err := crypto.EncryptDownlink(
 			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
 		if err != nil {
 			return nil, err
 		}
-
 		payload = append(payload, encrypted...)
 	}
 
@@ -219,12 +229,12 @@ func findDownLinkFreq(uplinkFreq int) int {
 	return downLinkFreq
 }
 
-func createDeviceTimeAns() []byte {
+func createDeviceTimeAns() ([]byte, error) {
 	// Create buffer for the complete PHYPayload
 	payload := make([]byte, 0)
 
 	// add command identifier
-	payload = append(payload, 0x0D)
+	payload = append(payload, deviceTimeCID)
 
 	// Create frame payload
 	// Time is represented as seconds since GPS epoch
@@ -233,17 +243,21 @@ func createDeviceTimeAns() []byte {
 	secondsSinceGPSEpoch := uint32(now.Sub(gpsEpoch).Seconds())
 
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch)
+	if err := binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch); err != nil {
+		return nil, err
+	}
+
 	payload = append(payload, buf.Bytes()...)
 
+	// using zero for fractional seconds to match chirpstack's behavior.
 	payload = append(payload, 0)
 
-	return payload
+	return payload, nil
 }
 
 func createLinkCheckAns(snr float64, sf int) []byte {
 	payload := make([]byte, 0)
-	payload = append(payload, 0x02)
+	payload = append(payload, linkCheckCID)
 
 	// calculate margin value
 	minSNR := sfToSNRMin[sf]
@@ -252,10 +266,9 @@ func createLinkCheckAns(snr float64, sf int) []byte {
 	margin := snr - minSNR
 	gwCnt := 1
 
-	ans := make([]byte, 0)
-	ans = append(ans, byte(margin))
-	ans = append(ans, byte(gwCnt))
+	payload = append(payload, byte(margin))
+	payload = append(payload, byte(gwCnt))
 
-	return ans
+	return payload
 
 }
