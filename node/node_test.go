@@ -664,7 +664,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          2,
 			useLittleEndian:   false,
 			header:            "01",
-			expectedReturn:    "01003C",
+			expectedReturn:    "01003C", // 1 min -> 60 seconds -> 003C in big endian hex with 2 bytes
 			testGatewayReturn: false,
 		},
 		{
@@ -684,7 +684,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "01",
-			expectedReturn:    "0100000258",
+			expectedReturn:    "0100000258", // 10 min -> 600 seconds -> 00000258 in big endian hex with 4 bytes
 			testGatewayReturn: false,
 		},
 		{
@@ -694,7 +694,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          3,
 			useLittleEndian:   true,
 			header:            "01",
-			expectedReturn:    "013C0000",
+			expectedReturn:    "013C0000", // 1 min -> 60 seconds -> 3C0000 in little endian hex with 3 bytes
 			testGatewayReturn: false,
 		},
 		{
@@ -704,7 +704,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "02",
-			expectedReturn:    "0200000001",
+			expectedReturn:    "0200000001", // 1 min -> 1 min -> 00000001 in big endian hex with 4 bytes
 			testGatewayReturn: false,
 		},
 		{
@@ -714,7 +714,7 @@ func TestIntervalDownlink(t *testing.T) {
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "ff8e",
-			expectedReturn:    "FF8E0000001E",
+			expectedReturn:    "FF8E0000001E", // 0.5 min -> 30 sec -> 0000001E  in big endian hex with 4 bytes
 			testGatewayReturn: false,
 		},
 		{
