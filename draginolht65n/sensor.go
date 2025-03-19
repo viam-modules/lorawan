@@ -5,7 +5,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"math"
 	"reflect"
 
 	"github.com/viam-modules/gateway/node"
@@ -16,7 +15,6 @@ import (
 
 const (
 	decoderFilename = "LHT65NChirpstack4decoder.js"
-	intervalKey     = "set_interval"
 )
 
 // Model represents a dragino-LHT65N lorawan node model.
@@ -121,22 +119,20 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 
 	nodeCfg := cfg.getNodeConfig(n.decoderPath)
 
-	err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg)
-	if err != nil {
+	if err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg); err != nil {
 		return err
 	}
 
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
-		_, err = n.addIntervalToQueue(ctx, *nodeCfg.Interval, false)
-		if err != nil {
+		req := node.IntervalRequest{IntervalMin: *nodeCfg.Interval, PayloadUnits: node.Seconds, Header: "01", NumBytes: 3, TestOnly: false}
+		if _, err := n.node.SendIntervalDownlink(ctx, req); err != nil {
 			return err
 		}
 	}
 
-	err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger)
-	if err != nil {
+	if err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger); err != nil {
 		return err
 	}
 
@@ -157,25 +153,14 @@ func (n *LHT65N) Readings(ctx context.Context, extra map[string]interface{}) (ma
 func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	testOnly := node.CheckTestKey(cmd)
 
-	if interval, intervalSet := cmd[intervalKey]; intervalSet {
+	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
-			return n.addIntervalToQueue(ctx, intervalFloat, testOnly)
+			req := node.IntervalRequest{IntervalMin: intervalFloat, PayloadUnits: node.Seconds, Header: "01", NumBytes: 3, TestOnly: testOnly}
+			return n.node.SendIntervalDownlink(ctx, req)
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 
 	// do generic node if no sensor specific key was found
 	return n.node.DoCommand(ctx, cmd)
-}
-
-func (n *LHT65N) addIntervalToQueue(ctx context.Context, interval float64, testOnly bool) (map[string]interface{}, error) {
-	// convert to the nearest second.
-	convertToSeconds := int(math.Round(interval * 60))
-	// 01 byte is the header for the downlink. six bytes are for data.
-	intervalString := fmt.Sprintf("01%06x", convertToSeconds)
-	if testOnly {
-		return map[string]interface{}{intervalKey: intervalString}, nil
-	}
-
-	return n.node.SendDownlink(ctx, intervalString, false)
 }

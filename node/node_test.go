@@ -255,10 +255,10 @@ func TestNewNode(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
-	node := n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, testNodeName)
-	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
-	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
+	testNode := n.(*Node)
+	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
+	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
+	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Test with valid ABP config
 	validABPConf := resource.Config{
@@ -277,19 +277,19 @@ func TestNewNode(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
-	node = n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, "test-node-abp")
-	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeABP)
-	test.That(t, node.DecoderPath, test.ShouldEqual, testDecoderPath)
+	testNode = n.(*Node)
+	test.That(t, testNode.NodeName, test.ShouldEqual, "test-node-abp")
+	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeABP)
+	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Verify ABP byte arrays
 	expectedDevAddr, err := hex.DecodeString(testDevAddr)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, node.Addr, test.ShouldResemble, expectedDevAddr)
+	test.That(t, testNode.Addr, test.ShouldResemble, expectedDevAddr)
 
 	expectedAppSKey, err := hex.DecodeString(testAppSKey)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, node.AppSKey, test.ShouldResemble, expectedAppSKey)
+	test.That(t, testNode.AppSKey, test.ShouldResemble, expectedAppSKey)
 	n.Close(ctx)
 
 	// Decoder can be URL
@@ -308,11 +308,11 @@ func TestNewNode(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
-	node = n.(*Node)
-	test.That(t, node.NodeName, test.ShouldEqual, testNodeName)
-	test.That(t, node.JoinType, test.ShouldEqual, JoinTypeOTAA)
+	testNode = n.(*Node)
+	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
+	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
-	test.That(t, node.DecoderPath, test.ShouldEqual, expectedPath)
+	test.That(t, testNode.DecoderPath, test.ShouldEqual, expectedPath)
 	n.Close(ctx)
 
 	// Invalid decoder file should error
@@ -620,4 +620,131 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected string")
 	})
+}
+
+func TestIntervalDownlink(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	// copy the path to the tmpDir
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	validConf := resource.Config{
+		Name: testNodeName,
+		ConvertedAttributes: &Config{
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	n, err := newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+	testNode := n.(*Node)
+
+	tests := []struct {
+		name              string
+		interval          float64
+		payloadUnits      Units
+		numBytes          int
+		useLittleEndian   bool
+		header            string
+		expectedPayload   string
+		testGatewayReturn bool
+		expectedErr       string
+	}{
+		{
+			name:              "valid interval in seconds with a size of 2",
+			interval:          1,
+			payloadUnits:      Seconds,
+			numBytes:          2,
+			useLittleEndian:   false,
+			header:            "01",
+			expectedPayload:   "01003C",
+			testGatewayReturn: false,
+		},
+		{
+			name:              "valid interval in seconds with a size of 2 that sends to the gateway",
+			interval:          1,
+			payloadUnits:      Seconds,
+			numBytes:          2,
+			useLittleEndian:   false,
+			header:            "01",
+			expectedPayload:   "downlink added",
+			testGatewayReturn: true,
+		},
+		{
+			name:              "valid interval in seconds with a size of 4",
+			interval:          1,
+			payloadUnits:      Seconds,
+			numBytes:          4,
+			useLittleEndian:   false,
+			header:            "01",
+			expectedPayload:   "010000003C",
+			testGatewayReturn: false,
+		},
+		{
+			name:              "valid interval in seconds with a size of 3 with little endianness",
+			interval:          1,
+			payloadUnits:      Seconds,
+			numBytes:          3,
+			useLittleEndian:   true,
+			header:            "01",
+			expectedPayload:   "013C0000",
+			testGatewayReturn: false,
+		},
+		{
+			name:              "valid interval in minutes with a size of 4",
+			interval:          1,
+			payloadUnits:      Minutes,
+			numBytes:          4,
+			useLittleEndian:   false,
+			header:            "02",
+			expectedPayload:   "0200000001",
+			testGatewayReturn: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := IntervalRequest{IntervalMin: tt.interval, PayloadUnits: tt.payloadUnits, NumBytes: tt.numBytes,
+				UseLittleEndian: tt.useLittleEndian, Header: tt.header, TestOnly: !tt.testGatewayReturn}
+			resp, err := testNode.SendIntervalDownlink(ctx, req)
+			if tt.expectedErr != "" {
+				test.That(t, resp, test.ShouldBeNil)
+				test.That(t, err, test.ShouldBeNil)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+				logger.Info(resp)
+
+				// receive a response from the gateway
+				if tt.testGatewayReturn {
+					// we should receive a success from the gateway
+					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+					test.That(t, gatewayOk, test.ShouldBeTrue)
+					test.That(t, gatewayResp, test.ShouldEqual, tt.expectedPayload)
+
+					// we should not receive a interval success message
+					nodeResp, nodeOk := resp[IntervalKey].(string)
+					test.That(t, nodeOk, test.ShouldBeFalse)
+					test.That(t, nodeResp, test.ShouldEqual, "")
+				} else {
+					// we should not receive a success from the gateway
+					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+					test.That(t, gatewayOk, test.ShouldBeFalse)
+					test.That(t, gatewayResp, test.ShouldEqual, "")
+
+					// we should receive a interval payload message
+					nodeResp, nodeOk := resp[IntervalKey].(string)
+					test.That(t, nodeOk, test.ShouldBeTrue)
+					test.That(t, nodeResp, test.ShouldEqual, tt.expectedPayload) // 20 minutes
+				}
+
+			}
+		})
+	}
+
 }
