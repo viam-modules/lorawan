@@ -55,19 +55,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	foptsLength := fctrl & 0x0F
 	fopts := phyPayload[8 : 8+foptsLength]
 
-	// Check if there are mac commands supported by this module in FOPTS
-	requests := make([]byte, 0)
-	for _, b := range fopts {
-		switch b {
-		case deviceTimeCID:
-			requests = append(requests, b)
-		case linkCheckCID:
-			requests = append(requests, b)
-		default:
-			// unsupported mac command
-			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
-		}
-	}
+	// get the supported requests from fopts.
+	requests := g.getFOptsToSend(fopts, device)
 
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
@@ -264,4 +253,21 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 		}
 		return res.val.Export()
 	}
+}
+
+// returns a list of the fopt mac commands the module supports sending a downlink for.
+func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
+	requests := make([]byte, 0)
+	for _, b := range fopts {
+		switch b {
+		case deviceTimeCID:
+			requests = append(requests, b)
+		case linkCheckCID:
+			requests = append(requests, b)
+		default:
+			// unsupported mac command
+			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
+		}
+	}
+	return requests
 }

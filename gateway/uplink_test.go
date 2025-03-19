@@ -54,7 +54,6 @@ func createUplinkData(devAddr, framePayload []byte) ([]byte, error) {
 }
 
 var (
-
 	// Expected decoded values.
 	expectedTemp     = -0.01
 	expectedHumidity = 460.8
@@ -127,6 +126,52 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, err, test.ShouldBeError, errInvalidMIC)
 
 	err = g.Close(context.Background())
+	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestGetFOptsToSend(t *testing.T) {
+	g := createTestGateway(t)
+
+	tests := []struct {
+		name     string
+		fopts    []byte
+		expected []byte
+	}{
+		{
+			name:     "empty input",
+			fopts:    []byte{},
+			expected: []byte{},
+		},
+		{
+			name:     "device time command only",
+			fopts:    []byte{deviceTimeCID},
+			expected: []byte{deviceTimeCID},
+		},
+		{
+			name:     "link check command only",
+			fopts:    []byte{linkCheckCID},
+			expected: []byte{linkCheckCID},
+		},
+		{
+			name:     "multiple commands including unsupported",
+			fopts:    []byte{deviceTimeCID, 0xFF, linkCheckCID, 0xAA},
+			expected: []byte{deviceTimeCID, linkCheckCID},
+		},
+		{
+			name:     "only unsupported commands",
+			fopts:    []byte{0xFF, 0xAA},
+			expected: []byte{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := g.getFOptsToSend(tc.fopts, g.devices[testNodeName])
+			test.That(t, result, test.ShouldResemble, tc.expected)
+		})
+	}
+
+	err := g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
 }
 

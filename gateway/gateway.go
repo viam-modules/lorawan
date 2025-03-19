@@ -78,15 +78,16 @@ var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
 const sendDownlinkKey = "senddown"
 
-// Define the map of SF to minimum SNR values
+// Define the map of SF to minimum SNR values in dB.
 // Any packet received below the minimum demodulation value will not be parsed.
+// Values found at https://www.thethingsnetwork.org/docs/lorawan/rssi-and-snr/
 var sfToSNRMin = map[int]float64{
-	7:  -7.5,  // SF7 minimum SNR in dB
-	8:  -8.5,  // SF8 minimum SNR in dB
-	9:  -9.5,  // SF9 minimum SNR in dB
-	10: -10.5, // SF10 minimum SNR in dB
-	11: -11.5, // SF11 minimum SNR in dB
-	12: -12.5, // SF12 minimum SNR in dB
+	7:  -7.5,
+	8:  -8.5,
+	9:  -9.5,
+	10: -10.5,
+	11: -11.5,
+	12: -12.5,
 }
 
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has

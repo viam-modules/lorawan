@@ -31,7 +31,8 @@ const (
 	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
 	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
 	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
-	deviceTimeCID = 0x0D      // command identifier for device time request
+	// command idendifiers of supported mac commands.
+	deviceTimeCID = 0x0D
 	linkCheckCID  = 0x02
 )
 
