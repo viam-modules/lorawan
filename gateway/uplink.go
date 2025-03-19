@@ -17,7 +17,7 @@ import (
 
 type uplinkType string
 
-// Define constant strings for uplink types
+// Define constant strings for uplink types.
 const (
 	Unconfirmed uplinkType = "unconfirmed"
 	Confirmed   uplinkType = "confirmed"
@@ -48,38 +48,32 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// confirmed data up, send ACK bit in downlink
 	sendAck := phyPayload[0] == confirmedUplinkMHdr
 
-	var downlinkFramePayload []byte
-	if len(device.Downlinks) > 0 {
-		// we will send one device downlink from the do command per uplink.
-		downlinkFramePayload = device.Downlinks[0]
-		// remove the downlink we are about to send from the queue.
-		device.Downlinks = device.Downlinks[1:]
-	}
-
-	if downlinkFramePayload != nil || sendAck {
-		downlinkPayload, err := g.createDownlink(device, downlinkFramePayload, sendAck)
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
-		}
-		if err = g.sendDownlink(ctx, downlinkPayload, false, packetTime); err != nil {
-			// don't return error if the downlink fails, we still want to parse the uplink.
-			g.logger.Errorf("failed to send downlink: %w", err)
-		}
-
-		g.logger.Debugf("sent downlink packet to %s", device.NodeName)
-	}
-
 	// Frame control byte contains various settings
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
 	foptsLength := fctrl & 0x0F
+	fopts := phyPayload[8 : 8+foptsLength]
 
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
-	// fopts not supported in this module yet.
-	if foptsLength != 0 {
-		_ = phyPayload[8 : 8+foptsLength]
+	// we will send one device downlink from the do command per uplink.
+	var downlinkPayload []byte
+	if len(device.Downlinks) > 0 {
+		downlinkPayload = device.Downlinks[0]
+		// remove the downlink we are about to send to the queue
+		device.Downlinks = device.Downlinks[1:]
+	}
+
+	if downlinkPayload != nil || foptsLength > 0 || sendAck {
+		payload, err := g.createDownlink(device, downlinkPayload, sendAck, fopts)
+		if err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+		}
+		if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
+		}
+		g.logger.Debugf("sent a downlink to %s", device.NodeName)
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.
