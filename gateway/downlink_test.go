@@ -203,7 +203,6 @@ func TestCreateDownLink(t *testing.T) {
 
 				currentPos := 8 // Start after MHDR(1) + DevAddr(4) + FCtrl(1) + FCnt(2)
 				if tt.uplinkFopts != nil {
-					// First verify deviceTimeCID if present
 					for _, b := range tt.uplinkFopts {
 						if b == deviceTimeCID {
 							test.That(t, payload[currentPos], test.ShouldEqual, deviceTimeCID)
@@ -284,25 +283,17 @@ func TestCreateDeviceTimeAns(t *testing.T) {
 
 func TestCreateLinkCheckAns(t *testing.T) {
 	// Test with SF12 and SNR of -5.0 dB
-	// SF12 has minimum SNR of -12.5 dB, so margin should be 7.5 dB
 	snr := -5.0
 	sf := 12
 
 	linkCheckAns := createLinkCheckAns(snr, sf)
 
-	// Verify response length (1 byte CID + 1 byte margin + 1 byte gwCnt)
 	test.That(t, len(linkCheckAns), test.ShouldEqual, 3)
-
-	// Verify command ID is linkCheckCID (0x02)
 	test.That(t, linkCheckAns[0], test.ShouldEqual, linkCheckCID)
 
-	// Calculate expected margin
 	minSNR := sfToSNRMin[sf]
-	expectedMargin := byte(snr - minSNR) // -5.0 - (-12.5) = 7.5, truncated to 7 as byte
-
-	// Verify margin calculation
+	expectedMargin := byte(snr - minSNR)
 	test.That(t, linkCheckAns[1], test.ShouldEqual, expectedMargin)
-
 	// Verify gateway count is always 1
 	test.That(t, linkCheckAns[2], test.ShouldEqual, byte(1))
 }
