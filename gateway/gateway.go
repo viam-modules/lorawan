@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -94,11 +95,11 @@ type Config struct {
 // deviceInfo is a struct containing OTAA device information.
 // This info is saved across module restarts for each device.
 type deviceInfo struct {
-	DevEUI   string `json:"dev_eui"`
-	DevAddr  string `json:"dev_addr"`
-	AppSKey  string `json:"app_skey"`
-	NwkSKey  string `json:"nwk_skey"`
-	FCntDown uint32 `json:"fcnt_down"`
+	DevEUI   string  `json:"dev_eui"`
+	DevAddr  string  `json:"dev_addr"`
+	AppSKey  string  `json:"app_skey"`
+	NwkSKey  string  `json:"nwk_skey"`
+	FCntDown *uint32 `json:"fcnt_down"`
 }
 
 func init() {
@@ -616,7 +617,12 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
 	device.NwkSKey = nwksKey
-	device.FCntDown = d.FCntDown
+
+	// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
+	device.FCntDown = math.MaxUint32
+	if d.FCntDown != nil {
+		device.FCntDown = *d.FCntDown
+	}
 
 	// Update the device in the map.
 	g.devices[device.NodeName] = device

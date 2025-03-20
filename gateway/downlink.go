@@ -202,7 +202,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload []byte, sendAck
 		DevAddr:  fmt.Sprintf("%X", device.Addr),
 		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
 		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
-		FCntDown: device.FCntDown,
+		FCntDown: &device.FCntDown,
 	}
 
 	if err = g.searchAndRemove(g.dataFile, device.DevEui); err != nil {
