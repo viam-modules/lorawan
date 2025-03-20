@@ -199,7 +199,7 @@ func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b
 	switch v.(type) {
 	case map[string]interface{}:
 	default:
-		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %s", reflect.TypeOf(v))
+		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %v", reflect.TypeOf(v))
 	}
 
 	readings := v.(map[string]interface{})
