@@ -29,7 +29,8 @@ const (
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
-	string, map[string]interface{}, error) {
+	string, map[string]interface{}, error,
+) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
