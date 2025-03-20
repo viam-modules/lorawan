@@ -27,7 +27,8 @@ const (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time) (string, map[string]interface{}, error) {
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
+	string, map[string]interface{}, error) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -54,8 +55,22 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	foptsLength := fctrl & 0x0F
 	fopts := phyPayload[8 : 8+foptsLength]
 
+	// get the supported requests from fopts.
+	requests := g.getFOptsToSend(fopts, device)
+
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
+
+	// Validate the MIC
+	mic, err := crypto.ComputeLegacyUplinkMIC(
+		types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
+	if err != nil {
+		return "", map[string]interface{}{}, err
+	}
+
+	if !bytes.Equal(phyPayload[len(phyPayload)-4:], mic[:]) {
+		return "", map[string]interface{}{}, errInvalidMIC
+	}
 
 	// we will send one device downlink from the do command per uplink.
 	var downlinkPayload []byte
@@ -65,8 +80,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		device.Downlinks = device.Downlinks[1:]
 	}
 
-	if downlinkPayload != nil || foptsLength > 0 || sendAck {
-		payload, err := g.createDownlink(device, downlinkPayload, sendAck, fopts)
+	if downlinkPayload != nil || len(requests) > 0 || sendAck {
+		payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}
@@ -184,7 +199,7 @@ func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b
 	switch v.(type) {
 	case map[string]interface{}:
 	default:
-		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %s", reflect.TypeOf(v))
+		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %v", reflect.TypeOf(v))
 	}
 
 	readings := v.(map[string]interface{})
@@ -238,4 +253,21 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 		}
 		return res.val.Export()
 	}
+}
+
+// returns a list of the fopt mac commands the module supports sending a downlink for.
+func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
+	requests := make([]byte, 0)
+	for _, b := range fopts {
+		switch b {
+		case deviceTimeCID:
+			requests = append(requests, b)
+		case linkCheckCID:
+			requests = append(requests, b)
+		default:
+			// unsupported mac command
+			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
+		}
+	}
+	return requests
 }

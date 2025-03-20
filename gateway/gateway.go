@@ -76,6 +76,20 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
+const sendDownlinkKey = "senddown"
+
+// Define the map of SF to minimum SNR values in dB.
+// Any packet received below the minimum demodulation value will not be parsed.
+// Values found at https://www.thethingsnetwork.org/docs/lorawan/rssi-and-snr/
+var sfToSNRMin = map[int]float64{
+	7:  -7.5,
+	8:  -8.5,
+	9:  -9.5,
+	10: -10.5,
+	11: -11.5,
+	12: -12.5,
+}
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -405,19 +419,26 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				if isDuplicate {
 					continue
 				}
+
+				minSNR := sfToSNRMin[int(packets[i].datarate)]
+				if float64(packets[i].snr) < minSNR {
+					g.logger.Warnf("packet skipped due to low signal noise ratio")
+					continue
+				}
+
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
-					g.handlePacket(ctx, payload, t)
+					g.handlePacket(ctx, payload, t, float64(packets[i].snr), int(packets[i].datarate))
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
 	case joinRequestMHdr:
@@ -430,7 +451,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			g.logger.Errorf("couldn't handle join request: %s", err)
 		}
 	case unconfirmedUplinkMHdr:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -441,7 +462,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 		}
 		g.updateReadings(name, readings)
 	case confirmedUplinkMHdr:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
