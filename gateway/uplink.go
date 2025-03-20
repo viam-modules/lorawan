@@ -18,7 +18,6 @@ import (
 type uplinkType string
 
 // Define constant strings for uplink types.
-// Define constant strings for uplink types.
 const (
 	Unconfirmed uplinkType = "unconfirmed"
 	Confirmed   uplinkType = "confirmed"
