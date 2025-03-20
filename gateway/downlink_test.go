@@ -15,15 +15,17 @@ import (
 	"go.viam.com/test"
 )
 
-func TestCreateDownLink(t *testing.T) {
+func TestCreateDownlink(t *testing.T) {
 	tests := []struct {
-		name           string
-		device         *node.Node
-		framePayload   []byte
-		expectedErr    bool
-		ack            bool
-		uplinkFopts    []byte
-		expectedLength int
+		name                string
+		device              *node.Node
+		framePayload        []byte
+		expectedErr         bool
+		ack                 bool
+		uplinkFopts         []byte
+		expectedLength      int
+		expectedFctrl       byte
+		expectedFOptsLength int
 	}{
 		{
 			name: "valid downlink with standard payload",
@@ -41,6 +43,7 @@ func TestCreateDownLink(t *testing.T) {
 			ack:            false,
 			uplinkFopts:    nil,
 			expectedLength: 17,
+			expectedFctrl:  0x80,
 		},
 		{
 			name: "valid downlink frame payload with an ACK",
@@ -58,6 +61,7 @@ func TestCreateDownLink(t *testing.T) {
 			ack:            true,
 			uplinkFopts:    nil,
 			expectedLength: 17,
+			expectedFctrl:  0xA0,
 		},
 		{
 			name: "downlink with only ACK",
@@ -74,6 +78,7 @@ func TestCreateDownLink(t *testing.T) {
 			ack:            true,
 			uplinkFopts:    nil,
 			expectedLength: 12,
+			expectedFctrl:  0xA0,
 		},
 		{
 			name: "downlink with device time request",
@@ -86,11 +91,31 @@ func TestCreateDownLink(t *testing.T) {
 				FPort:    0x01,
 				DevEui:   testDevEUI,
 			},
-			framePayload:   []byte{0x01, 0x02, 0x03, 0x04},
-			uplinkFopts:    []byte{deviceTimeCID},
-			expectedErr:    false,
-			ack:            false,
-			expectedLength: 23, // Base length (17) + device time response (6 bytes)
+			uplinkFopts:         []byte{deviceTimeCID},
+			expectedErr:         false,
+			ack:                 false,
+			expectedLength:      18, // Base length (12) + device time response (6 bytes)
+			expectedFctrl:       0x86,
+			expectedFOptsLength: 6,
+		},
+		{
+			name: "downlink with link check request",
+			device: &node.Node{
+				NodeName: testNodeName,
+				Addr:     testDeviceAddr,
+				AppSKey:  testAppSKey,
+				NwkSKey:  testNwkSKey,
+				FCntDown: 0,
+				FPort:    0x01,
+				DevEui:   testDevEUI,
+			},
+			framePayload:        []byte{0x01, 0x02, 0x03, 0x04},
+			uplinkFopts:         []byte{linkCheckCID},
+			expectedErr:         false,
+			ack:                 false,
+			expectedLength:      20, // Base length (17) + link check answer (3 bytes)
+			expectedFctrl:       0x83,
+			expectedFOptsLength: 3,
 		},
 		{
 			name: "invalid fport should return error",
@@ -103,10 +128,29 @@ func TestCreateDownLink(t *testing.T) {
 				FPort:    0x00,
 				DevEui:   testDevEUI,
 			},
-			framePayload: []byte{0x01, 0x02, 0x03, 0x04},
-			expectedErr:  true,
-			ack:          true,
-			uplinkFopts:  nil,
+			framePayload:  []byte{0x01, 0x02, 0x03, 0x04},
+			expectedErr:   true,
+			ack:           true,
+			uplinkFopts:   nil,
+			expectedFctrl: 0xA0,
+		},
+		{
+			name: "downlink with devicetimeans, linkcheckans, and ignore unknown command",
+			device: &node.Node{
+				NodeName: testNodeName,
+				Addr:     testDeviceAddr,
+				AppSKey:  testAppSKey,
+				NwkSKey:  testNwkSKey,
+				FCntDown: 0,
+				FPort:    0x01,
+				DevEui:   testDevEUI,
+			},
+			uplinkFopts:         []byte{deviceTimeCID, linkCheckCID, 0x01},
+			expectedErr:         false,
+			ack:                 false,
+			expectedLength:      21, // Base length (12) + link check answer (3 bytes) + device time ans (6 bytes)
+			expectedFctrl:       0x89,
+			expectedFOptsLength: 9,
 		},
 	}
 
@@ -124,7 +168,7 @@ func TestCreateDownLink(t *testing.T) {
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.ack, tt.uplinkFopts)
+			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -135,33 +179,32 @@ func TestCreateDownLink(t *testing.T) {
 				// Check packet structure
 				test.That(t, len(payload), test.ShouldEqual, tt.expectedLength)
 				test.That(t, payload[0], test.ShouldEqual, unconfirmedDownLinkMHdr)
+				test.That(t, payload[0], test.ShouldEqual, unconfirmedDownLinkMHdr)
 
 				// DevAddr should be in little-endian format in the packet
 				devAddrLE := reverseByteArray(tt.device.Addr)
 				test.That(t, payload[1:5], test.ShouldResemble, devAddrLE)
+				test.That(t, payload[5], test.ShouldEqual, tt.expectedFctrl)
 
-				expectedFctrl := 0x0
-				if tt.ack {
-					expectedFctrl = 0x20
-				}
+				currentPos := 8 // Start after MHDR(1) + DevAddr(4) + FCtrl(1) + FCnt(2)
+				if tt.uplinkFopts != nil {
+					for _, b := range tt.uplinkFopts {
+						if b == deviceTimeCID {
+							test.That(t, payload[currentPos], test.ShouldEqual, deviceTimeCID)
+							currentPos += 6
+						}
+						if b == linkCheckCID {
+							test.That(t, payload[currentPos], test.ShouldEqual, linkCheckCID)
+							currentPos += 3
+						}
+					}
 
-				// Check for FOpts length in FCtrl if device time request is included
-				if tt.uplinkFopts != nil && tt.uplinkFopts[0] == deviceTimeCID {
-					// The FCtrl should include FOpts length (6) in the lower 4 bits and ACK bit if set
-					expectedFctrl |= 0x06 // fopts length is 6 bytes
-					test.That(t, payload[5], test.ShouldEqual, byte(expectedFctrl))
-					// Check that the device time ans is included in FOpts
-					test.That(t, payload[8], test.ShouldEqual, deviceTimeCID)
-				} else {
-					test.That(t, payload[5], test.ShouldEqual, byte(expectedFctrl))
+					actualFOptsLength := currentPos - 8
+					test.That(t, actualFOptsLength, test.ShouldEqual, tt.expectedFOptsLength)
 				}
 
 				if tt.framePayload != nil {
-					portIndex := 8
-					// If we have FOpts, port is after that
-					if tt.uplinkFopts != nil {
-						portIndex = 14 // 8 + 6 bytes of FOpts
-					}
+					portIndex := currentPos
 					test.That(t, payload[portIndex], test.ShouldEqual, tt.device.FPort)
 				}
 
@@ -221,4 +264,21 @@ func TestCreateDeviceTimeAns(t *testing.T) {
 	// The time should be reasonably close to now (within 5 seconds)
 	timeDiff := math.Abs(float64(int64(expectedSeconds) - int64(secondsSinceEpoch)))
 	test.That(t, timeDiff < 5, test.ShouldBeTrue)
+}
+
+func TestCreateLinkCheckAns(t *testing.T) {
+	// Test with SF12 and SNR of -5.0 dB
+	snr := -5.0
+	sf := 12
+
+	linkCheckAns := createLinkCheckAns(snr, sf)
+
+	test.That(t, len(linkCheckAns), test.ShouldEqual, 3)
+	test.That(t, linkCheckAns[0], test.ShouldEqual, linkCheckCID)
+
+	minSNR := sfToSNRMin[sf]
+	expectedMargin := byte(snr - minSNR)
+	test.That(t, linkCheckAns[1], test.ShouldEqual, expectedMargin)
+	// Verify gateway count is always 1
+	test.That(t, linkCheckAns[2], test.ShouldEqual, byte(1))
 }
