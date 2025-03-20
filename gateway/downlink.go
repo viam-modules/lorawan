@@ -126,7 +126,8 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
 func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []byte, sendAck bool, snr float64, sf int) (
-	[]byte, error) {
+	[]byte, error,
+) {
 	payload := make([]byte, 0)
 
 	// Mhdr unconfirmed data down
@@ -207,7 +208,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 		DevAddr:  fmt.Sprintf("%X", device.Addr),
 		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
 		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
-		FCntDown: device.FCntDown,
+		FCntDown: &device.FCntDown,
 	}
 
 	if err = g.searchAndRemove(g.dataFile, device.DevEui); err != nil {

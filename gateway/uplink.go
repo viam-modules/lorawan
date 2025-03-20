@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"time"
@@ -28,7 +29,8 @@ const (
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
-	string, map[string]interface{}, error) {
+	string, map[string]interface{}, error,
+) {
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -81,14 +83,19 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	if downlinkPayload != nil || len(requests) > 0 || sendAck {
-		payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
-		if err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint32 {
+			g.logger.Warnf("Sensor %v must be reset to support new features. "+
+				"Please physically restart the sensor to enable downlinks", device.NodeName)
+		} else {
+			payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
+			if err != nil {
+				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+			}
+			if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
+				return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
+			}
+			g.logger.Debugf("sent a downlink to %s", device.NodeName)
 		}
-		if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
-			return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
-		}
-		g.logger.Debugf("sent a downlink to %s", device.NodeName)
 	}
 
 	// frame port specifies application port - 0 is for MAC commands 1-255 for device messages.

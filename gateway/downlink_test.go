@@ -230,7 +230,7 @@ func TestCreateDownlink(t *testing.T) {
 				for _, di := range deviceInfoList {
 					if di.DevEUI == fmt.Sprintf("%X", tt.device.DevEui) {
 						found = true
-						test.That(t, di.FCntDown, test.ShouldEqual, tt.device.FCntDown)
+						test.That(t, *di.FCntDown, test.ShouldEqual, tt.device.FCntDown)
 						test.That(t, di.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", tt.device.Addr))
 						break
 					}
