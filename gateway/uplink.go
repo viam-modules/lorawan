@@ -82,7 +82,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	if downlinkPayload != nil || len(requests) > 0 || sendAck {
-		payload, err := g.createDownlink(device, downlinkPayload, sendAck, requests, snr, sf)
+		payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
 		if err != nil {
 			return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 		}

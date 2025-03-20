@@ -15,7 +15,7 @@ import (
 	"go.viam.com/test"
 )
 
-func TestCreateDownLink(t *testing.T) {
+func TestCreateDownlink(t *testing.T) {
 	tests := []struct {
 		name                string
 		device              *node.Node
@@ -168,7 +168,7 @@ func TestCreateDownLink(t *testing.T) {
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.ack, tt.uplinkFopts, 0, 12)
+			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)
