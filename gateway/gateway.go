@@ -506,7 +506,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 
 				minSNR := sfToSNRMin[int(packets[i].datarate)]
 				if float64(packets[i].snr) < minSNR {
-					g.logger.Warnf("packet skipped due to low signal noise ratio")
+					g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packets[i].snr, minSNR)
 					continue
 				}
 
