@@ -380,9 +380,10 @@ type ResetRequest struct {
 	TestOnly   bool
 }
 
-// ResetKey is the key for a reset DoCommand
+// ResetKey is the key for a reset DoCommand.
 const ResetKey = "restart_sensor"
 
+// SendResetDownlink formats a payload to send to the gateway using a ResetRequest.
 func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[string]interface{}, error) {
 	if req.Header == "" {
 		return nil, errors.New("cannot send reset downlink, downlink header is empty")

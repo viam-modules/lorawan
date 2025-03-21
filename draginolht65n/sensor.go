@@ -161,7 +161,7 @@ func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
-		// FF byte is the channel, 10 is the message type and FF is the command for the downlink.
+		// 04 is the header and FFFF is the command for the downlink.
 		req := node.ResetRequest{Header: "04", PayloadHex: "FFFF", TestOnly: testOnly}
 		return n.node.SendResetDownlink(ctx, req)
 	}

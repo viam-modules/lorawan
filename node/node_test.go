@@ -789,35 +789,7 @@ func TestIntervalDownlink(t *testing.T) {
 				UseLittleEndian: tt.useLittleEndian, Header: tt.header, TestOnly: !tt.testGatewayReturn,
 			}
 			resp, err := testNode.SendIntervalDownlink(ctx, req)
-			if tt.expectedErr != "" {
-				test.That(t, resp, test.ShouldBeNil)
-				test.That(t, err.Error(), test.ShouldContainSubstring, tt.expectedErr)
-			} else {
-				test.That(t, err, test.ShouldBeNil)
-
-				// receive a response from the gateway
-				if tt.testGatewayReturn {
-					// we should receive a success from the gateway
-					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
-					test.That(t, gatewayOk, test.ShouldBeTrue)
-					test.That(t, gatewayResp, test.ShouldEqual, tt.expectedReturn)
-
-					// we should not receive a interval success message
-					nodeResp, nodeOk := resp[IntervalKey].(string)
-					test.That(t, nodeOk, test.ShouldBeFalse)
-					test.That(t, nodeResp, test.ShouldEqual, "")
-				} else {
-					// we should not receive a success from the gateway
-					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
-					test.That(t, gatewayOk, test.ShouldBeFalse)
-					test.That(t, gatewayResp, test.ShouldEqual, "")
-
-					// we should receive a interval payload message
-					nodeResp, nodeOk := resp[IntervalKey].(string)
-					test.That(t, nodeOk, test.ShouldBeTrue)
-					test.That(t, nodeResp, test.ShouldEqual, tt.expectedReturn)
-				}
-			}
+			testDoCommandResp(t, resp, err, IntervalKey, tt.expectedReturn, tt.expectedErr, tt.testGatewayReturn)
 		})
 	}
 }
@@ -895,39 +867,44 @@ func TestResetDownlink(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := ResetRequest{
-
 				Header: tt.header, PayloadHex: tt.payload, TestOnly: !tt.testGatewayReturn,
 			}
 			resp, err := testNode.SendResetDownlink(ctx, req)
-			if tt.expectedErr != "" {
-				test.That(t, resp, test.ShouldBeNil)
-				test.That(t, err.Error(), test.ShouldContainSubstring, tt.expectedErr)
-			} else {
-				test.That(t, err, test.ShouldBeNil)
-
-				// receive a response from the gateway
-				if tt.testGatewayReturn {
-					// we should receive a success from the gateway
-					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
-					test.That(t, gatewayOk, test.ShouldBeTrue)
-					test.That(t, gatewayResp, test.ShouldEqual, tt.expectedReturn)
-
-					// we should not receive a reset success message
-					nodeResp, nodeOk := resp[ResetKey].(string)
-					test.That(t, nodeOk, test.ShouldBeFalse)
-					test.That(t, nodeResp, test.ShouldEqual, "")
-				} else {
-					// we should not receive a success from the gateway
-					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
-					test.That(t, gatewayOk, test.ShouldBeFalse)
-					test.That(t, gatewayResp, test.ShouldEqual, "")
-
-					// we should receive a reset payload message
-					nodeResp, nodeOk := resp[ResetKey].(string)
-					test.That(t, nodeOk, test.ShouldBeTrue)
-					test.That(t, nodeResp, test.ShouldEqual, tt.expectedReturn)
-				}
-			}
+			testDoCommandResp(t, resp, err, ResetKey, tt.expectedReturn, tt.expectedErr, tt.testGatewayReturn)
 		})
+	}
+}
+
+func testDoCommandResp(t *testing.T, resp map[string]interface{}, err error,
+	key, expectedReturn, expectedErr string, testGatewayReturn bool,
+) {
+	t.Helper()
+	if expectedErr != "" {
+		test.That(t, resp, test.ShouldBeNil)
+		test.That(t, err.Error(), test.ShouldContainSubstring, expectedErr)
+	} else {
+		test.That(t, err, test.ShouldBeNil)
+		// receive a response from the gateway
+		if testGatewayReturn {
+			// we should receive a success from the gateway
+			gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+			test.That(t, gatewayOk, test.ShouldBeTrue)
+			test.That(t, gatewayResp, test.ShouldEqual, expectedReturn)
+
+			// we should not receive a reset success message
+			nodeResp, nodeOk := resp[key].(string)
+			test.That(t, nodeOk, test.ShouldBeFalse)
+			test.That(t, nodeResp, test.ShouldEqual, "")
+		} else {
+			// we should not receive a success from the gateway
+			gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+			test.That(t, gatewayOk, test.ShouldBeFalse)
+			test.That(t, gatewayResp, test.ShouldEqual, "")
+
+			// we should receive a reset payload message
+			nodeResp, nodeOk := resp[key].(string)
+			test.That(t, nodeOk, test.ShouldBeTrue)
+			test.That(t, nodeResp, test.ShouldEqual, expectedReturn)
+		}
 	}
 }
