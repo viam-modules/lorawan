@@ -215,7 +215,7 @@ Example ABP node configuration:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | join_type | string | no | "OTTA" | Join type ("OTAA" or "ABP") |
-| uplink_interval_mins | float64 | no | **10** for the ct101 and **1080** for the em310-tilt | Expected interval between uplink messages sent by the node |
+| uplink_interval_mins | float64 | no | **10** for the ct101 and **1080** for the em310-tilt | Desired interval between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
 | gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
@@ -298,7 +298,7 @@ Example ABP node configuration:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP") |
-| uplink_interval_mins | float64 | no | 20 | Expected interval between uplink messages sent by the node. |
+| uplink_interval_mins | float64 | no | 20 | Desired interval between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
 | gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
