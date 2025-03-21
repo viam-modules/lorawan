@@ -59,7 +59,7 @@ int setUpGateway(int bus, int region) {
     int radio0_freq;
     int radio1_freq;
     switch(region) {
-        case 1:
+        case 2:
             radio0_freq = EU_RADIO_0_FREQ;
             radio1_freq = EU_RADIO_1_FREQ;
             break;

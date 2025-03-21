@@ -60,14 +60,14 @@ var regionInfoEU = regionInfo{
 	rx2Freq:      rx2FrequencyEU,
 }
 
-func isValidRegion(region string) bool {
+func getRegion(region string) region {
 	region = strings.ToUpper(region)
 	switch region {
 	case "US", "US915", "915":
-		return true
+		return US
 	case "EU", "EU868", "868":
-		return true
+		return EU
 	default:
-		return false
+		return unspecified
 	}
 }

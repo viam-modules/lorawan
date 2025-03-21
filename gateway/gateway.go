@@ -57,7 +57,7 @@ var (
 	errNoDevice           = errors.New("received packet from unknown device")
 	errInvalidMIC         = errors.New("invalid MIC")
 	errSendJoinAccept     = errors.New("failed to send join accept packet")
-	errInvalidRegion      = errors.New("unrecongized region code, valid options are US915 and EU868")
+	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
 )
 
 // constants for MHDRs of different message types/
@@ -73,7 +73,8 @@ type region int
 
 // enum to define supported frequency band regions
 const (
-	US region = iota
+	unspecified region = iota
+	US
 	EU
 )
 
@@ -163,7 +164,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
-		if !isValidRegion(conf.Region) {
+		if getRegion(conf.Region) == unspecified {
 			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
@@ -305,19 +306,14 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
-	region := US
-	if strings.Contains(cfg.Region, "EU") || strings.Contains(cfg.Region, "868") {
-		g.logger.Infof("configuring for EU868 region")
-		region = EU
-	}
-
+	region := getRegion(cfg.Region)
 	switch region {
-	case US:
+	case US, unspecified:
 		g.regionInfo = regionInfoUS
 	case EU:
 		g.regionInfo = regionInfoEU
-	}
 
+	}
 	errCode := C.setUpGateway(C.int(cfg.Bus), C.int(region))
 	if errCode != 0 {
 		strErr := parseErrorCode(int(errCode))
