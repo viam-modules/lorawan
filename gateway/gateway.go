@@ -309,8 +309,10 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	region := getRegion(cfg.Region)
 	switch region {
 	case US, unspecified:
+		g.logger.Infof("configuring gateway for US915 band")
 		g.regionInfo = regionInfoUS
 	case EU:
+		g.logger.Infof("configuring gateway for EU868 band")
 		g.regionInfo = regionInfoEU
 
 	}
