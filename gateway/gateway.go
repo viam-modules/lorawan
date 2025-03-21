@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -84,6 +85,20 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
+
+const sendDownlinkKey = "senddown"
+
+// Define the map of SF to minimum SNR values in dB.
+// Any packet received below the minimum demodulation value will not be parsed.
+// Values found at https://www.thethingsnetwork.org/docs/lorawan/rssi-and-snr/
+var sfToSNRMin = map[int]float64{
+	7:  -7.5,
+	8:  -8.5,
+	9:  -9.5,
+	10: -10.5,
+	11: -11.5,
+	12: -12.5,
+}
 
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
@@ -158,11 +173,11 @@ var regionInfoEU = regionInfo{
 // deviceInfo is a struct containing OTAA device information.
 // This info is saved across module restarts for each device.
 type deviceInfo struct {
-	DevEUI   string `json:"dev_eui"`
-	DevAddr  string `json:"dev_addr"`
-	AppSKey  string `json:"app_skey"`
-	NwkSKey  string `json:"nwk_skey"`
-	FCntDown uint32 `json:"fcnt_down"`
+	DevEUI   string  `json:"dev_eui"`
+	DevAddr  string  `json:"dev_addr"`
+	AppSKey  string  `json:"app_skey"`
+	NwkSKey  string  `json:"nwk_skey"`
+	FCntDown *uint32 `json:"fcnt_down"`
 }
 
 func init() {
@@ -488,19 +503,26 @@ func (g *gateway) receivePackets(ctx context.Context) {
 				if isDuplicate {
 					continue
 				}
+
+				minSNR := sfToSNRMin[int(packets[i].datarate)]
+				if float64(packets[i].snr) < minSNR {
+					g.logger.Warnf("packet skipped due to low signal noise ratio")
+					continue
+				}
+
 				// Convert packet to go byte array
 				for j := range int(packets[i].size) {
 					payload = append(payload, byte(packets[i].payload[j]))
 				}
 				if payload != nil {
-					g.handlePacket(ctx, payload, t)
+					g.handlePacket(ctx, payload, t, float64(packets[i].snr), int(packets[i].datarate))
 				}
 			}
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time) {
+func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
 	case joinRequestMHdr:
@@ -513,7 +535,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			g.logger.Errorf("couldn't handle join request: %s", err)
 		}
 	case unconfirmedUplinkMHdr:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -524,7 +546,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 		}
 		g.updateReadings(name, readings)
 	case confirmedUplinkMHdr:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime)
+		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -699,7 +721,12 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
 	device.NwkSKey = nwksKey
-	device.FCntDown = d.FCntDown
+
+	// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
+	device.FCntDown = math.MaxUint32
+	if d.FCntDown != nil {
+		device.FCntDown = *d.FCntDown
+	}
 
 	// Update the device in the map.
 	g.devices[device.NodeName] = device

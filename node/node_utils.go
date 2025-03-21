@@ -314,7 +314,7 @@ const (
 	// Minutes is minutes.
 	Minutes
 	// IntervalKey is the key for an interval DoCommand.
-	IntervalKey = "send_interval"
+	IntervalKey = "set_interval"
 )
 
 // SendIntervalDownlink formats a payload to send to the gateway using an IntervalRequest.

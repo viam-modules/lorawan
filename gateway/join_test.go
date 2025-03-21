@@ -99,7 +99,7 @@ func TestParseJoinRequestPacket(t *testing.T) {
 	}
 
 	// Create valid join request payload
-	payload := []byte{0x00} // MHDR
+	payload := []byte{joinAcceptMHdr}
 	payload = append(payload, testJoinEUI...)
 	payload = append(payload, testDevEUILE...)
 	payload = append(payload, testDevNonce...)
