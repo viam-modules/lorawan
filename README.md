@@ -252,6 +252,7 @@ This command will update the interval the milesight sends data at. This can also
 #### Restart the device
 
 This command will restart the milesight sensor, triggering a new join request.
+**The sensor must already be connected for this request to work.**
 
 ```json
 {
@@ -328,6 +329,17 @@ This command will update the interval the dragino sends data at. This can also b
 ```json
 {
   "set_interval": 1.0
+}
+```
+
+#### Restart the device
+
+This command will restart the dragino sensor, triggering a new join request.
+**The sensor must already be connected for this request to work.**
+
+```json
+{
+  "restart_sensor": ""
 }
 ```
 

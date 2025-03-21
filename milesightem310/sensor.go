@@ -18,8 +18,6 @@ const (
 	defaultAppKey  = "5572404C696E6B4C6F52613230313823"
 	defaultNwkSKey = "5572404C696E6B4C6F52613230313823"
 	defaultAppSKey = "5572404C696E6B4C6F52613230313823"
-
-	resetKey = "restart_sensor"
 )
 
 var defaultIntervalMin = 1080.
@@ -172,20 +170,12 @@ func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
-	if _, ok := cmd[resetKey]; ok {
-		return n.addRestartToQueue(ctx, testOnly)
+	if _, ok := cmd[node.ResetKey]; ok {
+		// FF byte is the channel, 10 is the message type and FF is the command for the downlink.
+		req := node.ResetRequest{Header: "FF10", PayloadHex: "FF", TestOnly: testOnly}
+		return n.node.SendResetDownlink(ctx, req)
 	}
 
 	// do generic node if no sensor specific key was found
 	return n.node.DoCommand(ctx, cmd)
-}
-
-func (n *em310Tilt) addRestartToQueue(ctx context.Context, testOnly bool) (map[string]interface{}, error) {
-	// ff byte is the channel, 10 is the message type and ff is the command for the downlink.
-	intervalString := "FF10FF"
-	if testOnly {
-		return map[string]interface{}{resetKey: intervalString}, nil
-	}
-
-	return n.node.SendDownlink(ctx, intervalString, false)
 }

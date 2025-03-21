@@ -821,3 +821,113 @@ func TestIntervalDownlink(t *testing.T) {
 		})
 	}
 }
+
+func TestResetDownlink(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	// copy the path to the tmpDir
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	validConf := resource.Config{
+		Name: testNodeName,
+		ConvertedAttributes: &Config{
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	n, err := newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+	testNode := n.(*Node)
+
+	tests := []struct {
+		name              string
+		header            string
+		payload           string
+		expectedReturn    string
+		testGatewayReturn bool
+		expectedErr       string
+	}{
+		{
+			name:              "valid reset",
+			header:            "FF",
+			payload:           "003C",
+			expectedReturn:    "FF003C",
+			testGatewayReturn: false,
+		},
+		{
+			name:              "valid reset with lowercase letters",
+			header:            "ff",
+			payload:           "003c",
+			expectedReturn:    "FF003C",
+			testGatewayReturn: false,
+		},
+		{
+			name:              "valid reset that sends to the gateway",
+			header:            "FF",
+			payload:           "003C",
+			expectedReturn:    "downlink added",
+			testGatewayReturn: true,
+		},
+		{
+			name:              "fail due to empty header",
+			header:            "",
+			payload:           "FF003C",
+			expectedReturn:    "",
+			testGatewayReturn: false,
+			expectedErr:       "cannot send reset downlink, downlink header is empty",
+		},
+		{
+			name:              "fail due to empty payload",
+			header:            "FF003C",
+			payload:           "",
+			expectedReturn:    "",
+			testGatewayReturn: false,
+			expectedErr:       "cannot send reset downlink, downlink payload is empty",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ResetRequest{
+
+				Header: tt.header, PayloadHex: tt.payload, TestOnly: !tt.testGatewayReturn,
+			}
+			resp, err := testNode.SendResetDownlink(ctx, req)
+			if tt.expectedErr != "" {
+				test.That(t, resp, test.ShouldBeNil)
+				test.That(t, err.Error(), test.ShouldContainSubstring, tt.expectedErr)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+
+				// receive a response from the gateway
+				if tt.testGatewayReturn {
+					// we should receive a success from the gateway
+					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+					test.That(t, gatewayOk, test.ShouldBeTrue)
+					test.That(t, gatewayResp, test.ShouldEqual, tt.expectedReturn)
+
+					// we should not receive a reset success message
+					nodeResp, nodeOk := resp[ResetKey].(string)
+					test.That(t, nodeOk, test.ShouldBeFalse)
+					test.That(t, nodeResp, test.ShouldEqual, "")
+				} else {
+					// we should not receive a success from the gateway
+					gatewayResp, gatewayOk := resp[GatewaySendDownlinkKey].(string)
+					test.That(t, gatewayOk, test.ShouldBeFalse)
+					test.That(t, gatewayResp, test.ShouldEqual, "")
+
+					// we should receive a reset payload message
+					nodeResp, nodeOk := resp[ResetKey].(string)
+					test.That(t, nodeOk, test.ShouldBeTrue)
+					test.That(t, nodeResp, test.ShouldEqual, tt.expectedReturn)
+				}
+			}
+		})
+	}
+}

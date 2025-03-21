@@ -198,6 +198,25 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err, test.ShouldBeNil)
 	})
+
+	t.Run("Test successful reset downlink DoCommand to that returns the payload", func(t *testing.T) {
+		// testKey controls whether we send bytes to the gateway. used for debugging.
+		req := map[string]interface{}{node.TestKey: "", node.ResetKey: ""}
+		resp, err := n.DoCommand(ctx, req)
+		test.That(t, resp, test.ShouldNotBeNil)
+		test.That(t, err, test.ShouldBeNil)
+		logger.Info(resp)
+
+		// we should not receive a success from the gateway
+		gatewayResp, gatewayOk := resp[node.GatewaySendDownlinkKey].(string)
+		test.That(t, gatewayOk, test.ShouldBeFalse)
+		test.That(t, gatewayResp, test.ShouldEqual, "")
+
+		// we should receive a dragino success message
+		nodeResp, nodeOk := resp[node.ResetKey].(string)
+		test.That(t, nodeOk, test.ShouldBeTrue)
+		test.That(t, nodeResp, test.ShouldEqual, "04FFFF") // reset
+	})
 }
 
 func TestConfigValidate(t *testing.T) {
