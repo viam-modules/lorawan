@@ -238,16 +238,9 @@ func TestGenerateJoinAccept(t *testing.T) {
 			test.That(t, err, test.ShouldBeNil)
 			test.That(t, decrypted[3:6], test.ShouldResemble, reverseByteArray(netID))
 			test.That(t, decrypted[6:10], test.ShouldResemble, reverseByteArray(tt.device.Addr))
+			test.That(t, decrypted[10], test.ShouldEqual, g.regionInfo.dlSettings)
 			test.That(t, decrypted[11], test.ShouldEqual, 0x01) // rx delay
-
-			switch tt.region {
-			case US:
-				test.That(t, decrypted[10], test.ShouldEqual, regionInfoUS.dlSettings)
-				test.That(t, decrypted[12:28], test.ShouldResemble, regionInfoUS.cfList)
-			case EU:
-				test.That(t, decrypted[10], test.ShouldEqual, regionInfoEU.dlSettings)
-				test.That(t, decrypted[12:28], test.ShouldResemble, regionInfoEU.cfList)
-			}
+			test.That(t, decrypted[12:28], test.ShouldResemble, g.regionInfo.cfList)
 
 			if tt.checkFile {
 				devices, err := readFromFile(g.dataFile)

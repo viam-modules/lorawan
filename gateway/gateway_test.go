@@ -126,7 +126,7 @@ func TestValidate(t *testing.T) {
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 
-	// Region can be just the number
+	// Region can be just be the number
 	conf = &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,

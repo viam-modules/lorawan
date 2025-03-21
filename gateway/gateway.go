@@ -124,6 +124,7 @@ type regionInfo struct {
 	rx2Bandwidth int
 }
 
+// regionInfoUS defines the region specific parameters for the US915 band.
 var regionInfoUS = regionInfo{
 	// Use data rate 8 for rx2 downlinks
 	// DR8 = SF12 BW 500K
@@ -153,6 +154,7 @@ var regionInfoUS = regionInfo{
 	rx2Freq:      rx2FrequencyUS,
 }
 
+// regionInfoEU defines the region specific parameters for the EU868 band.
 var regionInfoEU = regionInfo{
 	// Use data rate 0 for rx2 downlinks
 	// DR0 = SF12 BW 125K
