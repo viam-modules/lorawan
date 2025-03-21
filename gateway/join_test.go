@@ -139,6 +139,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 		file            *os.File
 		checkFile       bool // whether to check file contents after test
 		expectedFileLen int
+		region          region
 	}{
 		{
 			name: "Device sending initial join reuqest should generate valid join accept, get OTAA fields populated, and added to file",
@@ -153,6 +154,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
+			region:          US,
 		},
 		{
 			name: "Same device joining again should generate JA, get OTAA fields repopulated, and info replaced in file",
@@ -167,6 +169,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
+			region:          US,
 		},
 		{
 			name: "New device joining should generate JA, get OTTAA fields popualated, and appended to file",
@@ -181,6 +184,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 2,
 			checkFile:       true,
+			region:          EU,
 		},
 		{
 			name: "If writing to the file errors, should still return valid JA",
@@ -194,6 +198,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			},
 			file:      nil,
 			checkFile: false,
+			region:    EU,
 		},
 	}
 
@@ -212,6 +217,13 @@ func TestGenerateJoinAccept(t *testing.T) {
 				logger:   logging.NewTestLogger(t),
 			}
 
+			switch tt.region {
+			case US:
+				g.regionInfo = regionInfoUS
+			case EU:
+				g.regionInfo = regionInfoEU
+			}
+
 			joinAccept, err := g.generateJoinAccept(ctx, tt.joinRequest, tt.device)
 			test.That(t, err, test.ShouldBeNil)
 			// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4)
@@ -219,6 +231,23 @@ func TestGenerateJoinAccept(t *testing.T) {
 			test.That(t, joinAccept[0], test.ShouldEqual, byte(0x20))  // Join-accept message type
 			test.That(t, len(tt.device.Addr), test.ShouldEqual, 4)     // Device address should be generated
 			test.That(t, len(tt.device.AppSKey), test.ShouldEqual, 16) // AppSKey should be generated
+			test.That(t, len(tt.device.NwkSKey), test.ShouldEqual, 16) // NwkSKey should be generated
+			test.That(t, tt.device.FCntDown, test.ShouldEqual, 0)      // fcnt should be set to zero
+
+			decrypted, err := crypto.DecryptJoinAccept(types.AES128Key(testAppKey), joinAccept[1:])
+			test.That(t, err, test.ShouldBeNil)
+			test.That(t, decrypted[3:6], test.ShouldResemble, reverseByteArray(netID))
+			test.That(t, decrypted[6:10], test.ShouldResemble, reverseByteArray(tt.device.Addr))
+			test.That(t, decrypted[11], test.ShouldEqual, 0x01) // rx delay
+
+			switch tt.region {
+			case US:
+				test.That(t, decrypted[10], test.ShouldEqual, regionInfoUS.dlSettings)
+				test.That(t, decrypted[12:28], test.ShouldResemble, regionInfoUS.cfList)
+			case EU:
+				test.That(t, decrypted[10], test.ShouldEqual, regionInfoEU.dlSettings)
+				test.That(t, decrypted[12:28], test.ShouldResemble, regionInfoEU.cfList)
+			}
 
 			if tt.checkFile {
 				devices, err := readFromFile(g.dataFile)

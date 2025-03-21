@@ -5,7 +5,6 @@ lorawan:
     update_interval: 168h0m0s
     user: testbot
     group: testbot
-    default: true
     persistent: true
 
 lorawan-test:

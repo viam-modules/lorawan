@@ -7,7 +7,7 @@ struct lgw_pkt_rx_s* createRxPacketArray();
 int receive(struct lgw_pkt_rx_s* packet);
 int send(struct lgw_pkt_tx_s* packet);
 int stopGateway();
-int setUpGateway(int com_path);
+int setUpGateway(int com_path, int region);
 void disableBuffering();
 void redirectToPipe(int fd);
 extern const int MAX_RX_PKT;

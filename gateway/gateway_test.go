@@ -104,6 +104,37 @@ func TestValidate(t *testing.T) {
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "board"))
 	test.That(t, deps, test.ShouldBeNil)
+
+	// Test invalid region
+	conf = &Config{
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Region:    "AS923",
+	}
+
+	deps, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidRegion))
+	test.That(t, deps, test.ShouldBeNil)
+
+	// Region code can be just the region
+	conf = &Config{
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Region:    "EU",
+	}
+
+	_, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeNil)
+
+	// Region can be just the number
+	conf = &Config{
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Region:    "915",
+	}
+
+	_, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestDoCommand(t *testing.T) {

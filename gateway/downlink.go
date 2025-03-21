@@ -26,25 +26,27 @@ import (
 )
 
 const (
-	joinDelay     = 6         // rx2 delay in seconds for sending join accept message.
-	downlinkDelay = 2         // rx2 delay in seconds for downlink messages.
-	rx2Frequency  = 923300000 // Frequency to send downlinks on rx2 window, lorawan rx2 default
-	rx2SF         = 12        // spreading factor for rx2 window, default for lorawan
-	rx2Bandwidth  = 0x06      // 500k bandwidth, default bandwidth for downlinks
-	deviceTimeCID = 0x0D      // command identifier for device time request
+	joinDelay      = 6         // rx2 delay in seconds for sending join accept message.
+	downlinkDelay  = 2         // rx2 delay in seconds for downlink messages.
+	rx2FrequencyUS = 923300000 // Frequency to send downlinks on rx2 window, default
+	rx2FrequencyEU = 869525000 // rx2 default freq for EU region
+	rx2SF          = 12        // spreading factor for rx2 window, used for both US and EU
+	rx2BandwidthUS = 0x06      // 500k bandwidth for US downlinks
+	rx2BandwidthEU = 0x04      // 125k bandwidth for EU downlinks
+	deviceTimeCID  = 0x0D      // command identifier for device time request
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
 	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:     C.uint32_t(rx2Frequency),
+		freq_hz:     C.uint32_t(g.regionInfo.rx2Freq),
 		freq_offset: C.int8_t(0),
 		// tx_mode 0 is immediate, 1 for timestampted with count_us delay
 		// doing immediate mode with sleep to exit on context cancelation.
 		tx_mode:    C.uint8_t(0),
 		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),            // tx power in dbm
-		modulation: C.uint8_t(0x10),         // LORA modulation
-		bandwidth:  C.uint8_t(rx2Bandwidth), // 500k
+		rf_power:   C.int8_t(26),    // tx power in dbm
+		modulation: C.uint8_t(0x10), // LORA modulation
+		bandwidth:  C.uint8_t(g.regionInfo.rx2Bandwidth),
 		datarate:   C.uint32_t(rx2SF),
 		coderate:   C.uint8_t(0x01), // code rate 4/5
 		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
