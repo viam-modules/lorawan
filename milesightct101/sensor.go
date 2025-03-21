@@ -174,21 +174,12 @@ func (n *CT101) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
-	if _, ok := cmd[resetKey]; ok {
-		return n.addRestartToQueue(ctx, testOnly)
+	if _, ok := cmd[node.ResetKey]; ok {
+		// FF byte is the channel, 10 is the message type and FF is the command for the downlink.
+		req := node.ResetRequest{Header: "FF10", PayloadHex: "FF", TestOnly: testOnly}
+		return n.node.SendResetDownlink(ctx, req)
 	}
 
 	// do generic node if no sensor specific key was found
 	return n.node.DoCommand(ctx, cmd)
-}
-
-func (n *CT101) addRestartToQueue(ctx context.Context, testOnly bool) (map[string]interface{}, error) {
-	// ff byte is the channel, 10 is the message type and ff is the command for the downlink.
-	// time is 2 bytes of data.
-	intervalString := "FF10FF"
-	if testOnly {
-		return map[string]interface{}{resetKey: intervalString}, nil
-	}
-
-	return n.node.SendDownlink(ctx, intervalString, false)
 }

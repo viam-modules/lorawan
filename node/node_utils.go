@@ -371,3 +371,30 @@ func formatStringWithBytes(numBytes int) string {
 	// 2 hex digits per byte
 	return fmt.Sprintf("%%0%dX", 2*numBytes)
 }
+
+// ResetRequest is the information needed to generate a reset downlink for a sensor.
+type ResetRequest struct {
+	Header string
+	// the Payload can usually be arbitrary as long as the number of bytes is correct.
+	PayloadHex string
+	TestOnly   bool
+}
+
+// ResetKey is the key for a reset DoCommand.
+const ResetKey = "restart_sensor"
+
+// SendResetDownlink formats a payload to send to the gateway using a ResetRequest.
+func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[string]interface{}, error) {
+	if req.Header == "" {
+		return nil, errors.New("cannot send reset downlink, downlink header is empty")
+	}
+	if req.PayloadHex == "" {
+		return nil, errors.New("cannot send reset downlink, downlink payload is empty")
+	}
+	fullPayload := strings.ToUpper(req.Header + req.PayloadHex)
+	if req.TestOnly {
+		return map[string]interface{}{ResetKey: fullPayload}, nil
+	}
+
+	return n.SendDownlink(ctx, fullPayload, false)
+}
