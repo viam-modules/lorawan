@@ -156,30 +156,30 @@ Example ABP node configuration:
 
 ### Common Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| decoder_path | string | yes | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
-| join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | yes | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
-| gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
-| fport | string | no | port (in hex) to send downlinks to the device. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| decoder_path | string | yes | - | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
+| join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP"). |
+| uplink_interval_mins | float64 | yes | - | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
+| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
+| fport | string | no | - | port (in hex) to send downlinks to the device. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | yes | - | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
 
 ### ABP Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | yes | - | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| network_s_key | string | yes | - | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
 ### DoCommand
 
@@ -219,28 +219,28 @@ Example ABP node configuration:
 
 ### Common Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **10** minutes for the ct101 and **1080** minutes for the em310-tilt. |
-| gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| join_type | string | no | "OTTA" | Join type ("OTAA" or "ABP") |
+| uplink_interval_mins | float64 | no | **10** for the ct101 and **1080** for the em310-tilt | Desired interval between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
+| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | no | Application Key (16 bytes in hex). Used to securely join the network. The default is **5572404C696E6B4C6F52613230313823**. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | no | 5572404C696E6B4C6F52613230313823 | Application Key (16 bytes in hex). Used to securely join the network. |
 
 ### ABP Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | no | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
-| network_s_key | string | no | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default is **5572404C696E6B4C6F52613230313823**. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | no | 5572404C696E6B4C6F52613230313823 | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. |
+| network_s_key | string | no | 5572404C696E6B4C6F52613230313823 | Network Session Key (16 bytes in hex) Used to decypt uplink messages. |
 
 ### DoCommand
 
@@ -302,28 +302,28 @@ Example ABP node configuration:
 ```
 ### Common Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| join_type | string | no | Join type ("OTAA" or "ABP"). Defaults to "OTAA" |
-| uplink_interval_mins | float64 | no | Expected interval between uplink messages sent by the node. The default is **20** minutes. |
-| gateways | []string | yes | gateways the node can send data to. Can also be in the `Depends on` drop down. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP") |
+| uplink_interval_mins | float64 | no | 20 | Desired interval between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
+| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
 The node registers itself with the gateway so the gateway will recognize messages from the node.
 
 ### OTAA Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_eui | string | yes | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | yes | Application Key (16 bytes in hex). Used to securely join the network. Unique to the specific device, can be found on the box. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | yes | - | Application Key (16 bytes in hex). Used to securely join the network. Unique to the specific device, can be found on the box. |
 
 ### ABP Attributes
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| dev_addr | string | yes | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
-| network_s_key | string | yes | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | yes | - | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| network_s_key | string | yes | - | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
 ### DoCommand
 
