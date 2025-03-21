@@ -7,8 +7,9 @@ This module combines the functionality of a LoRaWAN gateway and network server, 
 It handles packet forwarding, device management, and message routing to allow LoRaWAN sensor data to be viewed and managed directly in Viam.
 This module provides the following models:
 
-- `sx1302-gateway`: Sensor model for a SX1302 LoRaWAN concentrator hat connected to a Raspberry Pi.
-- `node`: Sensor model for any class A, US915 LoraWAN end device.
+- `sx1302-waveshare-hat`: Sensor model for the [waveshare loRaWAN gateway hat](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
+- `sx1302-hat-generic`: Sensor model for other SX1302 LoRaWAN concentrator hats.
+- `node`: Sensor model for any class A, US915/EU868 LoraWAN end device.
 - `dragino-LHT65N`: Sensor model for the dragino LHT65N temperature and humidity sensor.
 - `milesight-ct101`: Sensor model for the milesight ct101 current transformer.
 - `milesight-em310-tilt`: Sensor model for the milesight em310 tilt sensor.
@@ -16,7 +17,7 @@ This module provides the following models:
 You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
 
 Compatible with:
-- US915 frequency band
+- US915 or EU868 frequency band
 - Class A Devices
 - LoraWAN MAC version 1.0.3
 
@@ -25,7 +26,7 @@ Compatible with:
 Hardware Required:
 - Raspberry Pi (any model with GPIO pins)
 - SX1302 Gateway HAT/concentrator board
-- US915 LoRaWAN sensors
+- LoRaWAN sensors
 
 See [Hardware Tested Section](https://github.com/viam-modules/lorawan?tab=readme-ov-file#hardware-tested) for hardware we have used this module with successfully.
 
@@ -42,7 +43,8 @@ Example gateway configuration:
     "board": "rpi",
     "spi_bus": 0,
     "reset_pin": int,
-    "power_en_pin": int
+    "power_en_pin": int,
+    "region": "US915"
 }
 ```
 
@@ -57,6 +59,7 @@ The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 | reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1) |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
 
 ## Setup the `viam:sensor:sx1302-hat-generic`
 
@@ -71,7 +74,8 @@ Example gateway configuration - note - the gpio pins MUST be set to the gpio pin
     "board": "rpi",
     "spi_bus": 0,
     "reset_pin": int,
-    "power_en_pin": int
+    "power_en_pin": int,
+    "region": "US915"
 }
 ```
 
@@ -85,6 +89,7 @@ The following attributes are available for `viam:sensor:sx1302-hat-generic` sens
 | reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
 | spi_bus | int | no | 0 | SPI bus number  |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
 
 ## Setup the `viam:sensor:sx1302-waveshare-hat`
 
@@ -97,7 +102,8 @@ Example gateway configuration:
 ```json
 {
     "board": "rpi",
-    "spi_bus": 0
+    "spi_bus": 0,
+    "region": "US915"
 }
 ```
 
@@ -109,12 +115,13 @@ The following attributes are available for `viam:sensor:sx1302-waveshare-hat` se
 |------|------|----------|---------|-------------|
 | board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
 
 ## Set up the  `viam:sensor:node`
 
 As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
 
-The node model supports any US915 class A V1.0.3 device.
+The node model supports any class A V1.0.3 device sending on EU868 or US915 frequency band.
 The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
 
 ## Configure the `viam:sensor:node`

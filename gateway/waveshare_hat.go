@@ -18,12 +18,13 @@ const (
 type ConfigSX1302WaveshareHAT struct {
 	Bus       int    `json:"spi_bus,omitempty"`
 	BoardName string `json:"board"`
+	Region    string `json:"region_code"`
 }
 
 func (conf *ConfigSX1302WaveshareHAT) getGatewayConfig() *Config {
 	powerPin := waveshareHatPowerPin
 	resetPin := waveshareHatResetPin
-	return &Config{Bus: conf.Bus, BoardName: conf.BoardName, PowerPin: &powerPin, ResetPin: &resetPin}
+	return &Config{Bus: conf.Bus, BoardName: conf.BoardName, PowerPin: &powerPin, ResetPin: &resetPin, Region: conf.Region}
 }
 
 // Validate ensures all parts of the config are valid.

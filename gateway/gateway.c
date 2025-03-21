@@ -5,8 +5,12 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define RADIO_0_FREQ     902700000
-#define RADIO_1_FREQ     903700000
+#define US_RADIO_0_FREQ     902700000
+#define US_RADIO_1_FREQ     903700000
+
+#define EU_RADIO_0_FREQ     867500000
+#define EU_RADIO_1_FREQ     868500000
+
 int MAX_RX_PKT = 10;
 
 // the IF chain frequencies allow the gateway to read on multiple frequency channels.
@@ -23,10 +27,10 @@ const int32_t ifFrequencies[9] = {
 };
 
 // This defines what RF chain to use for each of the 8 if chains
-const int32_t rfChains [9] = {0, 0, 0, 0, 1, 1, 1};
+const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
 
-int setUpGateway(int bus) {
+int setUpGateway(int bus, int region) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -34,13 +38,14 @@ int setUpGateway(int bus) {
     boardconf.lorawan_public = true;
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
-    boardconf.com_type =  LGW_COM_SPI; // spi
+    boardconf.com_type =  LGW_COM_SPI;
 
     const char * com_path;
 
     switch(bus) {
         case 1:
             com_path = "/dev/spidev0.1";
+            break;
         default:
             com_path = "/dev/spidev0.0";
     }
@@ -49,6 +54,18 @@ int setUpGateway(int bus) {
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         return 1;
+    }
+
+    int radio0_freq;
+    int radio1_freq;
+    switch(region) {
+        case 2:
+            radio0_freq = EU_RADIO_0_FREQ;
+            radio1_freq = EU_RADIO_1_FREQ;
+            break;
+        default:
+            radio0_freq = US_RADIO_0_FREQ;
+            radio1_freq = US_RADIO_1_FREQ;
     }
 
 
@@ -60,7 +77,7 @@ int setUpGateway(int bus) {
     // We are setting default frequencies for the RF chains to listen on US915 band at two different frequencies.
     memset( &rfconf, 0, sizeof rfconf);
     rfconf.enable = true;
-    rfconf.freq_hz = RADIO_0_FREQ;
+    rfconf.freq_hz = radio0_freq;
     rfconf.radio_type = LGW_RADIO_TYPE_SX1250;
     rfconf.rssi_offset = -215.4;
     rfconf.tx_enable = true;
@@ -76,7 +93,7 @@ int setUpGateway(int bus) {
         return 2;
     }
 
-    rfconf.freq_hz = RADIO_1_FREQ;
+    rfconf.freq_hz = radio1_freq;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
         return 3;
 

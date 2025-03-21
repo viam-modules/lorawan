@@ -57,6 +57,7 @@ var (
 	errNoDevice           = errors.New("received packet from unknown device")
 	errInvalidMIC         = errors.New("invalid MIC")
 	errSendJoinAccept     = errors.New("failed to send join accept packet")
+	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
 )
 
 // constants for MHDRs of different message types/
@@ -66,6 +67,15 @@ const (
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
+)
+
+type region int
+
+// enum to define supported frequency band regions
+const (
+	unspecified region = iota
+	US
+	EU
 )
 
 // Model represents a lorawan gateway model.
@@ -104,6 +114,7 @@ type Config struct {
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
 	ResetPin  *int   `json:"reset_pin"`
 	BoardName string `json:"board"`
+	Region    string `json:"region_code,omitempty"`
 }
 
 // deviceInfo is a struct containing OTAA device information.
@@ -152,6 +163,12 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	}
 	deps = append(deps, conf.BoardName)
 
+	if conf.Region != "" {
+		if getRegion(conf.Region) == unspecified {
+			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
+		}
+	}
+
 	return deps, nil
 }
 
@@ -175,10 +192,11 @@ type gateway struct {
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
 
-	logReader *os.File
-	logWriter *os.File
-	dataFile  *os.File
-	dataMu    sync.Mutex
+	logReader  *os.File
+	logWriter  *os.File
+	dataFile   *os.File
+	dataMu     sync.Mutex
+	regionInfo regionInfo
 }
 
 // NewGateway creates a new gateway
@@ -288,7 +306,17 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
-	errCode := C.setUpGateway(C.int(cfg.Bus))
+	region := getRegion(cfg.Region)
+	switch region {
+	case US, unspecified:
+		g.logger.Infof("configuring gateway for US915 band")
+		g.regionInfo = regionInfoUS
+	case EU:
+		g.logger.Infof("configuring gateway for EU868 band")
+		g.regionInfo = regionInfoEU
+
+	}
+	errCode := C.setUpGateway(C.int(cfg.Bus), C.int(region))
 	if errCode != 0 {
 		strErr := parseErrorCode(int(errCode))
 		return fmt.Errorf("failed to set up the gateway: %s", strErr)
@@ -423,7 +451,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 
 				minSNR := sfToSNRMin[int(packets[i].datarate)]
 				if float64(packets[i].snr) < minSNR {
-					g.logger.Warnf("packet skipped due to low signal noise ratio")
+					g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packets[i].snr, minSNR)
 					continue
 				}
 
