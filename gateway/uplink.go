@@ -64,7 +64,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
 	// only validate the MIC if we have a NwkSKey set
-	if len(device.NwkSKey) == 0 {
+	if len(device.NwkSKey) != 0 {
 		// Validate the MIC
 		mic, err := crypto.ComputeLegacyUplinkMIC(
 			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
