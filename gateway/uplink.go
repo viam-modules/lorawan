@@ -63,15 +63,18 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
-	// Validate the MIC
-	mic, err := crypto.ComputeLegacyUplinkMIC(
-		types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
-	if err != nil {
-		return "", map[string]interface{}{}, err
-	}
+	// only validate the MIC if we have a NwkSKey set
+	if len(device.NwkSKey) != 0 {
+		// Validate the MIC
+		mic, err := crypto.ComputeLegacyUplinkMIC(
+			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
+		if err != nil {
+			return "", map[string]interface{}{}, err
+		}
 
-	if !bytes.Equal(phyPayload[len(phyPayload)-4:], mic[:]) {
-		return "", map[string]interface{}{}, errInvalidMIC
+		if !bytes.Equal(phyPayload[len(phyPayload)-4:], mic[:]) {
+			return "", map[string]interface{}{}, errInvalidMIC
+		}
 	}
 
 	// we will send one device downlink from the do command per uplink.
