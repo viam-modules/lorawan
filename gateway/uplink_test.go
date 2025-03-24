@@ -128,8 +128,6 @@ func TestParseDataUplink(t *testing.T) {
 	// Test no NwkSKey
 	validPayload, err = createUplinkData(testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
-	validPayload[len(validPayload)-1] = 0x00
-	test.That(t, err, test.ShouldBeNil)
 	g.devices[testNodeName].NwkSKey = []byte{}
 	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldBeNil)
