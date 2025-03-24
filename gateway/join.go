@@ -5,7 +5,7 @@ package gateway
 #cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
-#include "../hal/gateway.h"
+#include "gateway.h"
 #include <stdlib.h>
 
 */

@@ -1,6 +1,17 @@
 // Package gateway implements the sx1302 gateway module.
 package gateway
 
+/*
+#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
+#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
+
+#include "../sx1302/libloragw/inc/loragw_hal.h"
+#include "gateway.h"
+#include <stdlib.h>
+#include <string.h>
+*/
+import "C"
+
 import (
 	"bufio"
 	"bytes"
@@ -16,8 +27,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/viam-modules/gateway/hal"
+	"unsafe"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/board"
@@ -57,6 +67,15 @@ const (
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
+)
+
+type region int
+
+// enum to define supported frequency band regions
+const (
+	unspecified region = iota
+	US
+	EU
 )
 
 // Model represents a lorawan gateway model.
@@ -145,7 +164,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
-		if getRegion(conf.Region) == hal.Unspecified {
+		if getRegion(conf.Region) == unspecified {
 			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
@@ -289,16 +308,18 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	region := getRegion(cfg.Region)
 	switch region {
-	case hal.US, hal.Unspecified:
+	case US, unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
 		g.regionInfo = regionInfoUS
-	case hal.EU:
+	case EU:
 		g.logger.Infof("configuring gateway for EU868 band")
 		g.regionInfo = regionInfoEU
-	}
 
-	if err := hal.SetupGateway(cfg.Bus, region); err != nil {
-		return fmt.Errorf("failed to set up the gateway: %w", err)
+	}
+	errCode := C.setUpGateway(C.int(cfg.Bus), C.int(region))
+	if errCode != 0 {
+		strErr := parseErrorCode(int(errCode))
+		return fmt.Errorf("failed to set up the gateway: %s", strErr)
 	}
 
 	g.started = true
@@ -342,7 +363,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 		g.logWriter = stdoutW
 
 		// Redirect C's stdout to the write end of the pipe
-		hal.RedirectLogsToPipe(g.logWriter.Fd())
+		C.redirectToPipe(C.int(g.logWriter.Fd()))
 		scanner := bufio.NewScanner(g.logReader)
 
 		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
@@ -354,7 +375,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 // This is necessary because the sx1302 library only uses printf to report errors.
 func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	hal.DisableBuffering()
+	C.disableBuffering()
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -383,42 +404,65 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scann
 }
 
 func (g *gateway) receivePackets(ctx context.Context) {
+	// receive the radio packets
+	p := C.createRxPacketArray()
+	defer C.free(unsafe.Pointer(p))
 	for {
 		select {
 		case <-ctx.Done():
+
 			return
 		default:
 		}
-
-		packets, err := hal.ReceivePackets()
-		if err != nil {
-			g.logger.Errorf("error receiving lora packet: %v", err)
-			continue
-		}
-
-		if len(packets) == 0 {
-			// no packet received, wait 10 ms to receive again
+		numPackets := int(C.receive(p))
+		t := time.Now()
+		switch numPackets {
+		case 0:
+			// no packet received, wait 10 ms to receive again.
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(10 * time.Millisecond):
 			}
-			continue
-		}
+		case -1:
+			g.logger.Errorf("error receiving lora packet")
+		default:
+			// convert from c array to go slice
+			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
+			for i := range numPackets {
+				// received a LORA packet
+				var payload []byte
+				if packets[i].size == 0 {
+					continue
+				}
 
-		t := time.Now()
-		for _, packet := range packets {
-			if packet.Size == 0 {
-				continue
+				// don't process duplicates
+				isDuplicate := false
+				for j := i - 1; j >= 0; j-- {
+					if isSamePacket(packets[j], packets[i]) {
+						g.logger.Debugf("skipped duplicate packet")
+						isDuplicate = true
+						break
+					}
+				}
+				if isDuplicate {
+					continue
+				}
+
+				minSNR := sfToSNRMin[int(packets[i].datarate)]
+				if float64(packets[i].snr) < minSNR {
+					g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packets[i].snr, minSNR)
+					continue
+				}
+
+				// Convert packet to go byte array
+				for j := range int(packets[i].size) {
+					payload = append(payload, byte(packets[i].payload[j]))
+				}
+				if payload != nil {
+					g.handlePacket(ctx, payload, t, float64(packets[i].snr), int(packets[i].datarate))
+				}
 			}
-
-			minSNR := sfToSNRMin[int(packet.DataRate)]
-			if float64(packet.SNR) < minSNR {
-				g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
-				continue
-			}
-
-			g.handlePacket(ctx, packet.Payload, t, float64(packet.SNR), int(packet.DataRate))
 		}
 	}
 }
@@ -566,6 +610,15 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+}
+
+// Classifying two packets as the same if they have identifical payloads.
+func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
+	//nolint
+	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
+		return true
+	}
+	return false
 }
 
 // searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
@@ -743,8 +796,9 @@ func (g *gateway) reset(ctx context.Context) error {
 	if g.receivingWorker != nil {
 		g.receivingWorker.Stop()
 	}
-	if err := hal.StopGateway(); err != nil {
-		g.logger.Error("error stopping gateway: %v", err)
+	errCode := C.stopGateway()
+	if errCode != 0 {
+		g.logger.Error("error stopping gateway")
 	}
 	if g.rstPin != nil {
 		err := resetGateway(ctx, g.rstPin, g.pwrPin)
