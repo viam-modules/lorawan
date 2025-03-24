@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"strings"
+
+	"github.com/viam-modules/gateway/hal"
 )
 
 // struct to hold region specific gateway info.
@@ -60,14 +62,14 @@ var regionInfoEU = regionInfo{
 	rx2Freq:      rx2FrequencyEU,
 }
 
-func getRegion(region string) region {
+func getRegion(region string) hal.Region {
 	region = strings.ToUpper(region)
 	switch region {
 	case "US", "US915", "915":
-		return US
+		return hal.US
 	case "EU", "EU868", "868":
-		return EU
+		return hal.EU
 	default:
-		return unspecified
+		return hal.Unspecified
 	}
 }

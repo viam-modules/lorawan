@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/viam-modules/gateway/hal"
 	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -139,7 +140,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 		file            *os.File
 		checkFile       bool // whether to check file contents after test
 		expectedFileLen int
-		region          region
+		region          hal.Region
 	}{
 		{
 			name: "Device sending initial join reuqest should generate valid join accept, get OTAA fields populated, and added to file",
@@ -154,7 +155,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
-			region:          US,
+			region:          hal.US,
 		},
 		{
 			name: "Same device joining again should generate JA, get OTAA fields repopulated, and info replaced in file",
@@ -169,7 +170,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
-			region:          US,
+			region:          hal.US,
 		},
 		{
 			name: "New device joining should generate JA, get OTTAA fields popualated, and appended to file",
@@ -184,7 +185,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 2,
 			checkFile:       true,
-			region:          EU,
+			region:          hal.EU,
 		},
 		{
 			name: "If writing to the file errors, should still return valid JA",
@@ -198,7 +199,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			},
 			file:      nil,
 			checkFile: false,
-			region:    EU,
+			region:    hal.EU,
 		},
 	}
 
@@ -218,9 +219,9 @@ func TestGenerateJoinAccept(t *testing.T) {
 			}
 
 			switch tt.region {
-			case US:
+			case hal.US:
 				g.regionInfo = regionInfoUS
-			case EU:
+			case hal.EU:
 				g.regionInfo = regionInfoEU
 			}
 

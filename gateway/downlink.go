@@ -5,7 +5,7 @@ package gateway
 #cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
 
 #include "../sx1302/libloragw/inc/loragw_hal.h"
-#include "gateway.h"
+#include "../hal/gateway.h"
 #include <stdlib.h>
 
 */
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/viam-modules/gateway/hal"
 	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -39,30 +40,39 @@ const (
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
-	txPkt := C.struct_lgw_pkt_tx_s{
-		freq_hz:     C.uint32_t(g.regionInfo.rx2Freq),
-		freq_offset: C.int8_t(0),
-		// tx_mode 0 is immediate, 1 for timestampted with count_us delay
-		// doing immediate mode with sleep to exit on context cancelation.
-		tx_mode:    C.uint8_t(0),
-		rf_chain:   C.uint8_t(0),
-		rf_power:   C.int8_t(26),    // tx power in dbm
-		modulation: C.uint8_t(0x10), // LORA modulation
-		bandwidth:  C.uint8_t(g.regionInfo.rx2Bandwidth),
-		datarate:   C.uint32_t(rx2SF),
-		coderate:   C.uint8_t(0x01), // code rate 4/5
-		invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
-		size:       C.uint16_t(len(payload)),
-		preamble:   C.uint16_t(8),
-		no_crc:     C.bool(true), // CRCs in uplinks only
-		no_header:  C.bool(false),
-	}
+	// txPkt := C.struct_lgw_pkt_tx_s{
+	// 	freq_hz:     C.uint32_t(g.regionInfo.rx2Freq),
+	// 	freq_offset: C.int8_t(0),
+	// 	// tx_mode 0 is immediate, 1 for timestampted with count_us delay
+	// 	// doing immediate mode with sleep to exit on context cancelation.
+	// 	tx_mode:    C.uint8_t(0),
+	// 	rf_chain:   C.uint8_t(0),
+	// 	rf_power:   C.int8_t(26),    // tx power in dbm
+	// 	modulation: C.uint8_t(0x10), // LORA modulation
+	// 	bandwidth:  C.uint8_t(g.regionInfo.rx2Bandwidth),
+	// 	datarate:   C.uint32_t(rx2SF),
+	// 	coderate:   C.uint8_t(0x01), // code rate 4/5
+	// 	invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
+	// 	size:       C.uint16_t(len(payload)),
+	// 	preamble:   C.uint16_t(8),
+	// 	no_crc:     C.bool(true), // CRCs in uplinks only
+	// 	no_header:  C.bool(false),
+	// }
 
-	var cPayload [256]C.uchar
-	for i, b := range payload {
-		cPayload[i] = C.uchar(b)
+	// var cPayload [256]C.uchar
+	// for i, b := range payload {
+	// 	cPayload[i] = C.uchar(b)
+	// }
+	// txPkt.payload = cPayload
+
+	txPkt := &hal.TxPacket{
+		Freq:      uint32(g.regionInfo.rx2Freq),
+		Power:     26,
+		DataRate:  rx2SF,
+		Bandwidth: uint8(g.regionInfo.rx2Bandwidth),
+		Size:      uint(len(payload)),
+		Payload:   payload,
 	}
-	txPkt.payload = cPayload
 
 	// 47709/32*time.Microsecond is the internal delay of sending a packet
 	waitDuration := (downlinkDelay * time.Second) - (time.Since(packetTime)) - 47709/32*time.Microsecond
@@ -74,22 +84,9 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("error sending downlink: %w", ctx.Err())
 	}
 
-	errCode := int(C.send(&txPkt))
-	if errCode != 0 {
-		return errors.New("failed to send downlink packet")
-	}
-	// wait for packet to finish sending.
-	var status C.uint8_t
-	for {
-		C.lgw_status(txPkt.rf_chain, 1, &status)
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("error sending downlink: %w", ctx.Err())
-		}
-		// status of 2 indicates send was successful
-		if int(status) == 2 {
-			break
-		}
-		time.Sleep(2 * time.Millisecond)
+	err := hal.SendPacket(ctx, txPkt)
+	if err != nil {
+		return err
 	}
 
 	return nil
