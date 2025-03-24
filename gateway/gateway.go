@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/viam-modules/gateway/hal"
+	lorahw "github.com/viam-modules/gateway/hal"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/board"
@@ -145,7 +145,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
-		if getRegion(conf.Region) == hal.Unspecified {
+		if getRegion(conf.Region) == lorahw.Unspecified {
 			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
@@ -255,7 +255,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// capture C log output
-	g.startCLogging(ctx)
+	g.startCLogging()
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -289,15 +289,15 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	region := getRegion(cfg.Region)
 	switch region {
-	case hal.US, hal.Unspecified:
+	case lorahw.US, lorahw.Unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
 		g.regionInfo = regionInfoUS
-	case hal.EU:
+	case lorahw.EU:
 		g.logger.Infof("configuring gateway for EU868 band")
 		g.regionInfo = regionInfoEU
 	}
 
-	if err := hal.SetupGateway(cfg.Bus, region); err != nil {
+	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
 		return fmt.Errorf("failed to set up the gateway: %w", err)
 	}
 
@@ -329,7 +329,7 @@ func parseErrorCode(errCode int) string {
 
 // startCLogging starts the goroutine to capture C logs into the logger.
 // If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging(ctx context.Context) {
+func (g *gateway) startCLogging() {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
@@ -342,7 +342,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 		g.logWriter = stdoutW
 
 		// Redirect C's stdout to the write end of the pipe
-		hal.RedirectLogsToPipe(g.logWriter.Fd())
+		lorahw.RedirectLogsToPipe(g.logWriter.Fd())
 		scanner := bufio.NewScanner(g.logReader)
 
 		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
@@ -354,7 +354,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 // This is necessary because the sx1302 library only uses printf to report errors.
 func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	hal.DisableBuffering()
+	lorahw.DisableBuffering()
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -390,7 +390,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 
-		packets, err := hal.ReceivePackets()
+		packets, err := lorahw.ReceivePackets()
 		if err != nil {
 			g.logger.Errorf("error receiving lora packet: %v", err)
 			continue
@@ -743,7 +743,7 @@ func (g *gateway) reset(ctx context.Context) error {
 	if g.receivingWorker != nil {
 		g.receivingWorker.Stop()
 	}
-	if err := hal.StopGateway(); err != nil {
+	if err := lorahw.StopGateway(); err != nil {
 		g.logger.Error("error stopping gateway: %v", err)
 	}
 	if g.rstPin != nil {

@@ -1,5 +1,5 @@
-// Package hal provides hardware abstraction layer for sx1302 LoRa concentrator
-package hal
+// Package lorahw interacts directly with the sx1302 LoRa concentrator HAL library
+package lorahw
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
@@ -32,7 +32,6 @@ const (
 	EU
 )
 
-// SendPacket sends a packet using the gateway hardware
 func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	if pkt == nil {
 		return fmt.Errorf("packet cannot be nil")
@@ -49,16 +48,13 @@ func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	cPkt.bandwidth = C.uint8_t(pkt.Bandwidth)
 	cPkt.coderate = C.uint8_t(0x01) // code rate 4/5
 	cPkt.invert_pol = C.bool(true)  // Downlinks are always reverse polarity.
-	cPkt.no_crc = C.bool(true)      // CRCs in uplinks onl
+	cPkt.no_crc = C.bool(true)      // CRCs in uplinks only.
 	cPkt.no_header = C.bool(false)
 	cPkt.size = C.uint16_t(pkt.Size)
 
 	// Copy payload
 	if len(pkt.Payload) > 0 {
 		for i, b := range pkt.Payload {
-			if i >= 256 { // Max payload size
-				break
-			}
 			cPkt.payload[i] = C.uint8_t(b)
 		}
 	}

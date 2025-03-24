@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-const int MAX_RX_PKT = 8;
+const int MAX_RX_PKT = 10;
 
 #define US_RADIO_0_FREQ     902700000
 #define US_RADIO_1_FREQ     903700000
@@ -94,7 +94,10 @@ int setUpGateway(int bus, int region) {
         return 3;
     }
 
-    // set config for intermediate frequency chains
+    // set config for intermediate frequency chains to listen for uplink messages.
+    // the if (intermediate frequency chain) is used to listen to different frequency channels within the band.
+    // the freq_hz field should be set as the difference from the main frequency ie if the rf chain is set to 902.7MHz,
+    // to get an if chain for frequency 902.5MHz, set freq_hz to -2 MHz.
     struct lgw_conf_rxif_s ifconf;
     memset(&ifconf, 0, sizeof(ifconf));
     ifconf.enable = true;
@@ -120,12 +123,16 @@ int setUpGateway(int bus, int region) {
     }
 
     // Configure TX gain settings
+    // Using the same values as basic station
     struct lgw_tx_gain_lut_s lut;
     struct lgw_tx_gain_s txGain[16];
 
-    uint8_t paGain[16] = {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1};
-    int8_t rf_power[16] = {12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27};
-    uint8_t pwr_idx[16] = {15,16,17,19,20,22,1,2,3,4,5,6,7,9,11,14};
+    // power amplifier gain, 0 means low power gain, 1 mean high power gain.
+    uint8_t paGain [16] =  {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1};
+    // rf power in dbm - represents all power levels the device can transmit at.
+    int8_t rf_power [16] = {12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27};
+    // maps the rf power levels to sx1302 chip specific power control registers.
+    uint8_t pwr_idx [16] = {15,16,17,19,20,22,1,2,3,4,5,6,7,9,11,14};
 
     for(int i = 0; i < 16; i++) {
         txGain[i].pa_gain = paGain[i];
@@ -143,6 +150,7 @@ int setUpGateway(int bus, int region) {
         return 6;
     }
 
+    // start the gateway.
     int res = lgw_start();
     if (res != LGW_HAL_SUCCESS) {
         return 7;

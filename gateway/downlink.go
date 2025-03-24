@@ -1,16 +1,5 @@
 package gateway
 
-/*
-#cgo CFLAGS: -I./sx1302/libloragw/inc -I./sx1302/libtools/inc
-#cgo LDFLAGS: -L./sx1302/libloragw -lloragw -L./sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
-
-#include "../sx1302/libloragw/inc/loragw_hal.h"
-#include "../hal/gateway.h"
-#include <stdlib.h>
-
-*/
-import "C"
-
 import (
 	"bytes"
 	"context"
@@ -19,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/viam-modules/gateway/hal"
+	lorahw "github.com/viam-modules/gateway/hal"
 	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -40,32 +29,11 @@ const (
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
-	// txPkt := C.struct_lgw_pkt_tx_s{
-	// 	freq_hz:     C.uint32_t(g.regionInfo.rx2Freq),
-	// 	freq_offset: C.int8_t(0),
-	// 	// tx_mode 0 is immediate, 1 for timestampted with count_us delay
-	// 	// doing immediate mode with sleep to exit on context cancelation.
-	// 	tx_mode:    C.uint8_t(0),
-	// 	rf_chain:   C.uint8_t(0),
-	// 	rf_power:   C.int8_t(26),    // tx power in dbm
-	// 	modulation: C.uint8_t(0x10), // LORA modulation
-	// 	bandwidth:  C.uint8_t(g.regionInfo.rx2Bandwidth),
-	// 	datarate:   C.uint32_t(rx2SF),
-	// 	coderate:   C.uint8_t(0x01), // code rate 4/5
-	// 	invert_pol: C.bool(true),    // Downlinks are always reverse polarity.
-	// 	size:       C.uint16_t(len(payload)),
-	// 	preamble:   C.uint16_t(8),
-	// 	no_crc:     C.bool(true), // CRCs in uplinks only
-	// 	no_header:  C.bool(false),
-	// }
+	if len(payload) > 255 {
+		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 255 bytes", len(payload))
+	}
 
-	// var cPayload [256]C.uchar
-	// for i, b := range payload {
-	// 	cPayload[i] = C.uchar(b)
-	// }
-	// txPkt.payload = cPayload
-
-	txPkt := &hal.TxPacket{
+	txPkt := &lorahw.TxPacket{
 		Freq:      uint32(g.regionInfo.rx2Freq),
 		Power:     26,
 		DataRate:  rx2SF,
@@ -84,7 +52,7 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("error sending downlink: %w", ctx.Err())
 	}
 
-	err := hal.SendPacket(ctx, txPkt)
+	err := lorahw.SendPacket(ctx, txPkt)
 	if err != nil {
 		return err
 	}
