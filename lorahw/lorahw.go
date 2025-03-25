@@ -18,8 +18,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unsafe"
+)
+
+// Error variables for gateway setup errors
+var (
+	errInvalidSpiBus          = errors.New("invalid SPI bus")
+	errBoardConfig            = errors.New("error setting the board config")
+	errUnknownRegion          = errors.New("unknown region")
+	errRadio0Config           = errors.New("error setting the radio frequency config for radio 0")
+	errRadio1Config           = errors.New("error setting the radio frequency config for radio 1")
+	errIntermediateFreqConfig = errors.New("error setting the intermediate frequency chain config")
+	errLoraStdChannel         = errors.New("error configuring the lora STD channel")
+	errTxGainSettings         = errors.New("error configuring the tx gain settings")
+	errGatewayStart           = errors.New("error starting the gateway")
 )
 
 // Region represents the frequency band region
@@ -108,7 +122,7 @@ type RxPacket struct {
 func SetupGateway(spiBus int, region Region) error {
 	errCode := C.setUpGateway(C.int(spiBus), C.int(region))
 	if errCode != 0 {
-		return fmt.Errorf("failed to set up gateway: %s", parseErrorCode(int(errCode)))
+		return fmt.Errorf("failed to set up gateway: %v", parseErrorCode(int(errCode)))
 	}
 	return nil
 }
@@ -175,23 +189,39 @@ func DisableBuffering() {
 	C.disableBuffering()
 }
 
-func parseErrorCode(errCode int) string {
+func parseErrorCode(errCode int) error {
 	switch errCode {
 	case 1:
-		return "error setting the board config"
+		return errInvalidSpiBus
 	case 2:
-		return "error setting the radio frequency config for radio 0"
+		return errBoardConfig
 	case 3:
-		return "error setting the radio frequency config for radio 1"
+		return errUnknownRegion
 	case 4:
-		return "error setting the intermediate frequency chain config"
+		return errRadio0Config
 	case 5:
-		return "error configuring the lora STD channel"
+		return errRadio1Config
 	case 6:
-		return "error configuring the tx gain settings"
+		return errIntermediateFreqConfig
 	case 7:
-		return "error starting the gateway"
+		return errLoraStdChannel
+	case 8:
+		return errTxGainSettings
+	case 9:
+		return errGatewayStart
 	default:
-		return "unknown error"
+		return errors.New("unknown error")
+	}
+}
+
+func GetRegion(region string) Region {
+	region = strings.ToUpper(region)
+	switch region {
+	case "US", "US915", "915":
+		return US
+	case "EU", "EU868", "868":
+		return EU
+	default:
+		return Unspecified
 	}
 }

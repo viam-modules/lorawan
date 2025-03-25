@@ -1,11 +1,5 @@
 package gateway
 
-import (
-	"strings"
-
-	"github.com/viam-modules/gateway/lorahw"
-)
-
 // struct to hold region specific gateway info.
 type regionInfo struct {
 	cfList       []byte
@@ -60,16 +54,4 @@ var regionInfoEU = regionInfo{
 	},
 	rx2Bandwidth: rx2BandwidthEU,
 	rx2Freq:      rx2FrequencyEU,
-}
-
-func getRegion(region string) lorahw.Region {
-	region = strings.ToUpper(region)
-	switch region {
-	case "US", "US915", "915":
-		return lorahw.US
-	case "EU", "EU868", "868":
-		return lorahw.EU
-	default:
-		return lorahw.Unspecified
-	}
 }

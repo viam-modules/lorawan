@@ -43,29 +43,37 @@ int setUpGateway(int bus, int region) {
     const char * com_path;
 
     switch(bus) {
+        case 0:
+            com_path = "/dev/spidev0.0";
+            break;
         case 1:
-            com_path = "/dev/spidev0.1";
+            com_path = "/dev/sspidev0.1";
             break;
         default:
-            com_path = "/dev/spidev0.0";
+            //error invalid spi bus
+            return 1;
     }
 
     strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
-        return 1;
+        return 2;
     }
 
     int radio0_freq;
     int radio1_freq;
     switch(region) {
+        case 1:
+            radio0_freq = US_RADIO_0_FREQ;
+            radio1_freq = US_RADIO_1_FREQ;
+            break;
         case 2:
             radio0_freq = EU_RADIO_0_FREQ;
             radio1_freq = EU_RADIO_1_FREQ;
             break;
         default:
-            radio0_freq = US_RADIO_0_FREQ;
-            radio1_freq = US_RADIO_1_FREQ;
+            // error unknown region
+            return 3;
     }
 
     // The rfConf configures the two RF chains the gateway HAT has.
@@ -86,12 +94,12 @@ int setUpGateway(int bus, int region) {
     rfconf.rssi_tcomp = tcomp;
 
     if (lgw_rxrf_setconf(0, &rfconf) != LGW_HAL_SUCCESS) {
-        return 2;
+        return 4;
     }
 
     rfconf.freq_hz = radio1_freq;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
-        return 3;
+        return 5;
     }
 
     // set config for intermediate frequency chains to listen for uplink messages.
@@ -105,7 +113,7 @@ int setUpGateway(int bus, int region) {
         ifconf.rf_chain = rfChains[i];
         ifconf.freq_hz = ifFrequencies[i];
         if (lgw_rxif_setconf(i, &ifconf) != LGW_HAL_SUCCESS) {
-            return 4;
+            return 6;
         }
     }
 
@@ -119,7 +127,7 @@ int setUpGateway(int bus, int region) {
     ifconf.implicit_payload_length = 17;
     ifconf.implicit_hdr = false;
     if (lgw_rxif_setconf(8, &ifconf) != LGW_HAL_SUCCESS) {
-        return 5;
+        return 7;
     }
 
     // Configure TX gain settings
@@ -147,13 +155,13 @@ int setUpGateway(int bus, int region) {
     lut.size = 16;
 
     if(lgw_txgain_setconf(0, &lut) != LGW_HAL_SUCCESS) {
-        return 6;
+        return 8;
     }
 
     // start the gateway.
     int res = lgw_start();
     if (res != LGW_HAL_SUCCESS) {
-        return 7;
+        return 9;
     }
     return 0;
 }
@@ -182,6 +190,7 @@ void disableBuffering() {
 void redirectToPipe(int fd) {
     // Mock implementation for testing - does nothing
 }
+
 #else
 void redirectToPipe(int fd) {
     fflush(stdout);          // Flush anything in the current stdout buffer

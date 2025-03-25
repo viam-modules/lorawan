@@ -141,7 +141,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
-		if getRegion(conf.Region) == lorahw.Unspecified {
+		if lorahw.GetRegion(conf.Region) == lorahw.Unspecified {
 			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
@@ -281,7 +281,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
-	region := getRegion(cfg.Region)
+	region := lorahw.GetRegion(cfg.Region)
 	switch region {
 	case lorahw.US, lorahw.Unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
