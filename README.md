@@ -44,7 +44,7 @@ Example gateway configuration:
     "spi_bus": 0,
     "reset_pin": int,
     "power_en_pin": int,
-    "region": "US915"
+    "region_code": "US915"
 }
 ```
 
@@ -75,7 +75,7 @@ Example gateway configuration - note - the gpio pins MUST be set to the gpio pin
     "spi_bus": 0,
     "reset_pin": int,
     "power_en_pin": int,
-    "region": "US915"
+    "region_code": "US915"
 }
 ```
 
@@ -103,7 +103,7 @@ Example gateway configuration:
 {
     "board": "rpi",
     "spi_bus": 0,
-    "region": "US915"
+    "region_code": "US915"
 }
 ```
 
