@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -24,6 +25,8 @@ const (
 	Confirmed   uplinkType = "confirmed"
 )
 
+var errInvalidLength = errors.New("unexpected payload length")
+
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
@@ -31,6 +34,10 @@ const (
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
 	string, map[string]interface{}, error,
 ) {
+	if len(phyPayload) < 13 {
+		return "", map[string]interface{}{}, errInvalidLength
+	}
+
 	devAddr := phyPayload[1:5]
 
 	// need to reserve the bytes since payload is in LE.
@@ -55,6 +62,11 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// the last 4 bits is the fopts length
 	fctrl := phyPayload[5]
 	foptsLength := fctrl & 0x0F
+
+	if len(phyPayload) < 8+int(foptsLength) {
+		return "", map[string]interface{}{}, errInvalidLength
+	}
+
 	fopts := phyPayload[8 : 8+foptsLength]
 
 	// get the supported requests from fopts.

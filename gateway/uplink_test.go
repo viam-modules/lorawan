@@ -134,6 +134,25 @@ func TestParseDataUplink(t *testing.T) {
 	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldBeNil)
 
+	// Test invalid length
+	_, _, err = g.parseDataUplink(context.Background(), []byte{0x00, 0x00}, time.Now(), 0, 0)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, errInvalidLength)
+
+	// Test invalid fopts length
+	validPayload = validPayload[:len(validPayload)-13]
+	validPayload[5] = 0x88 // expected fopts length is 8 bytes, but whole payload only 14 bytes
+	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, errInvalidLength)
+
+	// Test no frame payload
+	noFramePayload, err := createUplinkData(testDeviceAddr, []byte{})
+	test.That(t, err, test.ShouldBeNil)
+	_, _, err = g.parseDataUplink(context.Background(), noFramePayload, time.Now(), 0, 0)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "sent packet with no data")
+
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
 }
