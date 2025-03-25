@@ -13,8 +13,10 @@ package lorahw
 
 */
 import "C"
+
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"unsafe"
@@ -24,7 +26,7 @@ import (
 type Region int
 
 const (
-	// unspecified represents an unspecified region
+	// Unspecified represents an unspecified region
 	Unspecified Region = iota
 	// US represents the US915 frequency band
 	US
@@ -32,9 +34,10 @@ const (
 	EU
 )
 
+// SendPacket sends a lora packet using the sx1302 concentrator
 func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	if pkt == nil {
-		return fmt.Errorf("packet cannot be nil")
+		return errors.New("packet cannot be nil")
 	}
 
 	// Convert Go packet to C packet
@@ -93,7 +96,7 @@ type TxPacket struct {
 // MaxRxPackets is the maximum number of packets that can be received in one call
 var MaxRxPackets = int(C.MAX_RX_PKT)
 
-// Packet represents a received LoRa packet
+// RxPacket represents a received LoRa packet
 type RxPacket struct {
 	Size     uint
 	Payload  []byte
@@ -114,7 +117,7 @@ func SetupGateway(spiBus int, region Region) error {
 func StopGateway() error {
 	errCode := C.stopGateway()
 	if errCode != 0 {
-		return fmt.Errorf("error stopping gateway")
+		return errors.New("error stopping gateway")
 	}
 	return nil
 }
@@ -123,13 +126,13 @@ func StopGateway() error {
 func ReceivePackets() ([]RxPacket, error) {
 	p := C.createRxPacketArray()
 	if p == nil {
-		return nil, fmt.Errorf("failed to create receive packet array")
+		return nil, errors.New("failed to create rx packet array")
 	}
 	defer C.free(unsafe.Pointer(p))
 
 	numPackets := int(C.receive(p))
 	if numPackets == -1 {
-		return nil, fmt.Errorf("error receiving packets")
+		return nil, errors.New("error receiving packets")
 	}
 	if numPackets == 0 {
 		return nil, nil
@@ -139,7 +142,7 @@ func ReceivePackets() ([]RxPacket, error) {
 	packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), MaxRxPackets)
 	var result []RxPacket
 
-	for i := 0; i < numPackets; i++ {
+	for i := range numPackets {
 		if packets[i].size == 0 {
 			continue
 		}

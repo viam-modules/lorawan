@@ -3,15 +3,15 @@ package gateway
 import (
 	"strings"
 
-	lorahw "github.com/viam-modules/gateway/hal"
+	"github.com/viam-modules/gateway/lorahw"
 )
 
 // struct to hold region specific gateway info.
 type regionInfo struct {
 	cfList       []byte
 	dlSettings   byte
-	rx2Freq      int
-	rx2Bandwidth int
+	rx2Freq      uint32
+	rx2Bandwidth uint8
 }
 
 // regionInfoUS defines the region specific parameters for the US915 band.

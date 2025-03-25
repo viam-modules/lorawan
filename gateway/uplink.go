@@ -86,7 +86,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	}
 
 	if downlinkPayload != nil || len(requests) > 0 || sendAck {
-		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint32 {
+		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint16 {
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {

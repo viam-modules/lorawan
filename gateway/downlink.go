@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	lorahw "github.com/viam-modules/gateway/hal"
+	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -34,10 +34,10 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	}
 
 	txPkt := &lorahw.TxPacket{
-		Freq:      uint32(g.regionInfo.rx2Freq),
+		Freq:      g.regionInfo.rx2Freq,
 		Power:     26,
 		DataRate:  rx2SF,
-		Bandwidth: uint8(g.regionInfo.rx2Bandwidth),
+		Bandwidth: g.regionInfo.rx2Bandwidth,
 		Size:      uint(len(payload)),
 		Payload:   payload,
 	}
@@ -91,7 +91,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
-// | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |
+// | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
 func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []byte, sendAck bool, snr float64, sf int) (
 	[]byte, error,
 ) {
@@ -139,7 +139,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
-	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
+	binary.LittleEndian.PutUint16(fCntBytes, device.FCntDown+1)
 	payload = append(payload, fCntBytes...)
 
 	payload = append(payload, fopts...)
@@ -151,7 +151,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 		}
 		payload = append(payload, device.FPort)
 		encrypted, err := crypto.EncryptDownlink(
-			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
+			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown)+1, framePayload)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +159,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 	}
 
 	mic, err := crypto.ComputeLegacyDownlinkMIC(
-		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
+		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown)+1, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,9 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 }
 
 // Helper function to calculate the downlink freq to be used for RX1.
-// Not currently being used
+// Not currently being used.
+//
+//nolint:unused
 func findDownLinkFreq(uplinkFreq int) int {
 	// channel number between 0-64
 	upLinkFreqNum := (uplinkFreq - 902300000) / 200000

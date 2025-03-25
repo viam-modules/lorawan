@@ -185,7 +185,7 @@ type Node struct {
 	JoinType      string
 	reconfigureMu sync.Mutex
 
-	FCntDown  uint32
+	FCntDown  uint16
 	FPort     byte     // for downlinks, only required when frame payload exists.
 	Downlinks [][]byte // list of downlink frame payloads to send
 }

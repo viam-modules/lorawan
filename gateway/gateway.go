@@ -17,8 +17,7 @@ import (
 	"sync"
 	"time"
 
-	lorahw "github.com/viam-modules/gateway/hal"
-
+	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
@@ -28,29 +27,28 @@ import (
 	"go.viam.com/utils"
 )
 
-// defining model names here to be reused in getNativeConfig
+// defining model names here to be reused in getNativeConfig.
 const (
 	oldModelName = "sx1302-gateway"
 	genericHat   = "sx1302-hat-generic"
 	waveshareHat = "sx1302-waveshare-hat"
 )
 
-// Error variables for validation and operations
+// Error variables for validation and operations.
 var (
-	// Config validation errors
+	// Config validation errors.
 	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
 
-	// Gateway operation errors
+	// Gateway operation errors.
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
 	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
 	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
 	errNoDevice           = errors.New("received packet from unknown device")
 	errInvalidMIC         = errors.New("invalid MIC")
-	errSendJoinAccept     = errors.New("failed to send join accept packet")
 	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
 )
 
-// constants for MHDRs of different message types/
+// constants for MHDRs of different message types/.
 const (
 	joinRequestMHdr         = 0x00
 	joinAcceptMHdr          = 0x20
@@ -67,8 +65,6 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
-
-const sendDownlinkKey = "senddown"
 
 // Define the map of SF to minimum SNR values in dB.
 // Any packet received below the minimum demodulation value will not be parsed.
@@ -89,7 +85,7 @@ var loggingRoutineStarted = make(map[string]bool)
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
 
-// Config describes the configuration of the gateway
+// Config describes the configuration of the gateway.
 type Config struct {
 	Bus       int    `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
@@ -105,7 +101,7 @@ type deviceInfo struct {
 	DevAddr  string  `json:"dev_addr"`
 	AppSKey  string  `json:"app_skey"`
 	NwkSKey  string  `json:"nwk_skey"`
-	FCntDown *uint32 `json:"fcnt_down"`
+	FCntDown *uint16 `json:"fcnt_down"`
 }
 
 func init() {
@@ -180,7 +176,7 @@ type gateway struct {
 	regionInfo regionInfo
 }
 
-// NewGateway creates a new gateway
+// NewGateway creates a new gateway.
 func NewGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -196,7 +192,8 @@ func NewGateway(
 	// Create or open the file used to save device data across restarts.
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+	//nolint:gosec
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -238,10 +235,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
-		err := g.reset(ctx)
-		if err != nil {
-			return err
-		}
+		g.reset(ctx)
 	}
 
 	cfg, err := getNativeConfig(conf)
@@ -304,27 +298,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.started = true
 	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
 	return nil
-}
-
-func parseErrorCode(errCode int) string {
-	switch errCode {
-	case 1:
-		return "error setting the board config"
-	case 2:
-		return "error setting the radio frequency config for radio 0"
-	case 3:
-		return "error setting the radio frequency config for radio 1"
-	case 4:
-		return "error setting the intermediate frequency chain config"
-	case 5:
-		return "error configuring the lora STD channel"
-	case 6:
-		return "error configuring the tx gain settings"
-	case 7:
-		return "error starting the gateway"
-	default:
-		return "unknown error"
-	}
 }
 
 // startCLogging starts the goroutine to capture C logs into the logger.
@@ -615,7 +588,7 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	device.NwkSKey = nwksKey
 
 	// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
-	device.FCntDown = math.MaxUint32
+	device.FCntDown = math.MaxUint16
 	if d.FCntDown != nil {
 		device.FCntDown = *d.FCntDown
 	}
@@ -709,10 +682,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	err := g.reset(ctx)
-	if err != nil {
-		return err
-	}
+	g.reset(ctx)
 
 	if g.loggingWorker != nil {
 		if g.logReader != nil {
@@ -738,7 +708,7 @@ func (g *gateway) Close(ctx context.Context) error {
 	return nil
 }
 
-func (g *gateway) reset(ctx context.Context) error {
+func (g *gateway) reset(ctx context.Context) {
 	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if g.receivingWorker != nil {
 		g.receivingWorker.Stop()
@@ -753,7 +723,6 @@ func (g *gateway) reset(ctx context.Context) error {
 		}
 	}
 	g.started = false
-	return nil
 }
 
 // Readings returns all the node's readings.

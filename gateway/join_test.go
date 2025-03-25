@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	lorahw "github.com/viam-modules/gateway/hal"
+	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -48,7 +48,8 @@ func TestReverseByteArray(t *testing.T) {
 
 // test that random dev addr is 4 bytes and 7 msb is network id.
 func TestGenerateDevAddr(t *testing.T) {
-	addr := generateDevAddr()
+	addr, err := generateDevAddr()
+	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(addr), test.ShouldEqual, 4)
 	test.That(t, addr[0], test.ShouldEqual, netID[0])
 	test.That(t, addr[1], test.ShouldEqual, netID[1])
@@ -56,7 +57,8 @@ func TestGenerateDevAddr(t *testing.T) {
 
 // test that random join nonce is 3 bytes long.
 func TestGenerateJoinNonce(t *testing.T) {
-	nonce := generateJoinNonce()
+	nonce, err := generateJoinNonce()
+	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(nonce), test.ShouldEqual, 3)
 }
 
