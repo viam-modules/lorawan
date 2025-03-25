@@ -191,6 +191,10 @@ void redirectToPipe(int fd) {
     // Mock implementation for testing - does nothing
 }
 
+int send(struct lgw_pkt_tx_s* packet) {
+   // testing
+}
+
 #else
 void redirectToPipe(int fd) {
     fflush(stdout);          // Flush anything in the current stdout buffer

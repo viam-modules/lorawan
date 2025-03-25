@@ -163,11 +163,12 @@ func TestSetupAndStopGateway(t *testing.T) {
 	// Test invalid region
 	err := SetupGateway(0, Unspecified)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldBeError, errInvalidSpiBus)
+	test.That(t, Error.Is(), errUnknownRegion)
 
 	// Test invalid SPI bus
 	err = SetupGateway(999, US)
 	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, errInvalidSpiBus)
 
 	// Test stop gateway when not started
 	err = StopGateway()

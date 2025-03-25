@@ -122,7 +122,7 @@ type RxPacket struct {
 func SetupGateway(spiBus int, region Region) error {
 	errCode := C.setUpGateway(C.int(spiBus), C.int(region))
 	if errCode != 0 {
-		return fmt.Errorf("failed to set up gateway: %v", parseErrorCode(int(errCode)))
+		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
 	}
 	return nil
 }
@@ -214,6 +214,7 @@ func parseErrorCode(errCode int) error {
 	}
 }
 
+// GetRegion returns the region.
 func GetRegion(region string) Region {
 	region = strings.ToUpper(region)
 	switch region {
