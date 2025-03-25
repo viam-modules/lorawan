@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -137,14 +138,14 @@ func TestParseDataUplink(t *testing.T) {
 	// Test invalid length
 	_, _, err = g.parseDataUplink(context.Background(), []byte{0x00, 0x00}, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldBeError, errInvalidLength)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "unexpected payload length, payload should be at least 13 bytes")
 
 	// Test invalid fopts length
 	validPayload = validPayload[:len(validPayload)-13]
 	validPayload[5] = 0x88 // expected fopts length is 8 bytes, but whole payload only 14 bytes
 	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldBeError, errInvalidLength)
+	test.That(t, errors.Is(err, errInvalidLength), test.ShouldBeTrue)
 
 	// Test no frame payload
 	noFramePayload, err := createUplinkData(testDeviceAddr, []byte{})

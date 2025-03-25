@@ -34,8 +34,9 @@ var errInvalidLength = errors.New("unexpected payload length")
 func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
 	string, map[string]interface{}, error,
 ) {
+	// payload should be at least 13 bytes
 	if len(phyPayload) < 13 {
-		return "", map[string]interface{}{}, errInvalidLength
+		return "", map[string]interface{}{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
 	}
 
 	devAddr := phyPayload[1:5]
@@ -64,7 +65,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	foptsLength := fctrl & 0x0F
 
 	if len(phyPayload) < 8+int(foptsLength) {
-		return "", map[string]interface{}{}, errInvalidLength
+		return "", map[string]interface{}{}, fmt.Errorf("%w, got fopts length of %d but don't have enough bytes", errInvalidLength, foptsLength)
 	}
 
 	fopts := phyPayload[8 : 8+foptsLength]
