@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -199,18 +198,5 @@ func parseErrorCode(errCode int) error {
 		return errGatewayStart
 	default:
 		return errors.New("unknown error")
-	}
-}
-
-// GetRegion returns the region.
-func GetRegion(region string) regions.Region {
-	region = strings.ToUpper(region)
-	switch region {
-	case "US", "US915", "915":
-		return regions.US
-	case "EU", "EU868", "868":
-		return regions.EU
-	default:
-		return regions.Unspecified
 	}
 }
