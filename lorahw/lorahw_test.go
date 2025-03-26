@@ -5,69 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/test"
 )
-
-func TestGetRegion(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected Region
-	}{
-		{
-			name:     "US region full name",
-			input:    "US915",
-			expected: US,
-		},
-		{
-			name:     "US region short name",
-			input:    "US",
-			expected: US,
-		},
-		{
-			name:     "US region frequency only",
-			input:    "915",
-			expected: US,
-		},
-		{
-			name:     "EU region full name",
-			input:    "EU868",
-			expected: EU,
-		},
-		{
-			name:     "EU region short name",
-			input:    "EU",
-			expected: EU,
-		},
-		{
-			name:     "EU region frequency only",
-			input:    "868",
-			expected: EU,
-		},
-		{
-			name:     "lowercase input",
-			input:    "eu868",
-			expected: EU,
-		},
-		{
-			name:     "invalid region",
-			input:    "INVALID",
-			expected: Unspecified,
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: Unspecified,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := GetRegion(tt.input)
-			test.That(t, result, test.ShouldEqual, tt.expected)
-		})
-	}
-}
 
 func TestParseErrorCode(t *testing.T) {
 	tests := []struct {
@@ -158,15 +98,15 @@ func TestReceivePackets(t *testing.T) {
 
 func TestSetupGateway(t *testing.T) {
 	// Test successful case
-	err := SetupGateway(1, US)
+	err := SetupGateway(1, regions.US)
 	test.That(t, err, test.ShouldBeNil)
 
 	// unspecifed region will not error
-	err = SetupGateway(1, Unspecified)
+	err = SetupGateway(1, regions.Unspecified)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test invalid SPI bus
-	err = SetupGateway(999, US)
+	err = SetupGateway(999, regions.US)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, errors.Is(err, errInvalidSpiBus), test.ShouldBeTrue)
 }

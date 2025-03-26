@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -147,7 +147,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 		file            *os.File
 		checkFile       bool // whether to check file contents after test
 		expectedFileLen int
-		region          lorahw.Region
+		region          regions.Region
 	}{
 		{
 			name: "Device sending initial join reuqest should generate valid join accept, get OTAA fields populated, and added to file",
@@ -162,7 +162,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
-			region:          lorahw.US,
+			region:          regions.US,
 		},
 		{
 			name: "Same device joining again should generate JA, get OTAA fields repopulated, and info replaced in file",
@@ -177,7 +177,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
-			region:          lorahw.US,
+			region:          regions.US,
 		},
 		{
 			name: "New device joining should generate JA, get OTTAA fields popualated, and appended to file",
@@ -192,7 +192,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			file:            testFile,
 			expectedFileLen: 2,
 			checkFile:       true,
-			region:          lorahw.EU,
+			region:          regions.US,
 		},
 		{
 			name: "If writing to the file errors, should still return valid JA",
@@ -206,7 +206,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			},
 			file:      nil,
 			checkFile: false,
-			region:    lorahw.EU,
+			region:    regions.US,
 		},
 	}
 
@@ -226,10 +226,10 @@ func TestGenerateJoinAccept(t *testing.T) {
 			}
 
 			switch tt.region {
-			case lorahw.US:
-				g.regionInfo = regionInfoUS
-			case lorahw.EU:
-				g.regionInfo = regionInfoEU
+			case regions.US:
+				g.regionInfo = regions.RegionInfoUS
+			case regions.EU:
+				g.regionInfo = regions.RegionInfoEU
 			}
 
 			joinAccept, err := g.generateJoinAccept(ctx, tt.joinRequest, tt.device)
@@ -246,9 +246,9 @@ func TestGenerateJoinAccept(t *testing.T) {
 			test.That(t, err, test.ShouldBeNil)
 			test.That(t, decrypted[3:6], test.ShouldResemble, reverseByteArray(netID))
 			test.That(t, decrypted[6:10], test.ShouldResemble, reverseByteArray(tt.device.Addr))
-			test.That(t, decrypted[10], test.ShouldEqual, g.regionInfo.dlSettings)
+			test.That(t, decrypted[10], test.ShouldEqual, g.regionInfo.DlSettings)
 			test.That(t, decrypted[11], test.ShouldEqual, 0x01) // rx delay
-			test.That(t, decrypted[12:28], test.ShouldResemble, g.regionInfo.cfList)
+			test.That(t, decrypted[12:28], test.ShouldResemble, g.regionInfo.CfList)
 
 			if tt.checkFile {
 				devices, err := readFromFile(g.dataFile)

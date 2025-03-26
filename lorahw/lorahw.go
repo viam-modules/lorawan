@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/viam-modules/gateway/regions"
 )
 
 // Error variables for gateway setup errors
@@ -33,18 +35,6 @@ var (
 	errLoraStdChannel         = errors.New("error configuring the lora STD channel")
 	errTxGainSettings         = errors.New("error configuring the tx gain settings")
 	errGatewayStart           = errors.New("error starting the gateway")
-)
-
-// Region represents the frequency band region
-type Region int
-
-const (
-	// Unspecified represents an unspecified region
-	Unspecified Region = iota
-	// US represents the US915 frequency band
-	US
-	// EU represents the EU868 frequency band
-	EU
 )
 
 // SendPacket sends a lora packet using the sx1302 concentrator
@@ -119,7 +109,7 @@ type RxPacket struct {
 }
 
 // SetupGateway initializes the gateway hardware
-func SetupGateway(spiBus int, region Region) error {
+func SetupGateway(spiBus int, region regions.Region) error {
 	errCode := C.set_up_gateway(C.int(spiBus), C.int(region))
 	if errCode != 0 {
 		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
@@ -213,14 +203,14 @@ func parseErrorCode(errCode int) error {
 }
 
 // GetRegion returns the region.
-func GetRegion(region string) Region {
+func GetRegion(region string) regions.Region {
 	region = strings.ToUpper(region)
 	switch region {
 	case "US", "US915", "915":
-		return US
+		return regions.US
 	case "EU", "EU868", "868":
-		return EU
+		return regions.EU
 	default:
-		return Unspecified
+		return regions.Unspecified
 	}
 }

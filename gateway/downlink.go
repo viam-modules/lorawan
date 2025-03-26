@@ -34,9 +34,9 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	}
 
 	txPkt := &lorahw.TxPacket{
-		Freq:      g.regionInfo.rx2Freq,
+		Freq:      g.regionInfo.Rx2Freq,
 		DataRate:  rx2SF,
-		Bandwidth: g.regionInfo.rx2Bandwidth,
+		Bandwidth: g.regionInfo.Rx2Bandwidth,
 		Size:      uint(len(payload)),
 		Payload:   payload,
 	}

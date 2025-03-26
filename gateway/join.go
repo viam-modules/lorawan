@@ -132,10 +132,10 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Bit 7: OptNeg (0)
 	// Bits 6-4: RX1DROffset
 	// Bits 3-0: RX2DR
-	payload = append(payload, g.regionInfo.dlSettings)
+	payload = append(payload, g.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
-	payload = append(payload, g.regionInfo.cfList...)
+	payload = append(payload, g.regionInfo.CfList...)
 
 	// generate MIC
 	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)

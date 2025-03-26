@@ -20,6 +20,7 @@ import (
 
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -142,7 +143,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
-		if lorahw.GetRegion(conf.Region) == lorahw.Unspecified {
+		if regions.GetRegion(conf.Region) == regions.Unspecified {
 			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
@@ -174,7 +175,7 @@ type gateway struct {
 	logWriter  *os.File
 	dataFile   *os.File
 	dataMu     sync.Mutex
-	regionInfo regionInfo
+	regionInfo regions.RegionInfo
 }
 
 // NewGateway creates a new gateway.
@@ -282,14 +283,14 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
-	region := lorahw.GetRegion(cfg.Region)
+	region := regions.GetRegion(cfg.Region)
 	switch region {
-	case lorahw.US, lorahw.Unspecified:
+	case regions.US, regions.Unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
-		g.regionInfo = regionInfoUS
-	case lorahw.EU:
+		g.regionInfo = regions.RegionInfoUS
+	case regions.EU:
 		g.logger.Infof("configuring gateway for EU868 band")
-		g.regionInfo = regionInfoEU
+		g.regionInfo = regions.RegionInfoEU
 	}
 
 	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
