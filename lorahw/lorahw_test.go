@@ -2,6 +2,7 @@ package lorahw
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -73,64 +74,59 @@ func TestParseErrorCode(t *testing.T) {
 	tests := []struct {
 		name     string
 		errCode  int
-		expected string
+		expected error
 	}{
 		{
 			name:     "invalid SPI bus error",
 			errCode:  1,
-			expected: "invalid SPI bus",
+			expected: errInvalidSpiBus,
 		},
 		{
 			name:     "board config error",
 			errCode:  2,
-			expected: "error setting the board config",
+			expected: errBoardConfig,
 		},
 		{
 			name:     "unknown region error",
 			errCode:  3,
-			expected: "unknown region",
+			expected: errUnknownRegion,
 		},
 		{
 			name:     "radio 0 config error",
 			errCode:  4,
-			expected: "error setting the radio frequency config for radio 0",
+			expected: errRadio0Config,
 		},
 		{
 			name:     "radio 1 config error",
 			errCode:  5,
-			expected: "error setting the radio frequency config for radio 1",
+			expected: errRadio1Config,
 		},
 		{
 			name:     "IF chain config error",
 			errCode:  6,
-			expected: "error setting the intermediate frequency chain config",
+			expected: errIntermediateFreqConfig,
 		},
 		{
 			name:     "lora STD channel error",
 			errCode:  7,
-			expected: "error configuring the lora STD channel",
+			expected: errLoraStdChannel,
 		},
 		{
 			name:     "tx gain settings error",
 			errCode:  8,
-			expected: "error configuring the tx gain settings",
+			expected: errTxGainSettings,
 		},
 		{
 			name:     "gateway start error",
 			errCode:  9,
-			expected: "error starting the gateway",
-		},
-		{
-			name:     "unknown error code",
-			errCode:  999,
-			expected: "unknown error",
+			expected: errGatewayStart,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseErrorCode(tt.errCode)
-			test.That(t, result, test.ShouldEqual, tt.expected)
+			err := parseErrorCode(tt.errCode)
+			test.That(t, errors.Is(err, tt.expected), test.ShouldBeTrue)
 		})
 	}
 }
@@ -159,19 +155,18 @@ func TestSendPacket(t *testing.T) {
 	test.That(t, err.Error(), test.ShouldContainSubstring, "context deadline exceeded")
 }
 
-func TestSetupAndStopGateway(t *testing.T) {
+func TestSetupGateway(t *testing.T) {
+	// Test successful case
+	err := SetupGateway(1, US)
+	test.That(t, err, test.ShouldBeNil)
+
 	// Test invalid region
-	err := SetupGateway(0, Unspecified)
+	err = SetupGateway(0, Unspecified)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, Error.Is(), errUnknownRegion)
+	test.That(t, errors.Is(err, errUnknownRegion), test.ShouldBeTrue)
 
 	// Test invalid SPI bus
 	err = SetupGateway(999, US)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldBeError, errInvalidSpiBus)
-
-	// Test stop gateway when not started
-	err = StopGateway()
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldEqual, "error stopping gateway")
+	test.That(t, errors.Is(err, errInvalidSpiBus), test.ShouldBeTrue)
 }

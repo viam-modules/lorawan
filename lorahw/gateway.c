@@ -159,7 +159,7 @@ int setUpGateway(int bus, int region) {
     }
 
     // start the gateway.
-    int res = lgw_start();
+    int res = startGateway();
     if (res != LGW_HAL_SUCCESS) {
         return 9;
     }
@@ -177,11 +177,6 @@ struct lgw_pkt_rx_s* createRxPacketArray() {
 int receive(struct lgw_pkt_rx_s* packet) {
     return lgw_receive(MAX_RX_PKT, packet);
 }
-
-int send(struct lgw_pkt_tx_s* packet) {
-    return lgw_send(packet);
-}
-
 void disableBuffering() {
     setbuf(stdout, NULL);
 }
@@ -192,7 +187,13 @@ void redirectToPipe(int fd) {
 }
 
 int send(struct lgw_pkt_tx_s* packet) {
-   // testing
+    // for testing, return no error
+    return 0;
+}
+
+int startGateway() {
+    // for testing, return no error
+    return 0;
 }
 
 #else
@@ -200,4 +201,13 @@ void redirectToPipe(int fd) {
     fflush(stdout);          // Flush anything in the current stdout buffer
     dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
 }
+
+int send(struct lgw_pkt_tx_s* packet) {
+    return lgw_send(packet);
+}
+
+int startGateway() {
+    return lgw_start();
+}
+
 #endif
