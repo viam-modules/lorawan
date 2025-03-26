@@ -50,6 +50,10 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime tim
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
 func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
+	// join request should always contain 23 bytes, if not something went wrong.
+	if len(payload) != 23 {
+		return joinRequest{}, nil, errInvalidLength
+	}
 	var joinRequest joinRequest
 
 	// everything in the join request payload is little endian

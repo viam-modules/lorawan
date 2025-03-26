@@ -129,6 +129,11 @@ func TestParseJoinRequestPacket(t *testing.T) {
 	_, _, err = g.parseJoinRequestPacket(unknownPayload)
 	test.That(t, err, test.ShouldEqual, errNoDevice)
 
+	// Test invalid length
+	_, _, err = g.parseJoinRequestPacket([]byte{0x00, 0x00})
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, errInvalidLength)
+
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
 }
