@@ -27,7 +27,6 @@ import (
 var (
 	errInvalidSpiBus          = errors.New("invalid SPI bus")
 	errBoardConfig            = errors.New("error setting the board config")
-	errUnknownRegion          = errors.New("unknown region")
 	errRadio0Config           = errors.New("error setting the radio frequency config for radio 0")
 	errRadio1Config           = errors.New("error setting the radio frequency config for radio 1")
 	errIntermediateFreqConfig = errors.New("error setting the intermediate frequency chain config")
@@ -197,18 +196,16 @@ func parseErrorCode(errCode int) error {
 	case 2:
 		return errBoardConfig
 	case 3:
-		return errUnknownRegion
-	case 4:
 		return errRadio0Config
-	case 5:
+	case 4:
 		return errRadio1Config
-	case 6:
+	case 5:
 		return errIntermediateFreqConfig
-	case 7:
+	case 6:
 		return errLoraStdChannel
-	case 8:
+	case 7:
 		return errTxGainSettings
-	case 9:
+	case 8:
 		return errGatewayStart
 	default:
 		return errors.New("unknown error")

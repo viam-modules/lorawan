@@ -63,17 +63,14 @@ int set_up_gateway(int bus, int region) {
     int radio0_freq;
     int radio1_freq;
     switch(region) {
-        case 1:
-            radio0_freq = US_RADIO_0_FREQ;
-            radio1_freq = US_RADIO_1_FREQ;
-            break;
         case 2:
             radio0_freq = EU_RADIO_0_FREQ;
             radio1_freq = EU_RADIO_1_FREQ;
             break;
         default:
-            // error unknown region
-            return 3;
+            radio0_freq = US_RADIO_0_FREQ;
+            radio1_freq = US_RADIO_1_FREQ;
+            break;
     }
 
     // The rfConf configures the two RF chains the gateway HAT has.
@@ -94,12 +91,12 @@ int set_up_gateway(int bus, int region) {
     rfconf.rssi_tcomp = tcomp;
 
     if (lgw_rxrf_setconf(0, &rfconf) != LGW_HAL_SUCCESS) {
-        return 4;
+        return 3;
     }
 
     rfconf.freq_hz = radio1_freq;
     if (lgw_rxrf_setconf(1, &rfconf) != LGW_HAL_SUCCESS) {
-        return 5;
+        return 4;
     }
 
     // set config for intermediate frequency chains to listen for uplink messages.
@@ -113,7 +110,7 @@ int set_up_gateway(int bus, int region) {
         ifconf.rf_chain = rfChains[i];
         ifconf.freq_hz = ifFrequencies[i];
         if (lgw_rxif_setconf(i, &ifconf) != LGW_HAL_SUCCESS) {
-            return 6;
+            return 5;
         }
     }
 
@@ -127,7 +124,7 @@ int set_up_gateway(int bus, int region) {
     ifconf.implicit_payload_length = 17;
     ifconf.implicit_hdr = false;
     if (lgw_rxif_setconf(8, &ifconf) != LGW_HAL_SUCCESS) {
-        return 7;
+        return 6;
     }
 
     // Configure TX gain settings
@@ -155,13 +152,13 @@ int set_up_gateway(int bus, int region) {
     lut.size = 16;
 
     if(lgw_txgain_setconf(0, &lut) != LGW_HAL_SUCCESS) {
-        return 8;
+        return 7;
     }
 
     // start the gateway.
     int res = start_gateway();
     if (res != LGW_HAL_SUCCESS) {
-        return 9;
+        return 8;
     }
     return 0;
 }

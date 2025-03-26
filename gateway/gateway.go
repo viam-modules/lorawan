@@ -420,7 +420,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("couldn't handle join request: %w", err)
+			g.logger.Errorf("couldn't handle join request: %v", err)
 		}
 	case unconfirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
@@ -429,7 +429,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("error parsing uplink message: %w", err)
+			g.logger.Errorf("error parsing uplink message: %v", err)
 			return
 		}
 		g.updateReadings(name, readings)
@@ -440,7 +440,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("error parsing uplink message: %w", err)
+			g.logger.Errorf("error parsing uplink message: %v", err)
 			return
 		}
 		g.updateReadings(name, readings)

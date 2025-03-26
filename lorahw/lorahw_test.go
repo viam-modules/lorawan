@@ -86,38 +86,33 @@ func TestParseErrorCode(t *testing.T) {
 			expected: errBoardConfig,
 		},
 		{
-			name:     "unknown region error",
-			errCode:  3,
-			expected: errUnknownRegion,
-		},
-		{
 			name:     "radio 0 config error",
-			errCode:  4,
+			errCode:  3,
 			expected: errRadio0Config,
 		},
 		{
 			name:     "radio 1 config error",
-			errCode:  5,
+			errCode:  4,
 			expected: errRadio1Config,
 		},
 		{
 			name:     "IF chain config error",
-			errCode:  6,
+			errCode:  5,
 			expected: errIntermediateFreqConfig,
 		},
 		{
 			name:     "lora STD channel error",
-			errCode:  7,
+			errCode:  6,
 			expected: errLoraStdChannel,
 		},
 		{
 			name:     "tx gain settings error",
-			errCode:  8,
+			errCode:  7,
 			expected: errTxGainSettings,
 		},
 		{
 			name:     "gateway start error",
-			errCode:  9,
+			errCode:  8,
 			expected: errGatewayStart,
 		},
 	}
@@ -166,10 +161,9 @@ func TestSetupGateway(t *testing.T) {
 	err := SetupGateway(1, US)
 	test.That(t, err, test.ShouldBeNil)
 
-	// Test invalid region
-	err = SetupGateway(0, Unspecified)
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, errors.Is(err, errUnknownRegion), test.ShouldBeTrue)
+	// unspecifed region will not error
+	err = SetupGateway(1, Unspecified)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Test invalid SPI bus
 	err = SetupGateway(999, US)
