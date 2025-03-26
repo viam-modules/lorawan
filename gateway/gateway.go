@@ -399,7 +399,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			if isDuplicate {
 				continue
 			}
-			minSNR := sfToSNRMin[int(packet.DataRate)]
+			minSNR := sfToSNRMin[packet.DataRate]
 			if float64(packet.SNR) < minSNR {
 				g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
 				continue
