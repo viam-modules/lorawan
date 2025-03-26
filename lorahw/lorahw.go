@@ -57,10 +57,12 @@ func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	// Convert Go packet to C packet
 	var cPkt C.struct_lgw_pkt_tx_s
 	cPkt.freq_hz = C.uint32_t(pkt.Freq)
+	// tx_mode 0 is immediate, 1 for timestampted with count_us delay
+	// doing immediate mode with sleep to exit on context cancelation.
 	cPkt.tx_mode = C.uint8_t(0)
 	cPkt.rf_chain = C.uint8_t(0)
-	cPkt.rf_power = C.int8_t(pkt.Power)
-	cPkt.modulation = C.uint8_t(0x10)
+	cPkt.rf_power = C.int8_t(26)      // in dbm
+	cPkt.modulation = C.uint8_t(0x10) // LoRa moduleation
 	cPkt.datarate = C.uint32_t(pkt.DataRate)
 	cPkt.bandwidth = C.uint8_t(pkt.Bandwidth)
 	cPkt.coderate = C.uint8_t(0x01) // code rate 4/5
@@ -100,7 +102,6 @@ func SendPacket(ctx context.Context, pkt *TxPacket) error {
 // TxPacket represents a packet to be transmitted
 type TxPacket struct {
 	Freq      uint32
-	Power     int8
 	DataRate  uint8
 	Bandwidth uint8
 	Size      uint
@@ -114,8 +115,8 @@ var MaxRxPackets = int(C.MAX_RX_PKT)
 type RxPacket struct {
 	Size     uint
 	Payload  []byte
-	SNR      float32
-	DataRate uint8
+	SNR      float64
+	DataRate int
 }
 
 // SetupGateway initializes the gateway hardware
@@ -136,7 +137,7 @@ func StopGateway() error {
 	return nil
 }
 
-// ReceivePackets receives packets from the gateway
+// ReceivePackets receives packets from the gateway and converts them to go []RxPacket array.
 func ReceivePackets() ([]RxPacket, error) {
 	p := C.create_rx_packet_array()
 	if p == nil {
@@ -163,8 +164,8 @@ func ReceivePackets() ([]RxPacket, error) {
 
 		packet := RxPacket{
 			Size:     uint(packets[i].size),
-			SNR:      float32(packets[i].snr),
-			DataRate: uint8(packets[i].datarate),
+			SNR:      float64(packets[i].snr),
+			DataRate: int(packets[i].datarate),
 		}
 
 		// Convert payload

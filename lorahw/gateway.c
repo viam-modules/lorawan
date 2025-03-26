@@ -47,7 +47,7 @@ int set_up_gateway(int bus, int region) {
             com_path = "/dev/spidev0.0";
             break;
         case 1:
-            com_path = "/dev/sspidev0.1";
+            com_path = "/dev/spidev0.1";
             break;
         default:
             //error invalid spi bus

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -365,7 +366,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 
 		packets, err := lorahw.ReceivePackets()
 		if err != nil {
-			g.logger.Errorf("error receiving lora packet: %v", err)
+			g.logger.Errorf("error receiving lora packet: %w", err)
 			continue
 		}
 
@@ -380,18 +381,31 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		}
 
 		t := time.Now()
-		for _, packet := range packets {
+		for i, packet := range packets {
 			if packet.Size == 0 {
 				continue
 			}
 
+			// don't process duplicates
+			isDuplicate := false
+			for j := i - 1; j >= 0; j-- {
+				// two packets identical if payload is the same
+				if slices.Equal(packets[j].Payload, packets[i].Payload) {
+					g.logger.Debugf("skipped duplicate packet")
+					isDuplicate = true
+					break
+				}
+			}
+			if isDuplicate {
+				continue
+			}
 			minSNR := sfToSNRMin[int(packet.DataRate)]
 			if float64(packet.SNR) < minSNR {
 				g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
 				continue
 			}
 
-			g.handlePacket(ctx, packet.Payload, t, float64(packet.SNR), int(packet.DataRate))
+			g.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate)
 		}
 	}
 }
@@ -406,7 +420,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("couldn't handle join request: %s", err)
+			g.logger.Errorf("couldn't handle join request: %w", err)
 		}
 	case unconfirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
@@ -415,7 +429,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("error parsing uplink message: %s", err)
+			g.logger.Errorf("error parsing uplink message: %w", err)
 			return
 		}
 		g.updateReadings(name, readings)
@@ -426,7 +440,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("error parsing uplink message: %s", err)
+			g.logger.Errorf("error parsing uplink message: %w", err)
 			return
 		}
 		g.updateReadings(name, readings)

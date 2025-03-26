@@ -139,7 +139,6 @@ func TestSendPacket(t *testing.T) {
 	// Test valid packet
 	pkt := &TxPacket{
 		Freq:      915000000,
-		Power:     14,
 		DataRate:  10,
 		Bandwidth: 125,
 		Size:      10,
@@ -160,7 +159,6 @@ func TestReceivePackets(t *testing.T) {
 	test.That(t, pkts[0].Payload, test.ShouldResemble, []byte{0x01, 0x02, 0x03})
 	test.That(t, pkts[0].SNR, test.ShouldEqual, 20)
 	test.That(t, pkts[0].DataRate, test.ShouldEqual, 7)
-
 }
 
 func TestSetupGateway(t *testing.T) {
