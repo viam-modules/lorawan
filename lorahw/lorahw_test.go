@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"go.viam.com/test"
 )
@@ -147,12 +146,21 @@ func TestSendPacket(t *testing.T) {
 		Payload:   []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 	}
 
-	// Test with context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer cancel()
-	err = SendPacket(ctx, pkt)
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "context deadline exceeded")
+	err = SendPacket(context.Background(), pkt)
+	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestReceivePackets(t *testing.T) {
+	// should return go packet struct
+	pkts, err := ReceivePackets()
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(pkts), test.ShouldEqual, 1)
+	// Test that has same values as mock function in gateway.c
+	test.That(t, pkts[0].Size, test.ShouldEqual, 3)
+	test.That(t, pkts[0].Payload, test.ShouldResemble, []byte{0x01, 0x02, 0x03})
+	test.That(t, pkts[0].SNR, test.ShouldEqual, 20)
+	test.That(t, pkts[0].DataRate, test.ShouldEqual, 7)
+
 }
 
 func TestSetupGateway(t *testing.T) {

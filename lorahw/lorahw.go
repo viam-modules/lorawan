@@ -83,7 +83,7 @@ func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	// wait for packet to finish sending.
 	var status C.uint8_t
 	for {
-		C.lgw_status(cPkt.rf_chain, 1, &status)
+		C.get_status(cPkt.rf_chain, &status)
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("error sending downlink: %w", ctx.Err())
 		}
@@ -120,7 +120,7 @@ type RxPacket struct {
 
 // SetupGateway initializes the gateway hardware
 func SetupGateway(spiBus int, region Region) error {
-	errCode := C.setUpGateway(C.int(spiBus), C.int(region))
+	errCode := C.set_up_gateway(C.int(spiBus), C.int(region))
 	if errCode != 0 {
 		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
 	}
@@ -129,7 +129,7 @@ func SetupGateway(spiBus int, region Region) error {
 
 // StopGateway stops the gateway hardware
 func StopGateway() error {
-	errCode := C.stopGateway()
+	errCode := C.stop_gateway()
 	if errCode != 0 {
 		return errors.New("error stopping gateway")
 	}
@@ -138,7 +138,7 @@ func StopGateway() error {
 
 // ReceivePackets receives packets from the gateway
 func ReceivePackets() ([]RxPacket, error) {
-	p := C.createRxPacketArray()
+	p := C.create_rx_packet_array()
 	if p == nil {
 		return nil, errors.New("failed to create rx packet array")
 	}
@@ -181,12 +181,12 @@ func ReceivePackets() ([]RxPacket, error) {
 
 // RedirectLogsToPipe redirects C logs to a pipe
 func RedirectLogsToPipe(fd uintptr) {
-	C.redirectToPipe(C.int(fd))
+	C.redirect_to_pipe(C.int(fd))
 }
 
 // DisableBuffering disables buffering on C stdout
 func DisableBuffering() {
-	C.disableBuffering()
+	C.disable_buffering()
 }
 
 func parseErrorCode(errCode int) error {

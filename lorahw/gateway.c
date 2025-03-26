@@ -30,7 +30,7 @@ const int32_t ifFrequencies[9] = {
 // This defines what RF chain to use for each of the 8 if chains
 const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
-int setUpGateway(int bus, int region) {
+int set_up_gateway(int bus, int region) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -159,45 +159,59 @@ int setUpGateway(int bus, int region) {
     }
 
     // start the gateway.
-    int res = startGateway();
+    int res = start_gateway();
     if (res != LGW_HAL_SUCCESS) {
         return 9;
     }
     return 0;
 }
 
-int stopGateway() {
+int stop_gateway() {
     return lgw_stop();
 }
 
-struct lgw_pkt_rx_s* createRxPacketArray() {
+struct lgw_pkt_rx_s* create_rx_packet_array() {
     return (struct lgw_pkt_rx_s*)malloc(sizeof(struct lgw_pkt_rx_s) * MAX_RX_PKT);
 }
 
-int receive(struct lgw_pkt_rx_s* packet) {
-    return lgw_receive(MAX_RX_PKT, packet);
-}
-void disableBuffering() {
+void disable_buffering() {
     setbuf(stdout, NULL);
 }
 
 #ifdef TESTING
-void redirectToPipe(int fd) {
+void redirect_to_pipe(int fd) {
     // Mock implementation for testing - does nothing
 }
 
 int send(struct lgw_pkt_tx_s* packet) {
+    // for testing, return 0 - sucesssful
+    return 0;
+}
+
+int start_gateway() {
     // for testing, return no error
     return 0;
 }
 
-int startGateway() {
-    // for testing, return no error
+int receive(struct lgw_pkt_rx_s* packet) {
+    // testing - fill the packet with test values
+    packet->size = 3;
+    uint8_t payload[3] = {0x01, 0x02, 0x03};
+    memcpy(packet->payload, payload, packet->size);
+    packet->datarate = 7;
+    packet->snr = 20;
+
+    return 1; // 1 packet received
+}
+
+int get_status(uint8_t rf, uint8_t* status) {
+    // status 2 = sucessful for mock testing
+    *status = 2;
     return 0;
 }
 
 #else
-void redirectToPipe(int fd) {
+void redirect_to_pipe(int fd) {
     fflush(stdout);          // Flush anything in the current stdout buffer
     dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
 }
@@ -206,8 +220,17 @@ int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }
 
-int startGateway() {
+int start_gateway() {
     return lgw_start();
 }
+
+int receive(struct lgw_pkt_rx_s* packet) {
+    return lgw_receive(MAX_RX_PKT, packet);
+}
+
+int get_status(uint8_t rf, uint8_t* status) {
+    return lgw_status(rf, 1, status);
+}
+
 
 #endif
