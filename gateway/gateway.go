@@ -50,7 +50,7 @@ var (
 	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
 )
 
-// constants for MHDRs of different message types/.
+// constants for MHDRs of different message types.
 const (
 	joinRequestMHdr         = 0x00
 	joinAcceptMHdr          = 0x20

@@ -29,8 +29,8 @@ const (
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
-	if len(payload) > 255 {
-		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 255 bytes", len(payload))
+	if len(payload) > 256 {
+		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 256 bytes", len(payload))
 	}
 
 	txPkt := &lorahw.TxPacket{

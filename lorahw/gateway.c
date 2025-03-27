@@ -73,6 +73,7 @@ int set_up_gateway(int bus, int region) {
             break;
     }
 
+    // set configuration for RF (radio frequency) chains on the gateway.
     // The rfConf configures the two RF chains the gateway HAT has.
     struct lgw_conf_rxrf_s rfconf;
 
@@ -139,6 +140,7 @@ int set_up_gateway(int bus, int region) {
     // maps the rf power levels to sx1302 chip specific power control registers.
     uint8_t pwr_idx [16] = {15,16,17,19,20,22,1,2,3,4,5,6,7,9,11,14};
 
+    // sx1302 supports 16 power levels
     for(int i = 0; i < 16; i++) {
         txGain[i].pa_gain = paGain[i];
         txGain[i].rf_power = rf_power[i];
