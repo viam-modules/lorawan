@@ -1,25 +1,14 @@
 package gateway
 
-/*
-#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
-#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
-
-#include "../sx1302/libloragw/inc/loragw_hal.h"
-#include "gateway.h"
-#include <stdlib.h>
-
-*/
-import "C"
-
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"time"
 
@@ -104,21 +93,26 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
 func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
-	jn := generateJoinNonce()
+	jn, err := generateJoinNonce()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate join nonce: %w", err)
+	}
 
 	devEUIBE := reverseByteArray(jr.devEUI)
 
 	// Check if this device is already present in the file.
 	// If it is, remove it since the join procedure is being redone.
 
-	err := g.searchAndRemove(g.dataFile, devEUIBE)
-	if err != nil {
+	if err = g.searchAndRemove(g.dataFile, devEUIBE); err != nil {
 		// If this errors, log and continue as we can still complete the join procedure without the file.
 		g.logger.Errorf("failed to search and remove device info from file: %v", err)
 	}
 
 	// generate a random device address to identify uplinks.
-	d.Addr = generateDevAddr()
+	d.Addr, err = generateDevAddr()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate dev addr: %w", err)
+	}
 
 	// the join accept payload needs everything to be LE, so reverse the BE fields.
 	netIDLE := reverseByteArray(netID)
@@ -138,10 +132,10 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Bit 7: OptNeg (0)
 	// Bits 6-4: RX1DROffset
 	// Bits 3-0: RX2DR
-	payload = append(payload, g.regionInfo.dlSettings)
+	payload = append(payload, g.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
-	payload = append(payload, g.regionInfo.cfList...)
+	payload = append(payload, g.regionInfo.CfList...)
 
 	// generate MIC
 	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)
@@ -223,15 +217,20 @@ func (g *gateway) searchAndRemove(file *os.File, devEUI []byte) error {
 }
 
 // Generates random 4 byte dev addr. This is used for the network to identify device's data uplinks.
-func generateDevAddr() []byte {
-	source := rand.NewSource(time.Now().UnixNano())
-	rand := rand.New(source)
+func generateDevAddr() ([]byte, error) {
+	devAddr := make([]byte, 4)
 
-	num1 := rand.Intn(255)
-	num2 := rand.Intn(255)
+	// Generate 4 random byte
+	_, err := rand.Read(devAddr)
+	if err != nil {
+		return nil, err
+	}
 
-	// first 7 MSB of devAddr is the network ID.
-	return []byte{1, 2, byte(num1), byte(num2)}
+	// first 7 MSB of devAddr must match the network ID
+	devAddr[0] = 1
+	devAddr[1] = 2
+
+	return devAddr, nil
 }
 
 // Validates the message integrity code sent in the join request.
@@ -291,16 +290,17 @@ func generateKeys(ctx context.Context, devNonce, joinEUI, jn, devEUI, networkID 
 	return keys, nil
 }
 
-// generates random 3 byte join nonce
-func generateJoinNonce() []byte {
-	source := rand.NewSource(time.Now().UnixNano())
-	rand := rand.New(source)
+// generates random 3 byte join nonce.
+func generateJoinNonce() ([]byte, error) {
+	nonce := make([]byte, 3)
 
-	num1 := rand.Intn(255)
-	num2 := rand.Intn(255)
-	num3 := rand.Intn(255)
+	// Generate 3 random bytes
+	_, err := rand.Read(nonce)
+	if err != nil {
+		return nil, err
+	}
 
-	return []byte{byte(num1), byte(num2), byte(num3)}
+	return nonce, nil
 }
 
 // reverseByteArray creates a new array reversed of the input.

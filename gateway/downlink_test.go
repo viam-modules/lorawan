@@ -214,7 +214,7 @@ func TestCreateDownlink(t *testing.T) {
 				expectedMIC, err := crypto.ComputeLegacyDownlinkMIC(
 					types.AES128Key(tt.device.NwkSKey),
 					*types.MustDevAddr(tt.device.Addr),
-					initialFCntDown+1,
+					uint32(initialFCntDown)+1,
 					payloadWithoutMIC,
 				)
 				test.That(t, err, test.ShouldBeNil)

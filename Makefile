@@ -14,7 +14,7 @@ clean:
 	rm -f module.tar.gz
 
 lorawan: sx1302
-	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ main.go
+	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ cmd/module/cmd.go
 
 module.tar.gz: clean lorawan
 	rm -f $@
