@@ -6,6 +6,7 @@ import (
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/logging"
+	"go.viam.com/test"
 )
 
 var (
@@ -52,10 +53,12 @@ func createTestGateway(t *testing.T) *gateway {
 
 	dataDirectory1 := t.TempDir()
 	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
+
 	g := gateway{
 		logger:  logging.NewTestLogger(t),
 		devices: testDevices,
 	}
-	g.setupSqlite(context.Background())
+	err := g.setupSqlite(context.Background())
+	test.That(t, err, test.ShouldBeNil)
 	return &g
 }

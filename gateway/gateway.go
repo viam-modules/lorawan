@@ -571,7 +571,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 				g.devices[node.NodeName] = mergedNode
 			}
 			// Check if the device is in the persistent data file, if it is add the OTAA info.
-			deviceInfo, err := g.findDeviceInDB(ctx, fmt.Sprintf("%x", g.devices[node.NodeName].DevEui))
+			deviceInfo, err := g.findDeviceInDB(ctx, hex.EncodeToString(g.devices[node.NodeName].DevEui))
 			if err != nil {
 				if !errors.Is(err, errNoDeviceInDB) {
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)

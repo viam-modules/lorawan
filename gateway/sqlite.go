@@ -12,12 +12,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	// github.com/mattn/go-sqlite3 is for sqlite.
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var errTXTMigration = errors.New("error migrating device backup to sqlite. please reset your sensors")
-var errNoDeviceInDB = errors.New("error device not found")
-var errNoDB = errors.New("error device file not found")
+var (
+	errTXTMigration = errors.New("error migrating device backup to sqlite. please reset your sensors")
+	errNoDeviceInDB = errors.New("error device not found")
+	errNoDB         = errors.New("error device file not found")
+)
 
 // Create or open a sqlite db file used to save device data across restarts.
 func (g *gateway) setupSqlite(ctx context.Context) error {
@@ -76,7 +79,6 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 		device.DevAddr,
 		device.FCntDown)
 	return err
-
 }
 
 func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (*deviceInfo, error) {
@@ -85,7 +87,8 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (*deviceInf
 	}
 	devEui = strings.ToUpper(devEui)
 	newDevice := deviceInfo{}
-	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?", devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey, &newDevice.DevAddr, &newDevice.FCntDown); err != nil {
+	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?",
+		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey, &newDevice.DevAddr, &newDevice.FCntDown); err != nil {
 		if strings.Contains(err.Error(), "no rows in result set") {
 			return &deviceInfo{}, errNoDeviceInDB
 		}
@@ -103,6 +106,13 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	if err != nil {
 		return nil, err
 	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	//nolint:errcheck
+	defer rows.Close()
+
 	devices := []deviceInfo{}
 	for rows.Next() {
 		if ctx.Err() != nil {
@@ -123,10 +133,12 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 
 // Function to read the device info from the persitent data file.
 func readFromFile(filePath string) ([]deviceInfo, error) {
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+	filePath = filepath.Clean(filePath)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
+	//nolint:errcheck
 	defer file.Close()
 	// Reset file pointer to the beginning
 	_, err = file.Seek(0, io.SeekStart)

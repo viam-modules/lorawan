@@ -174,7 +174,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 	payload = append(payload, fctrl)
 
 	fCntBytes := make([]byte, 2)
-	binary.LittleEndian.PutUint16(fCntBytes, uint16(device.FCntDown)+1)
+	binary.LittleEndian.PutUint16(fCntBytes, device.FCntDown+1)
 	payload = append(payload, fCntBytes...)
 
 	payload = append(payload, fopts...)
