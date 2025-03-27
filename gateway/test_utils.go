@@ -1,13 +1,11 @@
 package gateway
 
 import (
-	"os"
-	"path/filepath"
+	"context"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/logging"
-	"go.viam.com/test"
 )
 
 var (
@@ -39,20 +37,7 @@ var (
 	unknownDevEUI = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 )
 
-func createDataFile(t *testing.T) *os.File {
-	// Create a temp device data file for testing
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "devices.txt")
-	//nolint:gosec
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o644)
-	test.That(t, err, test.ShouldBeNil)
-	return file
-}
-
 func createTestGateway(t *testing.T) *gateway {
-	// Create a temp device data file for testing
-	file := createDataFile(t)
-
 	testDevices := make(map[string]*node.Node)
 	testNode := &node.Node{
 		Addr:        testDeviceAddr,
@@ -65,9 +50,12 @@ func createTestGateway(t *testing.T) *gateway {
 	}
 	testDevices[testNodeName] = testNode
 
-	return &gateway{
-		logger:   logging.NewTestLogger(t),
-		devices:  testDevices,
-		dataFile: file,
+	dataDirectory1 := t.TempDir()
+	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
+	g := gateway{
+		logger:  logging.NewTestLogger(t),
+		devices: testDevices,
 	}
+	g.setupSqlite(context.Background())
+	return &g
 }

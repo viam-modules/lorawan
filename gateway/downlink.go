@@ -186,7 +186,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 		}
 		payload = append(payload, device.FPort)
 		encrypted, err := crypto.EncryptDownlink(
-			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, framePayload)
+			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown+1), framePayload)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +194,7 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 	}
 
 	mic, err := crypto.ComputeLegacyDownlinkMIC(
-		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), device.FCntDown+1, payload)
+		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown+1), payload)
 	if err != nil {
 		return nil, err
 	}
@@ -213,11 +213,8 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 		FCntDown: &device.FCntDown,
 	}
 
-	if err = g.searchAndRemove(g.dataFile, device.DevEui); err != nil {
-		return nil, fmt.Errorf("failed to remove device info from file: %w", err)
-	}
-	if err = g.addDeviceInfoToFile(g.dataFile, deviceInfo); err != nil {
-		return nil, fmt.Errorf("failed to add device info to file: %w", err)
+	if err = g.insertOrUpdateDeviceInDB(context.Background(), deviceInfo); err != nil {
+		return nil, fmt.Errorf("failed to add device info to db: %w", err)
 	}
 
 	return payload, nil

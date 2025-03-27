@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -156,14 +157,16 @@ func TestCreateDownlink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temporary data file for testing
-			testFile := createDataFile(t)
-
 			// Set up the gateway for testing
 			g := &gateway{
-				logger:   logging.NewTestLogger(t),
-				dataFile: testFile,
+				logger: logging.NewTestLogger(t),
 			}
+
+			dataDirectory1 := t.TempDir()
+			t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
+
+			err := g.setupSqlite(context.Background())
+			test.That(t, err, test.ShouldBeNil)
 
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
@@ -214,7 +217,7 @@ func TestCreateDownlink(t *testing.T) {
 				expectedMIC, err := crypto.ComputeLegacyDownlinkMIC(
 					types.AES128Key(tt.device.NwkSKey),
 					*types.MustDevAddr(tt.device.Addr),
-					initialFCntDown+1,
+					uint32(initialFCntDown+1),
 					payloadWithoutMIC,
 				)
 				test.That(t, err, test.ShouldBeNil)
@@ -223,7 +226,7 @@ func TestCreateDownlink(t *testing.T) {
 				// Verify FCntDown was incremented
 				test.That(t, tt.device.FCntDown, test.ShouldEqual, initialFCntDown+1)
 
-				deviceInfoList, err := readFromFile(g.dataFile)
+				deviceInfoList, err := g.getAllDevicesFromDB(context.Background())
 				test.That(t, err, test.ShouldBeNil)
 
 				found := false
