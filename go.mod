@@ -6,6 +6,7 @@ toolchain go1.23.2
 
 require (
 	github.com/golangci/golangci-lint v1.61.0
+	github.com/mattn/go-sqlite3 v1.9.0
 	github.com/robertkrimen/otto v0.4.0
 	go.thethings.network/lorawan-stack/v3 v3.32.0
 	go.viam.com/rdk v0.66.0

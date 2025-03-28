@@ -103,7 +103,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
+			payload, err := g.createDownlink(ctx, device, downlinkPayload, requests, sendAck, snr, sf)
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}

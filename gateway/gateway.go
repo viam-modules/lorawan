@@ -3,14 +3,13 @@ package gateway
 
 import (
 	"bufio"
-	"bytes"
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -104,6 +103,7 @@ type deviceInfo struct {
 	AppSKey  string  `json:"app_skey"`
 	NwkSKey  string  `json:"nwk_skey"`
 	FCntDown *uint16 `json:"fcnt_down"`
+	NodeName string  `json:"node_name"`
 }
 
 func init() {
@@ -173,8 +173,7 @@ type gateway struct {
 
 	logReader  *os.File
 	logWriter  *os.File
-	dataFile   *os.File
-	dataMu     sync.Mutex
+	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 }
 
@@ -191,19 +190,11 @@ func NewGateway(
 		started: false,
 	}
 
-	// Create or open the file used to save device data across restarts.
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, "devicedata.txt")
-	//nolint:gosec
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
-	if err != nil {
+	if err := g.setupSqlite(ctx); err != nil {
 		return nil, err
 	}
 
-	g.dataFile = file
-
-	err = g.Reconfigure(ctx, deps, conf)
-	if err != nil {
+	if err := g.Reconfigure(ctx, deps, conf); err != nil {
 		return nil, err
 	}
 
@@ -479,6 +470,29 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
+	if deviceReq, ok := cmd["return_devices"]; ok {
+		resp := map[string]interface{}{}
+		deviceStr, _ := deviceReq.(string)
+		// look for a specific device if requested. If the device name is not a string we just return all devices.
+		if deviceStr != "" {
+			// check if the device has joined the network.
+			resp[deviceStr], ok = g.devices[deviceStr]
+			if ok {
+				resp["specific device currently joined"] = deviceStr
+			}
+			return nil, fmt.Errorf("device %v is not currently joined", deviceStr)
+		}
+		resp["all devices"] = deviceStr
+		// Read the device info from the file
+		devices, err := g.getAllDevicesFromDB(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		for _, device := range devices {
+			resp[device.DevEUI] = device
+		}
+		return resp, nil
+	}
 
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
@@ -501,9 +515,9 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 				g.devices[node.NodeName] = mergedNode
 			}
 			// Check if the device is in the persistent data file, if it is add the OTAA info.
-			deviceInfo, err := g.searchForDeviceInFile(g.devices[node.NodeName].DevEui)
+			deviceInfo, err := g.findDeviceInDB(ctx, hex.EncodeToString(g.devices[node.NodeName].DevEui))
 			if err != nil {
-				if !errors.Is(err, errNoDevice) {
+				if !errors.Is(err, errNoDeviceInDB) {
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)
 				}
 			}
@@ -556,31 +570,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// searchForDeviceInfoInFile searhces for device address match in the module's data file and returns the device info.
-func (g *gateway) searchForDeviceInFile(devEUI []byte) (*deviceInfo, error) {
-	// read all the saved devices from the file
-	g.dataMu.Lock()
-	defer g.dataMu.Unlock()
-	savedDevices, err := readFromFile(g.dataFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read device info from file: %w", err)
-	}
-	// Check if the dev EUI is in the file.
-	for _, d := range savedDevices {
-		savedEUI, err := hex.DecodeString(d.DevEUI)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode file's dev EUI: %w", err)
-		}
-
-		if bytes.Equal(devEUI, savedEUI) {
-			// device found in the file
-			return &d, nil
-		}
-	}
-	return nil, errNoDevice
-}
-
-// updateDeviceInfo adds the device info from the file into the gateway's device map.
+// updateDeviceInfo adds the device info from the db into the gateway's device map.
 func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	// Update the fields in the map with the info from the file.
 	appsKey, err := hex.DecodeString(d.AppSKey)
@@ -714,9 +704,9 @@ func (g *gateway) Close(ctx context.Context) error {
 		delete(loggingRoutineStarted, g.Name().Name)
 	}
 
-	if g.dataFile != nil {
-		if err := g.dataFile.Close(); err != nil {
-			g.logger.Errorf("error closing data file: %s", err)
+	if g.db != nil {
+		if err := g.db.Close(); err != nil {
+			g.logger.Errorf("error closing data db: %s", err)
 		}
 	}
 
