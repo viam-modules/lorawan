@@ -475,7 +475,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		deviceStr, _ := deviceReq.(string)
 		// look for a specific device if requested. If the device name is not a string we just return all devices.
 		if deviceStr != "" {
-			// check if we are receiving data from the device.
+			// check if the device has joined the network.
 			resp[deviceStr], ok = g.devices[deviceStr]
 			if ok {
 				resp["specific device currently joined"] = deviceStr
