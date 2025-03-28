@@ -1,26 +1,44 @@
-package gateway
+// Package regions defines regional information
+package regions
 
-import (
-	"strings"
+import "strings"
+
+const (
+	rx2FrequencyUS = 923300000 // rx2 default freq for US
+	rx2FrequencyEU = 869525000 // rx2 default freq for EU region
+	rx2BandwidthUS = 0x06      // 500k bandwidth for US downlinks
+	rx2BandwidthEU = 0x04      // 125k bandwidth for EU downlinks
 )
 
-// struct to hold region specific gateway info.
-type regionInfo struct {
-	cfList       []byte
-	dlSettings   byte
-	rx2Freq      int
-	rx2Bandwidth int
+// Region represents the frequency band region.
+type Region int
+
+const (
+	// Unspecified represents an unspecified region.
+	Unspecified Region = iota
+	// US represents the US915 frequency band.
+	US
+	// EU represents the EU868 frequency band.
+	EU
+)
+
+// RegionInfo is a struct to hold region specific gateway info.
+type RegionInfo struct {
+	CfList       []byte
+	DlSettings   byte
+	Rx2Freq      uint32
+	Rx2Bandwidth uint8
 }
 
-// regionInfoUS defines the region specific parameters for the US915 band.
-var regionInfoUS = regionInfo{
+// RegionInfoUS defines the region specific parameters for the US915 band.
+var RegionInfoUS = RegionInfo{
 	// Use data rate 8 for rx2 downlinks
 	// DR8 = SF12 BW 500K
 	// See lorawan1.0.3 regional specs doc for a table of data rates to SF/BW for each region.
-	dlSettings: 0x08,
+	DlSettings: 0x08,
 	// CFList for US915 using Channel Mask
 	// This tells the device to only transmit on channels 0-7
-	cfList: []byte{
+	CfList: []byte{
 		0xFF, // Enable channels 0-7
 		0x00, // Disable channels 8-15
 		0x00, // Disable channels 16-23
@@ -38,17 +56,17 @@ var regionInfoUS = regionInfo{
 		0x00, // RFU
 		0x01, // CFList Type = 1 (Channel Mask)
 	},
-	rx2Bandwidth: rx2BandwidthUS,
-	rx2Freq:      rx2FrequencyUS,
+	Rx2Bandwidth: rx2BandwidthUS,
+	Rx2Freq:      rx2FrequencyUS,
 }
 
-// regionInfoEU defines the region specific parameters for the EU868 band.
-var regionInfoEU = regionInfo{
+// RegionInfoEU defines the region specific parameters for the EU868 band.
+var RegionInfoEU = RegionInfo{
 	// Use data rate 0 for rx2 downlinks
 	// DR0 = SF12 BW 125K
 	// See lorawan1.0.3 regional specs doc for a table of data rates to SF/BW for each region.
-	dlSettings: 0x00,
-	cfList: []byte{
+	DlSettings: 0x00,
+	CfList: []byte{
 		0xC4, 0xD2, 0x33, // 867.1 MHz
 		0xD4, 0xD2, 0x33, // 867.3 MHz
 		0xE4, 0xD2, 0x33, // 867.5 MHz
@@ -56,11 +74,12 @@ var regionInfoEU = regionInfo{
 		0x04, 0xD3, 0x33, // 867.9 MHz
 		0x00, // CFList type (0x00 for frequency list)
 	},
-	rx2Bandwidth: rx2BandwidthEU,
-	rx2Freq:      rx2FrequencyEU,
+	Rx2Bandwidth: rx2BandwidthEU,
+	Rx2Freq:      rx2FrequencyEU,
 }
 
-func getRegion(region string) region {
+// GetRegion returns the region.
+func GetRegion(region string) Region {
 	region = strings.ToUpper(region)
 	switch region {
 	case "US", "US915", "915":
@@ -68,6 +87,6 @@ func getRegion(region string) region {
 	case "EU", "EU868", "868":
 		return EU
 	default:
-		return unspecified
+		return Unspecified
 	}
 }

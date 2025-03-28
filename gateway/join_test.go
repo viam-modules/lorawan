@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -46,7 +47,8 @@ func TestReverseByteArray(t *testing.T) {
 
 // test that random dev addr is 4 bytes and 7 msb is network id.
 func TestGenerateDevAddr(t *testing.T) {
-	addr := generateDevAddr()
+	addr, err := generateDevAddr()
+	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(addr), test.ShouldEqual, 4)
 	test.That(t, addr[0], test.ShouldEqual, netID[0])
 	test.That(t, addr[1], test.ShouldEqual, netID[1])
@@ -54,7 +56,8 @@ func TestGenerateDevAddr(t *testing.T) {
 
 // test that random join nonce is 3 bytes long.
 func TestGenerateJoinNonce(t *testing.T) {
-	nonce := generateJoinNonce()
+	nonce, err := generateJoinNonce()
+	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(nonce), test.ShouldEqual, 3)
 }
 
@@ -143,7 +146,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 		device          *node.Node
 		checkFile       bool // whether to check file contents after test
 		expectedFileLen int
-		region          region
+		region          regions.Region
 	}{
 		{
 			name: "Device sending initial join reuqest should generate valid join accept, get OTAA fields populated, and added to file",
@@ -157,7 +160,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			},
 			expectedFileLen: 1,
 			checkFile:       true,
-			region:          US,
+			region:          regions.US,
 		},
 		{
 			name: "Same device joining again should generate JA, get OTAA fields repopulated, and info replaced in file",
@@ -171,7 +174,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			},
 			expectedFileLen: 1,
 			checkFile:       true,
-			region:          US,
+			region:          regions.US,
 		},
 		{
 			name: "New device joining should generate JA, get OTTAA fields popualated, and appended to file",
@@ -185,7 +188,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			},
 			expectedFileLen: 2,
 			checkFile:       true,
-			region:          EU,
+			region:          regions.US,
 		},
 		{
 			name: "If writing to the file errors, should still return valid JA",
@@ -198,7 +201,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 				AppKey: testAppKey,
 			},
 			checkFile: false,
-			region:    EU,
+			region:    regions.US,
 		},
 	}
 
@@ -216,10 +219,10 @@ func TestGenerateJoinAccept(t *testing.T) {
 			}
 
 			switch tt.region {
-			case US:
-				g.regionInfo = regionInfoUS
-			case EU:
-				g.regionInfo = regionInfoEU
+			case regions.US:
+				g.regionInfo = regions.RegionInfoUS
+			case regions.EU:
+				g.regionInfo = regions.RegionInfoEU
 			}
 
 			joinAccept, err := g.generateJoinAccept(ctx, tt.joinRequest, tt.device)
@@ -236,9 +239,9 @@ func TestGenerateJoinAccept(t *testing.T) {
 			test.That(t, err, test.ShouldBeNil)
 			test.That(t, decrypted[3:6], test.ShouldResemble, reverseByteArray(netID))
 			test.That(t, decrypted[6:10], test.ShouldResemble, reverseByteArray(tt.device.Addr))
-			test.That(t, decrypted[10], test.ShouldEqual, g.regionInfo.dlSettings)
+			test.That(t, decrypted[10], test.ShouldEqual, g.regionInfo.DlSettings)
 			test.That(t, decrypted[11], test.ShouldEqual, 0x01) // rx delay
-			test.That(t, decrypted[12:28], test.ShouldResemble, g.regionInfo.cfList)
+			test.That(t, decrypted[12:28], test.ShouldResemble, g.regionInfo.CfList)
 
 			if tt.checkFile {
 				devices, err := g.getAllDevicesFromDB(ctx)

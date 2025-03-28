@@ -1,17 +1,6 @@
 // Package gateway implements the sx1302 gateway module.
 package gateway
 
-/*
-#cgo CFLAGS: -I${SRCDIR}/../sx1302/libloragw/inc -I${SRCDIR}/../sx1302/libtools/inc
-#cgo LDFLAGS: -L${SRCDIR}/../sx1302/libloragw -lloragw -L${SRCDIR}/../sx1302/libtools -lbase64 -lparson -ltinymt32  -lm
-
-#include "../sx1302/libloragw/inc/loragw_hal.h"
-#include "gateway.h"
-#include <stdlib.h>
-#include <string.h>
-*/
-import "C"
-
 import (
 	"bufio"
 	"context"
@@ -22,13 +11,15 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
+	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
@@ -37,44 +28,34 @@ import (
 	"go.viam.com/utils"
 )
 
-// defining model names here to be reused in getNativeConfig
+// defining model names here to be reused in getNativeConfig.
 const (
 	oldModelName = "sx1302-gateway"
 	genericHat   = "sx1302-hat-generic"
 	waveshareHat = "sx1302-waveshare-hat"
 )
 
-// Error variables for validation and operations
+// Error variables for validation and operations.
 var (
-	// Config validation errors
+	// Config validation errors.
 	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
 
-	// Gateway operation errors
+	// Gateway operation errors.
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
 	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
 	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
 	errNoDevice           = errors.New("received packet from unknown device")
 	errInvalidMIC         = errors.New("invalid MIC")
-	errSendJoinAccept     = errors.New("failed to send join accept packet")
 	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
 )
 
-// constants for MHDRs of different message types/
+// constants for MHDRs of different message types.
 const (
 	joinRequestMHdr         = 0x00
 	joinAcceptMHdr          = 0x20
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
-)
-
-type region int
-
-// enum to define supported frequency band regions
-const (
-	unspecified region = iota
-	US
-	EU
 )
 
 // Model represents a lorawan gateway model.
@@ -85,8 +66,6 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
-
-const sendDownlinkKey = "senddown"
 
 // Define the map of SF to minimum SNR values in dB.
 // Any packet received below the minimum demodulation value will not be parsed.
@@ -107,7 +86,7 @@ var loggingRoutineStarted = make(map[string]bool)
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
 
-// Config describes the configuration of the gateway
+// Config describes the configuration of the gateway.
 type Config struct {
 	Bus       int    `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
@@ -163,7 +142,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
-		if getRegion(conf.Region) == unspecified {
+		if regions.GetRegion(conf.Region) == regions.Unspecified {
 			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
@@ -194,10 +173,10 @@ type gateway struct {
 	logReader  *os.File
 	logWriter  *os.File
 	db         *sql.DB
-	regionInfo regionInfo
+	regionInfo regions.RegionInfo
 }
 
-// NewGateway creates a new gateway
+// NewGateway creates a new gateway.
 func NewGateway(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -248,10 +227,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
-		err := g.reset(ctx)
-		if err != nil {
-			return err
-		}
+		g.reset(ctx)
 	}
 
 	cfg, err := getNativeConfig(conf)
@@ -265,7 +241,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// capture C log output
-	g.startCLogging(ctx)
+	g.startCLogging()
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -297,20 +273,18 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
-	region := getRegion(cfg.Region)
+	region := regions.GetRegion(cfg.Region)
 	switch region {
-	case US, unspecified:
+	case regions.US, regions.Unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
-		g.regionInfo = regionInfoUS
-	case EU:
+		g.regionInfo = regions.RegionInfoUS
+	case regions.EU:
 		g.logger.Infof("configuring gateway for EU868 band")
-		g.regionInfo = regionInfoEU
-
+		g.regionInfo = regions.RegionInfoEU
 	}
-	errCode := C.setUpGateway(C.int(cfg.Bus), C.int(region))
-	if errCode != 0 {
-		strErr := parseErrorCode(int(errCode))
-		return fmt.Errorf("failed to set up the gateway: %s", strErr)
+
+	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
+		return fmt.Errorf("failed to set up the gateway: %w", err)
 	}
 
 	g.started = true
@@ -318,30 +292,9 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	return nil
 }
 
-func parseErrorCode(errCode int) string {
-	switch errCode {
-	case 1:
-		return "error setting the board config"
-	case 2:
-		return "error setting the radio frequency config for radio 0"
-	case 3:
-		return "error setting the radio frequency config for radio 1"
-	case 4:
-		return "error setting the intermediate frequency chain config"
-	case 5:
-		return "error configuring the lora STD channel"
-	case 6:
-		return "error configuring the tx gain settings"
-	case 7:
-		return "error starting the gateway"
-	default:
-		return "unknown error"
-	}
-}
-
 // startCLogging starts the goroutine to capture C logs into the logger.
 // If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging(ctx context.Context) {
+func (g *gateway) startCLogging() {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
@@ -354,7 +307,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 		g.logWriter = stdoutW
 
 		// Redirect C's stdout to the write end of the pipe
-		C.redirectToPipe(C.int(g.logWriter.Fd()))
+		lorahw.RedirectLogsToPipe(g.logWriter.Fd())
 		scanner := bufio.NewScanner(g.logReader)
 
 		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
@@ -366,7 +319,7 @@ func (g *gateway) startCLogging(ctx context.Context) {
 // This is necessary because the sx1302 library only uses printf to report errors.
 func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	C.disableBuffering()
+	lorahw.DisableBuffering()
 
 	// loop to read lines from the scanner and log them
 	for {
@@ -395,65 +348,55 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scann
 }
 
 func (g *gateway) receivePackets(ctx context.Context) {
-	// receive the radio packets
-	p := C.createRxPacketArray()
-	defer C.free(unsafe.Pointer(p))
 	for {
 		select {
 		case <-ctx.Done():
-
 			return
 		default:
 		}
-		numPackets := int(C.receive(p))
-		t := time.Now()
-		switch numPackets {
-		case 0:
-			// no packet received, wait 10 ms to receive again.
+
+		packets, err := lorahw.ReceivePackets()
+		if err != nil {
+			g.logger.Errorf("error receiving lora packet: %w", err)
+			continue
+		}
+
+		if len(packets) == 0 {
+			// no packet received, wait 10 ms to receive again
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(10 * time.Millisecond):
 			}
-		case -1:
-			g.logger.Errorf("error receiving lora packet")
-		default:
-			// convert from c array to go slice
-			packets := unsafe.Slice((*C.struct_lgw_pkt_rx_s)(unsafe.Pointer(p)), int(C.MAX_RX_PKT))
-			for i := range numPackets {
-				// received a LORA packet
-				var payload []byte
-				if packets[i].size == 0 {
-					continue
-				}
+			continue
+		}
 
-				// don't process duplicates
-				isDuplicate := false
-				for j := i - 1; j >= 0; j-- {
-					if isSamePacket(packets[j], packets[i]) {
-						g.logger.Debugf("skipped duplicate packet")
-						isDuplicate = true
-						break
-					}
-				}
-				if isDuplicate {
-					continue
-				}
+		t := time.Now()
+		for i, packet := range packets {
+			if packet.Size == 0 {
+				continue
+			}
 
-				minSNR := sfToSNRMin[int(packets[i].datarate)]
-				if float64(packets[i].snr) < minSNR {
-					g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packets[i].snr, minSNR)
-					continue
-				}
-
-				// Convert packet to go byte array
-				for j := range int(packets[i].size) {
-					payload = append(payload, byte(packets[i].payload[j]))
-				}
-				if payload != nil {
-					g.handlePacket(ctx, payload, t, float64(packets[i].snr), int(packets[i].datarate))
+			// don't process duplicates
+			isDuplicate := false
+			for j := i - 1; j >= 0; j-- {
+				// two packets identical if payload is the same
+				if slices.Equal(packets[j].Payload, packets[i].Payload) {
+					g.logger.Debugf("skipped duplicate packet")
+					isDuplicate = true
+					break
 				}
 			}
+			if isDuplicate {
+				continue
+			}
+			minSNR := sfToSNRMin[packet.DataRate]
+			if float64(packet.SNR) < minSNR {
+				g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
+				continue
+			}
+
+			g.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate)
 		}
 	}
 }
@@ -468,7 +411,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("couldn't handle join request: %s", err)
+			g.logger.Errorf("couldn't handle join request: %v", err)
 		}
 	case unconfirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
@@ -477,7 +420,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("error parsing uplink message: %s", err)
+			g.logger.Errorf("error parsing uplink message: %v", err)
 			return
 		}
 		g.updateReadings(name, readings)
@@ -488,7 +431,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			if errors.Is(errNoDevice, err) {
 				return
 			}
-			g.logger.Errorf("error parsing uplink message: %s", err)
+			g.logger.Errorf("error parsing uplink message: %v", err)
 			return
 		}
 		g.updateReadings(name, readings)
@@ -626,15 +569,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// Classifying two packets as the same if they have identifical payloads.
-func isSamePacket(p1, p2 C.struct_lgw_pkt_rx_s) bool {
-	//nolint
-	if C.memcmp(unsafe.Pointer(&p1.payload[0]), unsafe.Pointer(&p2.payload[0]), C.size_t(len(p1.payload))) == 0 {
-		return true
-	}
-	return false
-}
-
 // updateDeviceInfo adds the device info from the db into the gateway's device map.
 func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	// Update the fields in the map with the info from the file.
@@ -752,10 +686,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	err := g.reset(ctx)
-	if err != nil {
-		return err
-	}
+	g.reset(ctx)
 
 	if g.loggingWorker != nil {
 		if g.logReader != nil {
@@ -781,14 +712,13 @@ func (g *gateway) Close(ctx context.Context) error {
 	return nil
 }
 
-func (g *gateway) reset(ctx context.Context) error {
+func (g *gateway) reset(ctx context.Context) {
 	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if g.receivingWorker != nil {
 		g.receivingWorker.Stop()
 	}
-	errCode := C.stopGateway()
-	if errCode != 0 {
-		g.logger.Error("error stopping gateway")
+	if err := lorahw.StopGateway(); err != nil {
+		g.logger.Error("error stopping gateway: %v", err)
 	}
 	if g.rstPin != nil {
 		err := resetGateway(ctx, g.rstPin, g.pwrPin)
@@ -797,7 +727,6 @@ func (g *gateway) reset(ctx context.Context) error {
 		}
 	}
 	g.started = false
-	return nil
 }
 
 // Readings returns all the node's readings.
