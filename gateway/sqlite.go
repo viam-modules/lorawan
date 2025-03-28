@@ -34,10 +34,6 @@ func (g *gateway) setupSqlite(ctx context.Context) error {
 		if err != nil {
 			return errTXTMigration
 		}
-
-		if err != nil {
-			g.logger.Warn("error removing old devicedata format: ", err)
-		}
 	}
 
 	filePathDB := filepath.Join(moduleDataDir, "devicedata.db")
