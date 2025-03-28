@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/viam-modules/gateway/node"
@@ -162,14 +164,15 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
-		DevEUI:   fmt.Sprintf("%X", devEUIBE),
-		DevAddr:  fmt.Sprintf("%X", d.Addr),
-		AppSKey:  fmt.Sprintf("%X", d.AppSKey),
-		NwkSKey:  fmt.Sprintf("%X", d.NwkSKey),
+		DevEUI:   strings.ToUpper(hex.EncodeToString(devEUIBE)),
+		DevAddr:  strings.ToUpper(hex.EncodeToString(d.Addr)),
+		AppSKey:  strings.ToUpper(hex.EncodeToString(d.AppSKey)),
+		NwkSKey:  strings.ToUpper(hex.EncodeToString(d.NwkSKey)),
 		FCntDown: &d.FCntDown,
 	}
-
-	err = g.insertOrUpdateDeviceInDB(ctx, deviceInfo)
+	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo)
 	if err != nil {
 		// if this errors, log but still return join accept.
 		g.logger.Errorf("failed to write device info to db: %v", err)

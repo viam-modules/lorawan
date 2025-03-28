@@ -39,11 +39,11 @@ func (g *gateway) setupSqlite(ctx context.Context) error {
 	filePathDB := filepath.Join(moduleDataDir, "devicedata.db")
 	db, err := sql.Open("sqlite3", filePathDB)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	// create the table if it does not exist
 	sqlStmt := `
-	create table if not exists devices(devEui STRING NOT NULL PRIMARY KEY, appSKey STRING, nwkSKey STRING, devAddr STRING, fCntDown INTEGER);
+	create table if not exists devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER);
 	`
 	if _, err = db.ExecContext(ctx, sqlStmt); err != nil {
 		return err
@@ -92,7 +92,7 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (*deviceInf
 	newDevice := deviceInfo{}
 	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?",
 		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey, &newDevice.DevAddr, &newDevice.FCntDown); err != nil {
-		if strings.Contains(err.Error(), "no rows in result set") {
+		if errors.Is(err, sql.ErrNoRows) {
 			return &deviceInfo{}, errNoDeviceInDB
 		}
 		return &deviceInfo{}, err
@@ -121,14 +121,12 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 		if ctx.Err() != nil {
 			return []deviceInfo{}, ctx.Err()
 		}
-		// var devEuiOut, appSKeyOut, nwkSKeyOut, devAddrOut string
-		// var fCntDownOut int
 		device := deviceInfo{}
 		err = rows.Scan(&device.DevEUI, &device.AppSKey, &device.NwkSKey, &device.DevAddr, &device.FCntDown)
 		if err != nil {
 			return nil, err
 		}
-		// fmt.Print(device)
+
 		devices = append(devices, device)
 	}
 	return devices, nil

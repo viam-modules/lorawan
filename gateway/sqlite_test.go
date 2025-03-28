@@ -172,14 +172,25 @@ func TestInsertOrUpdateDeviceInDB(t *testing.T) {
 				DevAddr: "REALDEVADDR",
 				AppSKey: "REAL-APPSKEY",
 			},
+			{
+				DevEUI:  "DEVEUI3",
+				DevAddr: "0000REAL00",
+				AppSKey: "REAL-APPSKEY",
+			},
+			{
+				DevEUI:  "DEVEUI2",
+				DevAddr: "REPEAT",
+				AppSKey: "REAL-APPSKEY",
+			},
 		}
 		for _, device := range devices {
 			g.insertOrUpdateDeviceInDB(context.Background(), device)
 		}
 		dbDevices, err = g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
-		test.That(t, len(dbDevices), test.ShouldEqual, 2)
+		test.That(t, len(dbDevices), test.ShouldEqual, 3)
 		test.That(t, dbDevices[0], test.ShouldResemble, devices[0])
-		test.That(t, dbDevices[1], test.ShouldResemble, devices[1])
+		test.That(t, dbDevices[1], test.ShouldResemble, devices[2])
+		test.That(t, dbDevices[2], test.ShouldResemble, devices[3])
 	})
 }

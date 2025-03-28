@@ -2,7 +2,8 @@ package gateway
 
 import (
 	"context"
-	"fmt"
+	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
@@ -251,9 +252,9 @@ func TestGenerateJoinAccept(t *testing.T) {
 				found := false
 				devEUIBE := reverseByteArray(tt.joinRequest.devEUI)
 				for _, d := range devices {
-					if d.DevEUI == fmt.Sprintf("%X", devEUIBE) {
-						test.That(t, d.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", tt.device.Addr))
-						test.That(t, d.AppSKey, test.ShouldEqual, fmt.Sprintf("%X", tt.device.AppSKey))
+					if d.DevEUI == strings.ToUpper(hex.EncodeToString(devEUIBE)) {
+						test.That(t, d.DevAddr, test.ShouldEqual, strings.ToUpper(hex.EncodeToString(tt.device.Addr)))
+						test.That(t, d.AppSKey, test.ShouldEqual, strings.ToUpper(hex.EncodeToString(tt.device.AppSKey)))
 						found = true
 						break
 					}

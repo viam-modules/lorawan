@@ -91,7 +91,8 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
-func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []byte, sendAck bool, snr float64, sf int) (
+func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePayload, uplinkFopts []byte,
+	sendAck bool, snr float64, sf int) (
 	[]byte, error,
 ) {
 	payload := make([]byte, 0)
@@ -176,8 +177,9 @@ func (g *gateway) createDownlink(device *node.Node, framePayload, uplinkFopts []
 		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
 		FCntDown: &device.FCntDown,
 	}
-
-	if err = g.insertOrUpdateDeviceInDB(context.Background(), deviceInfo); err != nil {
+	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	if err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo); err != nil {
 		return nil, fmt.Errorf("failed to add device info to db: %w", err)
 	}
 
