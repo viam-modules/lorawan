@@ -26,43 +26,39 @@ var (
 func (g *gateway) setupSqlite(ctx context.Context) error {
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
 
-	var txtDevices []deviceInfo
-	// check if the machine has an old devicedata file for us to migrate
-	filePathTXT := filepath.Join(moduleDataDir, "devicedata.txt")
-	if _, err := os.Stat(filePathTXT); err == nil {
-		txtDevices, err = readFromFile(filePathTXT)
-		if err != nil {
-			return errTXTMigration
-		}
-	}
-
 	filePathDB := filepath.Join(moduleDataDir, "devicedata.db")
 	db, err := sql.Open("sqlite3", filePathDB)
 	if err != nil {
 		return err
 	}
 	// create the table if it does not exist
-	sqlStmt := `
-	create table if not exists devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER);
+	cmd := `create table if not exists `
+	keys := `
+	devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT);
 	`
+	sqlStmt := cmd + keys
 	if _, err = db.ExecContext(ctx, sqlStmt); err != nil {
 		return err
 	}
 	g.db = db
 
-	// move devices found from the old backup logic into the sqlite db
-	for _, device := range txtDevices {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		err = g.insertOrUpdateDeviceInDB(ctx, device)
+	// check if the machine has an old devicedata file for us to migrate
+	filePathTXT := filepath.Join(moduleDataDir, "devicedata.txt")
+	if _, err := os.Stat(filePathTXT); err == nil {
+		txtDevices, err := readFromFile(filePathTXT)
 		if err != nil {
 			return errTXTMigration
 		}
-	}
-
-	// if we had a txt file, delete it now that we are finished migrating the data.
-	if len(txtDevices) > 0 {
+		// move devices found from the old backup logic into the sqlite db
+		for _, device := range txtDevices {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			err = g.insertOrUpdateDeviceInDB(ctx, device)
+			if err != nil {
+				return errTXTMigration
+			}
+		}
 		if err := os.Remove(filePathTXT); err != nil {
 			return errTXTMigration
 		}
@@ -75,12 +71,16 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 	if g.db == nil {
 		return errNoDB
 	}
-	_, err := g.db.ExecContext(ctx, "insert or replace into devices (devEui, appSKey, nwkSKey, devAddr, fCntDown) VALUES(?, ?, ?, ?, ?);",
+	cmd := `insert or replace into `
+	keys := `devices (devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName) VALUES(?, ?, ?, ?, ?, ?);`
+	_, err := g.db.ExecContext(ctx, cmd+keys,
 		device.DevEUI,
 		device.AppSKey,
 		device.NwkSKey,
 		device.DevAddr,
-		device.FCntDown)
+		device.FCntDown,
+		device.NodeName,
+	)
 	return err
 }
 
@@ -91,7 +91,8 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (*deviceInf
 	devEui = strings.ToUpper(devEui)
 	newDevice := deviceInfo{}
 	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?",
-		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey, &newDevice.DevAddr, &newDevice.FCntDown); err != nil {
+		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey,
+		&newDevice.DevAddr, &newDevice.FCntDown, &newDevice.NodeName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return &deviceInfo{}, errNoDeviceInDB
 		}
@@ -122,7 +123,7 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 			return []deviceInfo{}, ctx.Err()
 		}
 		device := deviceInfo{}
-		err = rows.Scan(&device.DevEUI, &device.AppSKey, &device.NwkSKey, &device.DevAddr, &device.FCntDown)
+		err = rows.Scan(&device.DevEUI, &device.AppSKey, &device.NwkSKey, &device.DevAddr, &device.FCntDown, &device.NodeName)
 		if err != nil {
 			return nil, err
 		}

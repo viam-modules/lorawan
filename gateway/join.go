@@ -169,6 +169,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 		AppSKey:  strings.ToUpper(hex.EncodeToString(d.AppSKey)),
 		NwkSKey:  strings.ToUpper(hex.EncodeToString(d.NwkSKey)),
 		FCntDown: &d.FCntDown,
+		NodeName: d.NodeName,
 	}
 	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()

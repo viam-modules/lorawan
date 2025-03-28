@@ -103,6 +103,7 @@ type deviceInfo struct {
 	AppSKey  string  `json:"app_skey"`
 	NwkSKey  string  `json:"nwk_skey"`
 	FCntDown *uint16 `json:"fcnt_down"`
+	NodeName string  `json:"node_name"`
 }
 
 func init() {

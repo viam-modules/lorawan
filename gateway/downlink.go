@@ -176,6 +176,7 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
 		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
 		FCntDown: &device.FCntDown,
+		NodeName: device.NodeName,
 	}
 	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
