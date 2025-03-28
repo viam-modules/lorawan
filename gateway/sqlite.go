@@ -32,9 +32,9 @@ func (g *gateway) setupSqlite(ctx context.Context) error {
 	if _, err := os.Stat(filePathTXT); err == nil {
 		txtDevices, err = readFromFile(filePathTXT)
 		if err != nil {
-			return errors.Join(errTXTMigration, os.Remove(filePathTXT))
+			return errTXTMigration
 		}
-		err = os.Remove(filePathTXT)
+
 		if err != nil {
 			g.logger.Warn("error removing old devicedata format: ", err)
 		}
@@ -61,6 +61,13 @@ func (g *gateway) setupSqlite(ctx context.Context) error {
 		}
 		err = g.insertOrUpdateDeviceInDB(ctx, device)
 		if err != nil {
+			return errTXTMigration
+		}
+	}
+
+	// if we had a txt file, delete it now that we are finished migrating the data.
+	if len(txtDevices) > 0 {
+		if err := os.Remove(filePathTXT); err != nil {
 			return errTXTMigration
 		}
 	}

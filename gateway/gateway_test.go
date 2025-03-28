@@ -451,68 +451,34 @@ func TestStartCLogging(t *testing.T) {
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 }
 
-// func TestSearchForDeviceInFile(t *testing.T) {
-// 	g := createTestGateway(t)
+func TestUpdateDeviceInfo(t *testing.T) {
+	g := createTestGateway(t)
 
-// 	// Device found in file should return device info
-// 	devices := []deviceInfo{
-// 		{
-// 			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-// 			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-// 			AppSKey: "5572404C694E6B4C6F526132303138323",
-// 		},
-// 	}
-// 	data, err := json.MarshalIndent(devices, "", "  ")
-// 	test.That(t, err, test.ShouldBeNil)
-// 	_, err = g.dataFile.Write(data)
-// 	test.That(t, err, test.ShouldBeNil)
+	newAppSKey := []byte{
+		0x55, 0x72, 0x40, 0x4C,
+		0x69, 0x6E, 0x6B, 0x4C,
+		0x6F, 0x52, 0x61, 0x32,
+		0x31, 0x30, 0x32, 0x23,
+	}
 
-// 	device, err := g.searchForDeviceInFile(testDevEUI)
-// 	test.That(t, err, test.ShouldBeNil)
-// 	test.That(t, device, test.ShouldNotBeNil)
-// 	test.That(t, device.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
+	newDevAddr := []byte{0xe2, 0x73, 0x65, 0x67}
 
-// 	//  Device not found in file should return errNoDevice
-// 	unknownAddr := []byte{0x01, 0x02, 0x03, 0x04}
-// 	device, err = g.searchForDeviceInFile(unknownAddr)
-// 	test.That(t, err, test.ShouldBeError, errNoDevice)
-// 	test.That(t, device, test.ShouldBeNil)
+	// Test 1: Successful update
+	validInfo := &deviceInfo{
+		DevEUI:  fmt.Sprintf("%X", testDevEUI), // matches dev EUI on the gateway map
+		DevAddr: fmt.Sprintf("%X", newDevAddr),
+		AppSKey: fmt.Sprintf("%X", newAppSKey),
+	}
 
-// 	// Test File read error
-// 	g.dataFile.Close()
-// 	_, err = g.searchForDeviceInFile(testDeviceAddr)
-// 	test.That(t, err, test.ShouldNotBeNil)
-// 	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to read device info from file")
-// }
+	device := g.devices[testNodeName]
 
-// func TestUpdateDeviceInfo(t *testing.T) {
-// 	g := setupTestGateway(t)
-
-// 	newAppSKey := []byte{
-// 		0x55, 0x72, 0x40, 0x4C,
-// 		0x69, 0x6E, 0x6B, 0x4C,
-// 		0x6F, 0x52, 0x61, 0x32,
-// 		0x31, 0x30, 0x32, 0x23,
-// 	}
-
-// 	newDevAddr := []byte{0xe2, 0x73, 0x65, 0x67}
-
-// 	// Test 1: Successful update
-// 	validInfo := &deviceInfo{
-// 		DevEUI:  fmt.Sprintf("%X", testDevEUI), // matches dev EUI on the gateway map
-// 		DevAddr: fmt.Sprintf("%X", newDevAddr),
-// 		AppSKey: fmt.Sprintf("%X", newAppSKey),
-// 	}
-
-// 	device := g.devices[testNodeName]
-
-// 	err := g.updateDeviceInfo(device, validInfo)
-// 	test.That(t, err, test.ShouldBeNil)
-// 	test.That(t, device, test.ShouldNotBeNil)
-// 	test.That(t, device.NodeName, test.ShouldEqual, testNodeName)
-// 	test.That(t, device.AppSKey, test.ShouldResemble, newAppSKey)
-// 	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
-// }
+	err := g.updateDeviceInfo(device, validInfo)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, device, test.ShouldNotBeNil)
+	test.That(t, device.NodeName, test.ShouldEqual, testNodeName)
+	test.That(t, device.AppSKey, test.ShouldResemble, newAppSKey)
+	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
+}
 
 func TestClose(t *testing.T) {
 	// Create a gateway instance for testing
