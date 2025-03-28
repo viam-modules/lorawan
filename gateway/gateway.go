@@ -173,7 +173,7 @@ type gateway struct {
 
 	logReader  *os.File
 	logWriter  *os.File
-	db         *sql.DB
+	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 }
 
