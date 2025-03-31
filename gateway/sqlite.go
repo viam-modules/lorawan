@@ -14,7 +14,7 @@ import (
 
 	// github.com/mattn/go-sqlite3 is for sqlite.
 	_ "github.com/mattn/go-sqlite3"
-	"go.viam.com/rdk/logging"
+	goutils "go.viam.com/utils"
 )
 
 var (
@@ -31,9 +31,8 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		return err
 	}
 	// create the table if it does not exist
-	cmd := `create table if not exists 
-	devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT);
-	`
+	cmd := `create table if not exists ` +
+		`devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT);`
 	if _, err = db.ExecContext(ctx, cmd); err != nil {
 		return err
 	}
@@ -42,7 +41,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	// check if the machine has an old devicedata file for us to migrate
 	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
 	if _, err := os.Stat(filePathTXT); err == nil {
-		txtDevices, err := readFromJSONFile(filePathTXT, g.logger)
+		txtDevices, err := readFromJSONFile(filePathTXT)
 		if err != nil {
 			return errTXTMigration
 		}
@@ -68,8 +67,8 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 		return errNoDB
 	}
 
-	cmd := `insert or replace into 
-	devices (devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName) VALUES(?, ?, ?, ?, ?, ?);`
+	cmd := `insert or replace into ` +
+		`devices(devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName) VALUES(?, ?, ?, ?, ?, ?);`
 	_, err := g.db.ExecContext(ctx, cmd,
 		device.DevEUI,
 		device.AppSKey,
@@ -88,7 +87,7 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo
 	var zero deviceInfo
 	devEui = strings.ToUpper(devEui)
 	newDevice := deviceInfo{}
-	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?",
+	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?;",
 		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey,
 		&newDevice.DevAddr, &newDevice.FCntDown, &newDevice.NodeName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -103,7 +102,7 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	if g.db == nil {
 		return nil, errNoDB
 	}
-	queryAll := `SELECT * FROM devices`
+	queryAll := `SELECT * FROM devices;`
 	rows, err := g.db.QueryContext(ctx, queryAll)
 	if err != nil {
 		return nil, err
@@ -111,8 +110,8 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	if rows.Err() != nil {
 		return nil, rows.Err()
 	}
-	//nolint:sqlclosecheck
-	defer g.logger.Debug(rows.Close())
+
+	defer func() { goutils.UncheckedError(rows.Close()) }()
 
 	devices := []deviceInfo{}
 	for rows.Next() {
@@ -127,18 +126,19 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 
 		devices = append(devices, device)
 	}
+
 	return devices, nil
 }
 
 // Function to read the device info from the persitent data file.
-func readFromJSONFile(filePath string, logger logging.Logger) ([]deviceInfo, error) {
+func readFromJSONFile(filePath string) ([]deviceInfo, error) {
 	filePath = filepath.Clean(filePath)
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
 
-	defer logger.Debug(file.Close())
+	defer func() { goutils.UncheckedError(file.Close()) }()
 	// Reset file pointer to the beginning
 	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
