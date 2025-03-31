@@ -190,7 +190,8 @@ type Node struct {
 	FPort     byte     // for downlinks, only required when frame payload exists.
 	Downlinks [][]byte // list of downlink frame payloads to send
 
-	Region regions.Region
+	Region             regions.Region
+	MinIntervalSeconds float64 // estimated minimum uplink interval
 }
 
 func newNode(

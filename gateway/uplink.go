@@ -102,9 +102,10 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// set the duty cycle in first downlink if in EU region.
 	setDutyCycle := false
 	if device.Region == regions.EU && device.FCntDown == 0 {
+		setDutyCycle = true
 		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
 		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
-		setDutyCycle = true
+		device.MinIntervalSeconds = minInterval
 	}
 
 	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {
