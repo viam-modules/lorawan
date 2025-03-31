@@ -91,7 +91,6 @@ func TestSetupSqlite(t *testing.T) {
 	})
 
 	t.Run("bad setup that fails migration because of a bad json file", func(t *testing.T) {
-
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}

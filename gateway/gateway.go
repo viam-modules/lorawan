@@ -500,12 +500,10 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)
 				}
 			}
-			if deviceInfo != nil {
-				// device was found in the file, update the gateway's device map with the device info.
-				err = g.updateDeviceInfo(g.devices[node.NodeName], deviceInfo)
-				if err != nil {
-					return nil, fmt.Errorf("error while updating device info: %w", err)
-				}
+			// device was found in the file, update the gateway's device map with the device info.
+			err = g.updateDeviceInfo(g.devices[node.NodeName], &deviceInfo)
+			if err != nil {
+				return nil, fmt.Errorf("error while updating device info: %w", err)
 			}
 		}
 	}
