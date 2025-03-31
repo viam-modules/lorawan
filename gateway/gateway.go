@@ -196,6 +196,10 @@ func NewGateway(
 		return nil, err
 	}
 
+	if err := g.migrateDevicesFromJSONFile(ctx, moduleDataDir); err != nil {
+		return nil, err
+	}
+
 	if err := g.Reconfigure(ctx, deps, conf); err != nil {
 		return nil, err
 	}

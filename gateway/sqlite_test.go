@@ -21,6 +21,8 @@ func TestSetupSqlite(t *testing.T) {
 		}
 		err := g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
+		err = g.migrateDevicesFromJSONFile(context.Background(), dataDirectory1)
+		test.That(t, err, test.ShouldBeNil)
 		test.That(t, g.db, test.ShouldNotBeNil)
 	})
 
@@ -51,6 +53,8 @@ func TestSetupSqlite(t *testing.T) {
 		test.That(t, err, test.ShouldBeNil)
 
 		err = g.setupSqlite(context.Background(), dataDirectory1)
+		test.That(t, err, test.ShouldBeNil)
+		err = g.migrateDevicesFromJSONFile(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
 		dbDevices, err := g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
@@ -104,7 +108,9 @@ func TestSetupSqlite(t *testing.T) {
 		_, err = dataFile.WriteString("badData")
 		test.That(t, err, test.ShouldBeNil)
 		err = g.setupSqlite(context.Background(), dataDirectory1)
-		test.That(t, err, test.ShouldBeError, errTXTMigration)
+		test.That(t, err, test.ShouldBeNil)
+		err = g.migrateDevicesFromJSONFile(context.Background(), dataDirectory1)
+		test.That(t, err.Error(), test.ShouldContainSubstring, errTXTMigration.Error())
 	})
 }
 

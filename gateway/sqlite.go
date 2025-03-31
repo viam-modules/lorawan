@@ -38,27 +38,6 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	}
 	g.db = db
 
-	// check if the machine has an old devicedata file for us to migrate
-	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
-	if _, err := os.Stat(filePathTXT); err == nil {
-		txtDevices, err := readFromJSONFile(filePathTXT)
-		if err != nil {
-			return errTXTMigration
-		}
-		// move devices found from the old backup logic into the sqlite db
-		for _, device := range txtDevices {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if err = g.insertOrUpdateDeviceInDB(ctx, device); err != nil {
-				return errTXTMigration
-			}
-		}
-		if err := os.Remove(filePathTXT); err != nil {
-			return errTXTMigration
-		}
-	}
-
 	return nil
 }
 
@@ -130,35 +109,54 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	return devices, nil
 }
 
-// Function to read the device info from the persitent data file.
-func readFromJSONFile(filePath string) ([]deviceInfo, error) {
-	filePath = filepath.Clean(filePath)
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
-	if err != nil {
-		return nil, err
-	}
+// Function to migrate the device info from the persitent data file into a sqlite db
+func (g *gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
+	// check if the machine has an old devicedata file for us to migrate
+	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
+	filePath := filepath.Clean(filePathTXT)
+	if _, err := os.Stat(filePathTXT); err == nil {
+		file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
+		if err != nil {
+			return errors.Join(errTXTMigration, err)
+		}
 
-	defer func() { goutils.UncheckedError(file.Close()) }()
-	// Reset file pointer to the beginning
-	_, err = file.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to the beginning of the file: %w", err)
-	}
+		defer func() { goutils.UncheckedError(file.Close()) }()
+		// Reset file pointer to the beginning
+		_, err = file.Seek(0, io.SeekStart)
+		if err != nil {
+			return errors.Join(errTXTMigration,
+				fmt.Errorf("failed to seek to the beginning of the file: %w", err))
+		}
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
+		data, err := io.ReadAll(file)
+		if err != nil {
+			return errors.Join(errTXTMigration,
+				fmt.Errorf("failed to read file: %w", err))
+		}
+		// if we have no devices in the file, just return
+		if len(data) == 0 {
+			return nil
+		}
 
-	if len(data) == 0 {
-		return nil, nil
-	}
+		var devices []deviceInfo
+		err = json.Unmarshal(data, &devices)
+		if err != nil {
+			return errors.Join(errTXTMigration,
+				fmt.Errorf("failed to unmarshal JSON: %w", err))
+		}
 
-	var devices []deviceInfo
-	err = json.Unmarshal(data, &devices)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+		// move devices found from the old backup logic into the sqlite db
+		for _, device := range devices {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if err = g.insertOrUpdateDeviceInDB(ctx, device); err != nil {
+				return errTXTMigration
+			}
+		}
+		if err := os.Remove(filePathTXT); err != nil {
+			return errTXTMigration
+		}
 	}
-
-	return devices, nil
+	return nil
 }
