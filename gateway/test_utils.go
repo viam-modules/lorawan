@@ -52,13 +52,12 @@ func createTestGateway(t *testing.T) *gateway {
 	testDevices[testNodeName] = testNode
 
 	dataDirectory1 := t.TempDir()
-	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
 
 	g := gateway{
 		logger:  logging.NewTestLogger(t),
 		devices: testDevices,
 	}
-	err := g.setupSqlite(context.Background())
+	err := g.setupSqlite(context.Background(), dataDirectory1)
 	test.That(t, err, test.ShouldBeNil)
 	return &g
 }

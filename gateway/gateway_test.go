@@ -494,8 +494,7 @@ func TestClose(t *testing.T) {
 		started: true,
 	}
 	dataDirectory1 := t.TempDir()
-	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
-	err := g.setupSqlite(context.Background())
+	err := g.setupSqlite(context.Background(), dataDirectory1)
 	test.That(t, err, test.ShouldBeNil)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -16,18 +16,15 @@ import (
 func TestSetupSqlite(t *testing.T) {
 	t.Run("Good setup with no previous db", func(t *testing.T) {
 		dataDirectory1 := t.TempDir()
-		t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}
-		err := g.setupSqlite(context.Background())
+		err := g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, g.db, test.ShouldNotBeNil)
 	})
 
 	t.Run("Good setup that migrates a txt file", func(t *testing.T) {
-		dataDirectory1 := t.TempDir()
-		t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}
@@ -44,16 +41,16 @@ func TestSetupSqlite(t *testing.T) {
 		data, err := json.MarshalIndent(devices, "", "  ")
 		test.That(t, err, test.ShouldBeNil)
 
-		moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+		dataDirectory1 := t.TempDir()
 		// check if the machine has an old devicedata file for us to migrate
-		filePathTXT := filepath.Join(moduleDataDir, "devicedata.txt")
+		filePathTXT := filepath.Join(dataDirectory1, "devicedata.txt")
 		dataFile, err := os.Create(filePathTXT)
 		test.That(t, err, test.ShouldBeNil)
 
 		_, err = dataFile.Write(data)
 		test.That(t, err, test.ShouldBeNil)
 
-		err = g.setupSqlite(context.Background())
+		err = g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
 		dbDevices, err := g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
@@ -62,12 +59,11 @@ func TestSetupSqlite(t *testing.T) {
 	})
 
 	t.Run("Good setup that reuses a db", func(t *testing.T) {
-		dataDirectory1 := t.TempDir()
-		t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}
-		err := g.setupSqlite(context.Background())
+		dataDirectory1 := t.TempDir()
+		err := g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
 		// Device found in file should return device info
 		devices := []deviceInfo{
@@ -85,7 +81,7 @@ func TestSetupSqlite(t *testing.T) {
 		for _, device := range devices {
 			g.insertOrUpdateDeviceInDB(context.Background(), device)
 		}
-		err = g.setupSqlite(context.Background())
+		err = g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
 		dbDevices, err := g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
@@ -95,21 +91,20 @@ func TestSetupSqlite(t *testing.T) {
 	})
 
 	t.Run("bad setup that fails migration because of a bad json file", func(t *testing.T) {
-		dataDirectory1 := t.TempDir()
-		t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
+
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}
 
-		moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+		dataDirectory1 := t.TempDir()
 		// check if the machine has an old devicedata file for us to migrate
-		filePathTXT := filepath.Join(moduleDataDir, "devicedata.txt")
+		filePathTXT := filepath.Join(dataDirectory1, "devicedata.txt")
 		dataFile, err := os.Create(filePathTXT)
 		test.That(t, err, test.ShouldBeNil)
 
 		_, err = dataFile.WriteString("badData")
 		test.That(t, err, test.ShouldBeNil)
-		err = g.setupSqlite(context.Background())
+		err = g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeError, errTXTMigration)
 	})
 }
@@ -148,12 +143,11 @@ func TestSearchForDeviceInFile(t *testing.T) {
 
 func TestInsertOrUpdateDeviceInDB(t *testing.T) {
 	t.Run("test inserting devices", func(t *testing.T) {
-		dataDirectory1 := t.TempDir()
-		t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}
-		err := g.setupSqlite(context.Background())
+		dataDirectory1 := t.TempDir()
+		err := g.setupSqlite(context.Background(), dataDirectory1)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, g.db, test.ShouldNotBeNil)
 		dbDevices, err := g.getAllDevicesFromDB(context.Background())

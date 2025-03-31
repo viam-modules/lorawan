@@ -140,7 +140,6 @@ func TestParseJoinRequestPacket(t *testing.T) {
 
 func TestGenerateJoinAccept(t *testing.T) {
 	dataDirectory1 := t.TempDir()
-	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
 	tests := []struct {
 		name            string
 		joinRequest     joinRequest
@@ -215,7 +214,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 			}
 			// generate the db for the test if we want to check the db afterwards
 			if tt.checkFile {
-				err := g.setupSqlite(ctx)
+				err := g.setupSqlite(ctx, dataDirectory1)
 				test.That(t, err, test.ShouldBeNil)
 			}
 
@@ -282,8 +281,7 @@ func TestHandleJoin(t *testing.T) {
 		devices: devices,
 	}
 	dataDirectory1 := t.TempDir()
-	t.Setenv("VIAM_MODULE_DATA", dataDirectory1)
-	err := g.setupSqlite(context.Background())
+	err := g.setupSqlite(context.Background(), dataDirectory1)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Create valid join request payload

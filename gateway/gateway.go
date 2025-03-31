@@ -190,7 +190,9 @@ func NewGateway(
 		started: false,
 	}
 
-	if err := g.setupSqlite(ctx); err != nil {
+	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
+
+	if err := g.setupSqlite(ctx, moduleDataDir); err != nil {
 		return nil, err
 	}
 

@@ -23,10 +23,8 @@ var (
 )
 
 // Create or open a sqlite db file used to save device data across restarts.
-func (g *gateway) setupSqlite(ctx context.Context) error {
-	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-
-	filePathDB := filepath.Join(moduleDataDir, "devicedata.db")
+func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
+	filePathDB := filepath.Join(pathPrefix, "devicedata.db")
 	db, err := sql.Open("sqlite3", filePathDB)
 	if err != nil {
 		return err
@@ -43,7 +41,7 @@ func (g *gateway) setupSqlite(ctx context.Context) error {
 	g.db = db
 
 	// check if the machine has an old devicedata file for us to migrate
-	filePathTXT := filepath.Join(moduleDataDir, "devicedata.txt")
+	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
 	if _, err := os.Stat(filePathTXT); err == nil {
 		txtDevices, err := readFromFile(filePathTXT)
 		if err != nil {
