@@ -347,14 +347,14 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 	}
 
 	if n.Region == regions.EU {
-		n.logger.Warnf(`The duty cycle limit in the EU region is 1%%. Ensure your
-		 uplink interval complies with this restriction to avoid transmission issues.`)
+		n.logger.Warnf(`the duty cycle limit in the EU region is 1%%. Ensure your
+		 uplink interval complies with this restriction to avoid transmission issues`)
 	}
 
 	if n.MinIntervalSeconds != 0 {
 		if n.MinIntervalSeconds > req.IntervalMin*60 {
 			n.logger.Warnf(`requested uplink interval (%.2f minutes) may exceed the legal duty cycle limit.
-			The device may not transmit at this interval.`, req.IntervalMin)
+			The device may not transmit at this interval`, req.IntervalMin)
 		}
 	}
 
