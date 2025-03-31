@@ -18,9 +18,11 @@ import (
 )
 
 var (
-	errTXTMigration = errors.New("error migrating device backup to sqlite. please reset your sensors")
-	errNoDeviceInDB = errors.New("error device not found")
-	errNoDB         = errors.New("error device file not found")
+	errTXTMigration     = errors.New("error migrating device backup to sqlite. please reset your sensors")
+	errNoDeviceInDB     = errors.New("error device not found")
+	errNoDB             = errors.New("error device file not found")
+	errDBClosedInternal = errors.New("sql: database is closed")
+	errDBClosed         = errors.New("error gateway is closed")
 )
 
 // Create or open a sqlite db file used to save device data across restarts.
@@ -56,6 +58,9 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 		device.FCntDown,
 		device.NodeName,
 	)
+	if err != nil && err.Error() == errDBClosedInternal.Error() {
+		return errDBClosed
+	}
 	return err
 }
 
@@ -72,6 +77,9 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo
 		if errors.Is(err, sql.ErrNoRows) {
 			return zero, errNoDeviceInDB
 		}
+		if err.Error() == errDBClosedInternal.Error() {
+			return zero, errDBClosed
+		}
 		return zero, err
 	}
 	return newDevice, nil
@@ -84,6 +92,12 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	queryAll := `SELECT * FROM devices;`
 	rows, err := g.db.QueryContext(ctx, queryAll)
 	if err != nil {
+		if errors.Is(err, errDBClosedInternal) {
+			return nil, errDBClosed
+		}
+		if err.Error() == errDBClosedInternal.Error() {
+			return nil, errDBClosed
+		}
 		return nil, err
 	}
 	if rows.Err() != nil {

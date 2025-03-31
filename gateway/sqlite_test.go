@@ -114,7 +114,7 @@ func TestSetupSqlite(t *testing.T) {
 	})
 }
 
-func TestSearchForDeviceInFile(t *testing.T) {
+func TestSearchForDeviceInDB(t *testing.T) {
 	g := createTestGateway(t)
 
 	// Device found in file should return device info
@@ -139,6 +139,11 @@ func TestSearchForDeviceInFile(t *testing.T) {
 		_, err := g.findDeviceInDB(context.Background(), "not-real")
 		test.That(t, err, test.ShouldBeError, errNoDeviceInDB)
 	})
+	t.Run("gateway is closed", func(t *testing.T) {
+		g.Close(context.Background())
+		_, err := g.findDeviceInDB(context.Background(), hex.EncodeToString(testDevEUI))
+		test.That(t, err, test.ShouldBeError, errDBClosed)
+	})
 	t.Run("no db is present", func(t *testing.T) {
 		badGateway := gateway{logger: logging.NewTestLogger(t)}
 		_, err := badGateway.findDeviceInDB(context.Background(), "not-real")
@@ -146,8 +151,8 @@ func TestSearchForDeviceInFile(t *testing.T) {
 	})
 }
 
-func TestInsertOrUpdateDeviceInDB(t *testing.T) {
-	t.Run("test inserting devices", func(t *testing.T) {
+func TestInsertOrUpdateDeviceInDBAndgetAllDevicesFromDB(t *testing.T) {
+	t.Run("test inserting devices and getting them", func(t *testing.T) {
 		g := gateway{
 			logger: logging.NewTestLogger(t),
 		}
@@ -183,7 +188,8 @@ func TestInsertOrUpdateDeviceInDB(t *testing.T) {
 			},
 		}
 		for _, device := range devices {
-			g.insertOrUpdateDeviceInDB(context.Background(), device)
+			err = g.insertOrUpdateDeviceInDB(context.Background(), device)
+			test.That(t, err, test.ShouldBeNil)
 		}
 		dbDevices, err = g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
@@ -191,5 +197,25 @@ func TestInsertOrUpdateDeviceInDB(t *testing.T) {
 		test.That(t, dbDevices[0], test.ShouldResemble, devices[0])
 		test.That(t, dbDevices[1], test.ShouldResemble, devices[2])
 		test.That(t, dbDevices[2], test.ShouldResemble, devices[3])
+	})
+	t.Run("gateway is closed", func(t *testing.T) {
+		g := gateway{
+			logger: logging.NewTestLogger(t),
+		}
+		dataDirectory1 := t.TempDir()
+		err := g.setupSqlite(context.Background(), dataDirectory1)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, g.db, test.ShouldNotBeNil)
+		err = g.Close(context.Background())
+		test.That(t, err, test.ShouldBeNil)
+		device := deviceInfo{
+			DevEUI:  fmt.Sprintf("%X", testDevEUI),
+			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
+			AppSKey: "5572404C694E6B4C6F526132303138323",
+		}
+		err = g.insertOrUpdateDeviceInDB(context.Background(), device)
+		test.That(t, err, test.ShouldBeError, errDBClosed)
+		_, err = g.getAllDevicesFromDB(context.Background())
+		test.That(t, err, test.ShouldBeError, errDBClosed)
 	})
 }
