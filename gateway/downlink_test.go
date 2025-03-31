@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -26,6 +27,7 @@ func TestCreateDownlink(t *testing.T) {
 		expectedLength      int
 		expectedFctrl       byte
 		expectedFOptsLength int
+		expectDutyCycleReq  bool
 	}{
 		{
 			name: "valid downlink with standard payload",
@@ -118,21 +120,24 @@ func TestCreateDownlink(t *testing.T) {
 			expectedFOptsLength: 3,
 		},
 		{
-			name: "invalid fport should return error",
+			name: "downlink with duty cycle request",
 			device: &node.Node{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
 				NwkSKey:  testNwkSKey,
 				FCntDown: 0,
-				FPort:    0x00,
+				FPort:    0x01,
 				DevEui:   testDevEUI,
+				Region:   regions.EU,
 			},
-			framePayload:  []byte{0x01, 0x02, 0x03, 0x04},
-			expectedErr:   true,
-			ack:           true,
-			uplinkFopts:   nil,
-			expectedFctrl: 0xA0,
+			framePayload:        []byte{0x01, 0x02, 0x03, 0x04},
+			expectedErr:         false,
+			ack:                 false,
+			expectedLength:      19, // base length (17) + duty cycle request (2 bytes)
+			expectedFctrl:       0x82,
+			expectedFOptsLength: 2,
+			expectDutyCycleReq:  true,
 		},
 		{
 			name: "downlink with devicetimeans, linkcheckans, and ignore unknown command",
@@ -152,6 +157,23 @@ func TestCreateDownlink(t *testing.T) {
 			expectedFctrl:       0x89,
 			expectedFOptsLength: 9,
 		},
+		{
+			name: "invalid fport should return error",
+			device: &node.Node{
+				NodeName: testNodeName,
+				Addr:     testDeviceAddr,
+				AppSKey:  testAppSKey,
+				NwkSKey:  testNwkSKey,
+				FCntDown: 0,
+				FPort:    0x00,
+				DevEui:   testDevEUI,
+			},
+			framePayload:  []byte{0x01, 0x02, 0x03, 0x04},
+			expectedErr:   true,
+			ack:           true,
+			uplinkFopts:   nil,
+			expectedFctrl: 0xA0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -168,7 +190,7 @@ func TestCreateDownlink(t *testing.T) {
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 2, 12)
+			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -187,21 +209,26 @@ func TestCreateDownlink(t *testing.T) {
 				test.That(t, payload[5], test.ShouldEqual, tt.expectedFctrl)
 
 				currentPos := 8 // Start after MHDR(1) + DevAddr(4) + FCtrl(1) + FCnt(2)
-				if tt.uplinkFopts != nil {
+				if tt.expectedFOptsLength != 0 {
+					fOpts := payload[8 : 8+tt.expectedFOptsLength]
 					for _, b := range tt.uplinkFopts {
 						if b == deviceTimeCID {
-							test.That(t, payload[currentPos], test.ShouldEqual, deviceTimeCID)
+							test.That(t, fOpts, test.ShouldContain, uint8(deviceTimeCID))
 							currentPos += 6
 						}
 						if b == linkCheckCID {
-							test.That(t, payload[currentPos], test.ShouldEqual, linkCheckCID)
+							test.That(t, fOpts, test.ShouldContain, uint8(linkCheckCID))
 							currentPos += 3
 						}
 					}
-
-					actualFOptsLength := currentPos - 8
-					test.That(t, actualFOptsLength, test.ShouldEqual, tt.expectedFOptsLength)
+					if tt.expectDutyCycleReq {
+						test.That(t, fOpts, test.ShouldContain, uint8(dutyCycleCID))
+						currentPos += 2
+					}
 				}
+
+				actualFOptsLength := currentPos - 8
+				test.That(t, actualFOptsLength, test.ShouldEqual, tt.expectedFOptsLength)
 
 				if tt.framePayload != nil {
 					portIndex := currentPos
@@ -281,4 +308,11 @@ func TestCreateLinkCheckAns(t *testing.T) {
 	test.That(t, linkCheckAns[1], test.ShouldEqual, expectedMargin)
 	// Verify gateway count is always 1
 	test.That(t, linkCheckAns[2], test.ShouldEqual, byte(1))
+}
+
+func testCreateDutyCycleReq(t *testing.T) {
+	req := createDutyCycleReq()
+	test.That(t, len(req), test.ShouldEqual, 2)
+	test.That(t, req[0], test.ShouldEqual, dutyCycleCID)
+	test.That(t, req[1], test.ShouldEqual, 0x07)
 }

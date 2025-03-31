@@ -102,6 +102,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// set the duty cycle in first downlink if in EU region.
 	setDutyCycle := false
 	if device.Region == regions.EU && device.FCntDown == 0 {
+		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
+		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
 		setDutyCycle = true
 	}
 
@@ -110,7 +112,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, len(phyPayload), sf)
+			payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
@@ -300,4 +302,40 @@ func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 		}
 	}
 	return requests
+}
+
+// Calculate an estimated minimum uplink interval based on the sf and size of the uplink.
+// Formula for TOA can be found in semtech's sx1262 datasheet 6.1.4:
+// https://semtech.my.salesforce.com/sfc/p/#E0000000JelG/a/2R000000Un7F/yT.fKdAr9ZAo3cJLc4F2cBdUsMftpT2vsOICP7NmvMo
+func calculateMinUplinkInterval(sf, size int) float64 {
+	bw := 125000.0
+	dutyCycle := 0.0078125      // 0.78% duty cycle
+	preambleSymbols := 8        // symbols in lora packet preamble
+	overheadSymbols := 4.25     // other symbols in lora packet
+	syncWordSymbols := 8        // overhead for sync word
+	explicitHeaderSymbols := 20 // lora explicit header
+	codeRate := 1               // lora packets using 4/5 coderate so use 1
+	crcNumBits := 16            // num bits in crc
+
+	payloadBits := 8 * size // get the number of bits of the payload
+	payloadBits += crcNumBits
+	payloadBits -= 4 * (sf) // Unclear what the -4 does, not explained in datasheet.
+	payloadBits += 8        // Mystery number from datasheet formula
+	payloadBits += explicitHeaderSymbols
+
+	bitsPerSymbol := float64(sf)
+
+	payloadSymbols := math.Ceil(float64(max(payloadBits, 0))/(4*bitsPerSymbol)) * float64(codeRate+4)
+	totalSymbols := payloadSymbols + float64(preambleSymbols) + overheadSymbols + float64(syncWordSymbols)
+
+	// calculate time on air
+	timePerSymbol := math.Pow(2, float64(sf)) / bw
+	toa := totalSymbols * timePerSymbol
+
+	// total time available for uplinks in an hour
+	timeav := dutyCycle * 3600
+	uplinksPerHour := timeav / toa
+	minIntervalSeconds := 3600 / uplinksPerHour
+
+	return minIntervalSeconds
 }
