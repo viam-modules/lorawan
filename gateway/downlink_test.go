@@ -310,7 +310,7 @@ func TestCreateLinkCheckAns(t *testing.T) {
 	test.That(t, linkCheckAns[2], test.ShouldEqual, byte(1))
 }
 
-func testCreateDutyCycleReq(t *testing.T) {
+func TestCreateDutyCycleReq(t *testing.T) {
 	req := createDutyCycleReq()
 	test.That(t, len(req), test.ShouldEqual, 2)
 	test.That(t, req[0], test.ShouldEqual, dutyCycleCID)
