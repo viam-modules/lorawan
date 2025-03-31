@@ -14,6 +14,7 @@ import (
 
 	// github.com/mattn/go-sqlite3 is for sqlite.
 	_ "github.com/mattn/go-sqlite3"
+	"go.viam.com/rdk/logging"
 )
 
 var (
@@ -30,12 +31,11 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		return err
 	}
 	// create the table if it does not exist
-	cmd := `create table if not exists `
-	keys := `
+	cmd := `create table if not exists ` +
+		`
 	devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT);
 	`
-	sqlStmt := cmd + keys
-	if _, err = db.ExecContext(ctx, sqlStmt); err != nil {
+	if _, err = db.ExecContext(ctx, cmd); err != nil {
 		return err
 	}
 	g.db = db
@@ -69,9 +69,9 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 	if g.db == nil {
 		return errNoDB
 	}
-	cmd := `insert or replace into `
-	keys := `devices (devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName) VALUES(?, ?, ?, ?, ?, ?);`
-	_, err := g.db.ExecContext(ctx, cmd+keys,
+	cmd := `insert or replace into ` +
+		`devices (devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName) VALUES(?, ?, ?, ?, ?, ?);`
+	_, err := g.db.ExecContext(ctx, cmd,
 		device.DevEUI,
 		device.AppSKey,
 		device.NwkSKey,
@@ -112,8 +112,7 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 		return nil, rows.Err()
 	}
 
-	//nolint:errcheck
-	defer rows.Close()
+	defer g.logger.Debug(rows.Close())
 
 	devices := []deviceInfo{}
 	for rows.Next() {
@@ -132,14 +131,14 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 }
 
 // Function to read the device info from the persitent data file.
-func readFromFile(filePath string) ([]deviceInfo, error) {
+func readFromFile(filePath string, logger logging.Logger) ([]deviceInfo, error) {
 	filePath = filepath.Clean(filePath)
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	//nolint:errcheck
-	defer file.Close()
+
+	defer logger.Debug(file.Close())
 	// Reset file pointer to the beginning
 	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
