@@ -472,29 +472,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": 1}, nil
 	}
-	if deviceReq, ok := cmd["return_devices"]; ok {
-		resp := map[string]interface{}{}
-		deviceStr, _ := deviceReq.(string)
-		// look for a specific device if requested. If the device name is not a string we just return all devices.
-		if deviceStr != "" {
-			// check if the device has joined the network.
-			resp[deviceStr], ok = g.devices[deviceStr]
-			if ok {
-				resp["specific device currently joined"] = deviceStr
-			}
-			return nil, fmt.Errorf("device %v is not currently joined", deviceStr)
-		}
-		resp["all devices"] = deviceStr
-		// Read the device info from the file
-		devices, err := g.getAllDevicesFromDB(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read device info from db: %w", err)
-		}
-		for _, device := range devices {
-			resp[device.DevEUI] = device
-		}
-		return resp, nil
-	}
 
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
@@ -567,6 +544,19 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		}
 
 		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
+	}
+	// return all devices that have been registered on the gateway
+	if _, ok := cmd["return_devices"]; ok {
+		resp := map[string]interface{}{}
+		// Read the device info from the file
+		devices, err := g.getAllDevicesFromDB(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		for _, device := range devices {
+			resp[device.DevEUI] = device
+		}
+		return resp, nil
 	}
 
 	return map[string]interface{}{}, nil
