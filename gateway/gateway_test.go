@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
@@ -34,6 +35,7 @@ func setupTestGateway(t *testing.T) *gateway {
 		logger:   logging.NewTestLogger(t),
 		devices:  testDevices,
 		dataFile: file,
+		region:   regions.US,
 	}
 }
 
@@ -156,7 +158,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	retVal, ok := resp["validate"]
 	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, retVal.(int), test.ShouldEqual, 1)
+	test.That(t, retVal.(regions.Region), test.ShouldEqual, regions.US)
 
 	// need to simulate what happens when the DoCommand message is serialized/deserialized into proto
 	doOverWire := func(gateway sensor.Sensor, cmd map[string]interface{}) {

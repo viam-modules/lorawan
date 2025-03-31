@@ -102,7 +102,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		n.FPort = val[0]
 	}
 
-	gateway, err := getGateway(ctx, deps)
+	gateway, err := n.getGateway(ctx, deps)
 	if err != nil {
 		return err
 	}

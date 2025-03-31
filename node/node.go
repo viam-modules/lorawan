@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
@@ -188,6 +189,8 @@ type Node struct {
 	FCntDown  uint16
 	FPort     byte     // for downlinks, only required when frame payload exists.
 	Downlinks [][]byte // list of downlink frame payloads to send
+
+	Region regions.Region
 }
 
 func newNode(
@@ -235,7 +238,7 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 }
 
 // getGateway sends the validate docommand to the gateway to confirm the dependency.
-func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
+func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
 	if len(deps) == 0 {
 		return nil, errors.New("must add sx1302-gateway as dependency")
 	}
@@ -255,7 +258,7 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 	cmd := make(map[string]interface{})
 	cmd["validate"] = 1
 
-	// Validate that the dependency is the gateway - gateway will return 1.
+	// Validate that the dependency is the gateway - gateway will return the region.
 	ret, err := gateway.DoCommand(ctx, cmd)
 	if err != nil {
 		return nil, err
@@ -265,9 +268,20 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 	if !ok {
 		return nil, errors.New("dependency must be the sx1302-gateway sensor")
 	}
-	if retVal.(float64) != 1 {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
+	re, ok := retVal.(float64)
+	if !ok {
+		return nil, fmt.Errorf("expected float64 return, got %v", reflect.TypeOf(retVal))
 	}
+
+	switch re {
+	case 1:
+		n.Region = regions.US
+	case 2:
+		n.Region = regions.EU
+	default:
+		return nil, errors.New("gateway return unexpected region")
+	}
+
 	return gateway, nil
 }
 

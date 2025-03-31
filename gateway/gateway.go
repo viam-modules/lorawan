@@ -171,10 +171,12 @@ type gateway struct {
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
 
-	logReader  *os.File
-	logWriter  *os.File
-	dataFile   *os.File
-	dataMu     sync.Mutex
+	logReader *os.File
+	logWriter *os.File
+	dataFile  *os.File
+	dataMu    sync.Mutex
+
+	region     regions.Region
 	regionInfo regions.RegionInfo
 }
 
@@ -284,13 +286,16 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	region := regions.GetRegion(cfg.Region)
+
 	switch region {
 	case regions.US, regions.Unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
 		g.regionInfo = regions.RegionInfoUS
+		g.region = regions.US
 	case regions.EU:
 		g.logger.Infof("configuring gateway for EU868 band")
 		g.regionInfo = regions.RegionInfoEU
+		g.region = regions.EU
 	}
 
 	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
@@ -475,9 +480,9 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Validate that the dependency is correct.
+	// Validate that the dependency is correct, returns the gateway's region.
 	if _, ok := cmd["validate"]; ok {
-		return map[string]interface{}{"validate": 1}, nil
+		return map[string]interface{}{"validate": g.region}, nil
 	}
 
 	// Add the nodes to the list of devices.

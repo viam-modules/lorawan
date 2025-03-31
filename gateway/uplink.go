@@ -13,6 +13,7 @@ import (
 
 	"github.com/robertkrimen/otto"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -98,12 +99,18 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		device.Downlinks = device.Downlinks[1:]
 	}
 
-	if downlinkPayload != nil || len(requests) > 0 || sendAck {
+	// set the duty cycle in first downlink if in EU region.
+	setDutyCycle := false
+	if device.Region == regions.EU && device.FCntDown == 0 {
+		setDutyCycle = true
+	}
+
+	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {
 		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint16 {
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, sf)
+			payload, err := g.createDownlink(device, downlinkPayload, requests, sendAck, snr, len(phyPayload), sf)
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
