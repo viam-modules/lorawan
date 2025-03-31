@@ -173,7 +173,7 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	}
 	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo)
+	if err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo); err != nil {
 	if err != nil {
 		// if this errors, log but still return join accept.
 		g.logger.Errorf("failed to write device info to db: %v", err)

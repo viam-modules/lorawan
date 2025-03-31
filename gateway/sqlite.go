@@ -52,7 +52,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			err = g.insertOrUpdateDeviceInDB(ctx, device)
+			if err = g.insertOrUpdateDeviceInDB(ctx, device); err != nil {
 			if err != nil {
 				return errTXTMigration
 			}
@@ -82,21 +82,22 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 	return err
 }
 
-func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (*deviceInfo, error) {
+func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo, error) {
 	if g.db == nil {
 		return nil, errNoDB
 	}
+	var zero deviceInfo
 	devEui = strings.ToUpper(devEui)
 	newDevice := deviceInfo{}
 	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?",
 		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey,
 		&newDevice.DevAddr, &newDevice.FCntDown, &newDevice.NodeName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &deviceInfo{}, errNoDeviceInDB
+			return zero, errNoDeviceInDB
 		}
-		return &deviceInfo{}, err
+		return zero, err
 	}
-	return &newDevice, nil
+	return newDevice, nil
 }
 
 func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error) {
