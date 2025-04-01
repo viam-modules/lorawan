@@ -125,6 +125,10 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 
 		devices = append(devices, device)
 	}
+	// check for any errors just in case
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
 
 	return devices, nil
 }
