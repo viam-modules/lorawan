@@ -94,9 +94,6 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	queryAll := `SELECT * FROM devices;`
 	rows, err := g.db.QueryContext(ctx, queryAll)
 	if err != nil {
-		if errors.Is(err, errDBClosedInternal) {
-			return nil, errDBClosed
-		}
 		if err.Error() == errDBClosedInternal.Error() {
 			return nil, errDBClosed
 		}
