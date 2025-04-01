@@ -35,7 +35,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	// create the table if it does not exist
 	// if we want to change the fields in the table, a migration function needs to be created
 	cmd := `create table if not exists ` +
-		`devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT);`
+		`devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT, minUplinkInterval REAL);`
 	if _, err = db.ExecContext(ctx, cmd); err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 	}
 
 	cmd := `insert or replace into ` +
-		`devices(devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName) VALUES(?, ?, ?, ?, ?, ?);`
+		`devices(devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName, minUplinkInterval) VALUES(?, ?, ?, ?, ?, ?, ?);`
 	_, err := g.db.ExecContext(ctx, cmd,
 		device.DevEUI,
 		device.AppSKey,
@@ -58,6 +58,7 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 		device.DevAddr,
 		device.FCntDown,
 		device.NodeName,
+		device.MinUplinkInterval,
 	)
 	if err != nil && err.Error() == errDBClosedInternal.Error() {
 		return errDBClosed
@@ -74,7 +75,7 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo
 	newDevice := deviceInfo{}
 	if err := g.db.QueryRowContext(ctx, "select * from devices where devEui = ?;",
 		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey,
-		&newDevice.DevAddr, &newDevice.FCntDown, &newDevice.NodeName); err != nil {
+		&newDevice.DevAddr, &newDevice.FCntDown, &newDevice.NodeName, &newDevice.MinUplinkInterval); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return zero, errNoDeviceInDB
 		}
@@ -113,7 +114,7 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 			return []deviceInfo{}, ctx.Err()
 		}
 		device := deviceInfo{}
-		err = rows.Scan(&device.DevEUI, &device.AppSKey, &device.NwkSKey, &device.DevAddr, &device.FCntDown, &device.NodeName)
+		err = rows.Scan(&device.DevEUI, &device.AppSKey, &device.NwkSKey, &device.DevAddr, &device.FCntDown, &device.NodeName, &device.MinUplinkInterval)
 		if err != nil {
 			return nil, err
 		}

@@ -98,12 +98,13 @@ type Config struct {
 // deviceInfo is a struct containing OTAA device information.
 // This info is saved across module restarts for each device.
 type deviceInfo struct {
-	DevEUI   string  `json:"dev_eui"`
-	DevAddr  string  `json:"dev_addr"`
-	AppSKey  string  `json:"app_skey"`
-	NwkSKey  string  `json:"nwk_skey"`
-	FCntDown *uint16 `json:"fcnt_down"`
-	NodeName string  `json:"node_name"`
+	DevEUI            string  `json:"dev_eui"`
+	DevAddr           string  `json:"dev_addr"`
+	AppSKey           string  `json:"app_skey"`
+	NwkSKey           string  `json:"nwk_skey"`
+	FCntDown          *uint16 `json:"fcnt_down"`
+	NodeName          string  `json:"node_name"`
+	MinUplinkInterval float64 `json:"min_uplink_interval"`
 }
 
 func init() {
