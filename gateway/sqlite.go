@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	errTXTMigration     = errors.New("error migrating device backup to sqlite. please reset your sensors")
-	errNoDeviceInDB     = errors.New("error device not found")
-	errNoDB             = errors.New("error device file not found")
+	errTXTMigration = errors.New("error migrating device backup to sqlite. please reset your sensors")
+	errNoDeviceInDB = errors.New("error device not found")
+	errNoDB         = errors.New("error device file not found")
+	// errDBClosedInternal is needed because this error is not exported by sql. this can potentially break in the far future.
 	errDBClosedInternal = errors.New("sql: database is closed")
 	errDBClosed         = errors.New("error gateway is closed")
 )
@@ -34,8 +35,8 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	}
 	// create the table if it does not exist
 	// if we want to change the fields in the table, a migration function needs to be created
-	cmd := `create table if not exists ` +
-		`devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT, minUplinkInterval REAL);`
+	cmd := `create table if not exists devices(devEui TEXT NOT NULL PRIMARY KEY,` +
+		` appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT, minUplinkInterval REAL);`
 	if _, err = db.ExecContext(ctx, cmd); err != nil {
 		return err
 	}
@@ -111,7 +112,13 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 			return []deviceInfo{}, ctx.Err()
 		}
 		device := deviceInfo{}
-		err = rows.Scan(&device.DevEUI, &device.AppSKey, &device.NwkSKey, &device.DevAddr, &device.FCntDown, &device.NodeName, &device.MinUplinkInterval)
+		err = rows.Scan(&device.DevEUI,
+			&device.AppSKey,
+			&device.NwkSKey,
+			&device.DevAddr,
+			&device.FCntDown,
+			&device.NodeName,
+			&device.MinUplinkInterval)
 		if err != nil {
 			return nil, err
 		}
