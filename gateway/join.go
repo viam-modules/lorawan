@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -32,10 +31,14 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime tim
 		return err
 	}
 
-	joinAccept, err := g.generateJoinAccept(ctx, jr, device)
+	joinAccept, err := g.generateJoinAccept(ctx, jr, &device)
 	if err != nil {
 		return err
 	}
+
+	g.logger.Info("yo devices: ", g.devices)
+	// update state in gatewayNodes
+	g.devices[device.NodeName] = device
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
@@ -46,10 +49,10 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime tim
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
-func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
+func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, gatewayNode, error) {
 	// join request should always contain 23 bytes, if not something went wrong.
 	if len(payload) != 23 {
-		return joinRequest{}, nil, errInvalidLength
+		return joinRequest{}, gatewayNode{}, errInvalidLength
 	}
 	var joinRequest joinRequest
 
@@ -59,7 +62,7 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	joinRequest.devNonce = payload[17:19]
 	joinRequest.mic = payload[19:23]
 
-	matched := &node.Node{}
+	matched := gatewayNode{}
 
 	// device.devEUI is in big endian - reverse to compare and find device.
 	devEUIBE := reverseByteArray(joinRequest.devEUI)
@@ -73,12 +76,12 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 
 	if matched.NodeName == "" {
 		g.logger.Debugf("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
-		return joinRequest, nil, errNoDevice
+		return joinRequest, gatewayNode{}, errNoDevice
 	}
 
 	err := validateMIC(types.AES128Key(matched.AppKey), payload)
 	if err != nil {
-		return joinRequest, nil, err
+		return joinRequest, gatewayNode{}, err
 	}
 
 	return joinRequest, matched, nil
@@ -88,7 +91,7 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
-func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
+func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *gatewayNode) ([]byte, error) {
 	// generate random join nonce.
 	jn, err := generateJoinNonce()
 	if err != nil {

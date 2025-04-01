@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -88,8 +87,8 @@ func TestValidateMIC(t *testing.T) {
 }
 
 func TestParseJoinRequestPacket(t *testing.T) {
-	devices := make(map[string]*node.Node)
-	testDevice := &node.Node{
+	devices := make(map[string]gatewayNode)
+	testDevice := gatewayNode{
 		DevEui:   testDevEUI,
 		AppKey:   testAppKey,
 		NodeName: testNodeName,
@@ -143,7 +142,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 	tests := []struct {
 		name            string
 		joinRequest     joinRequest
-		device          *node.Node
+		device          gatewayNode
 		checkFile       bool // whether to check file contents after test
 		expectedFileLen int
 		region          regions.Region
@@ -155,7 +154,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 				devEUI:   testDevEUILE,
 				devNonce: testDevNonce,
 			},
-			device: &node.Node{
+			device: gatewayNode{
 				AppKey: testAppKey,
 			},
 			expectedFileLen: 1,
@@ -169,7 +168,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 				devEUI:   testDevEUILE,
 				devNonce: testDevNonce,
 			},
-			device: &node.Node{
+			device: gatewayNode{
 				AppKey: testAppKey,
 			},
 			expectedFileLen: 1,
@@ -183,7 +182,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 				devEUI:   []byte{0x11, 0x11, 0x11, 0x0D, 0x0C, 0x0B, 0x0A, 0x09}, // Different DevEUI
 				devNonce: testDevNonce,
 			},
-			device: &node.Node{
+			device: gatewayNode{
 				AppKey: testAppKey,
 			},
 			expectedFileLen: 2,
@@ -197,7 +196,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 				devEUI:   testDevEUILE,
 				devNonce: testDevNonce,
 			},
-			device: &node.Node{
+			device: gatewayNode{
 				AppKey: testAppKey,
 			},
 			checkFile: false,
@@ -210,7 +209,8 @@ func TestGenerateJoinAccept(t *testing.T) {
 			ctx := context.Background()
 
 			g := &gateway{
-				logger: logging.NewTestLogger(t),
+				logger:  logging.NewTestLogger(t),
+				devices: map[string]gatewayNode{},
 			}
 			// generate the db for the test if we want to check the db afterwards
 			if tt.checkFile {
@@ -225,7 +225,7 @@ func TestGenerateJoinAccept(t *testing.T) {
 				g.regionInfo = regions.RegionInfoEU
 			}
 
-			joinAccept, err := g.generateJoinAccept(ctx, tt.joinRequest, tt.device)
+			joinAccept, err := g.generateJoinAccept(ctx, tt.joinRequest, &tt.device)
 			test.That(t, err, test.ShouldBeNil)
 			// MHDR(1) + Encrypted(JoinNonce(3) + NetID(3) + DevAddr(4) + DLSettings(1) + RxDelay(1) + CFList(16)) + MIC(4)
 			test.That(t, len(joinAccept), test.ShouldEqual, 33)
@@ -268,8 +268,8 @@ func TestGenerateJoinAccept(t *testing.T) {
 }
 
 func TestHandleJoin(t *testing.T) {
-	devices := make(map[string]*node.Node)
-	testDevice := &node.Node{
+	devices := make(map[string]gatewayNode)
+	testDevice := gatewayNode{
 		DevEui:   testDevEUI,
 		AppKey:   testAppKey,
 		NodeName: testNodeName,

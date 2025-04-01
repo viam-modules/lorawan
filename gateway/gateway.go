@@ -166,7 +166,7 @@ type gateway struct {
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
-	devices map[string]*node.Node // map of node name to node struct
+	devices map[string]gatewayNode // map of node name to node struct
 
 	started bool
 	rstPin  board.GPIOPin
@@ -253,7 +253,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
-		g.devices = make(map[string]*node.Node)
+		g.devices = make(map[string]gatewayNode)
 	}
 
 	if g.lastReadings == nil {
@@ -481,32 +481,20 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	// Add the nodes to the list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
-			node, err := convertToNode(newN)
+			node, err := convertToGatewayNode(newN)
 			if err != nil {
 				return nil, err
 			}
-
-			oldNode, exists := g.devices[node.NodeName]
-			switch exists {
-			case false:
-				g.devices[node.NodeName] = node
-			case true:
-				// node with that name already exists, merge them
-				mergedNode, err := mergeNodes(node, oldNode)
-				if err != nil {
-					return nil, err
-				}
-				g.devices[node.NodeName] = mergedNode
-			}
 			// Check if the device is in the persistent data file, if it is add the OTAA info.
-			deviceInfo, err := g.findDeviceInDB(ctx, hex.EncodeToString(g.devices[node.NodeName].DevEui))
+			deviceInfo, err := g.findDeviceInDB(ctx, hex.EncodeToString(node.DevEui))
 			if err != nil {
 				if !errors.Is(err, errNoDeviceInDB) {
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)
 				}
+				g.devices[node.NodeName] = node
 			}
 			// device was found in the file, update the gateway's device map with the device info.
-			err = g.updateDeviceInfo(g.devices[node.NodeName], &deviceInfo)
+			err = g.updateDeviceInfo(node, deviceInfo)
 			if err != nil {
 				return nil, fmt.Errorf("error while updating device info: %w", err)
 			}
@@ -544,6 +532,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			}
 
 			dev.Downlinks = append(dev.Downlinks, payloadBytes)
+			g.devices[name] = dev
 		}
 
 		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
@@ -565,32 +554,63 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// updateDeviceInfo adds the device info from the db into the gateway's device map.
-func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
-	// Update the fields in the map with the info from the file.
-	appsKey, err := hex.DecodeString(d.AppSKey)
-	if err != nil {
-		return fmt.Errorf("failed to decode file's app session key: %w", err)
-	}
+// Node defines a lorawan node device.
+type gatewayNode struct {
+	AppSKey []byte
+	NwkSKey []byte
+	AppKey  []byte
 
-	savedAddr, err := hex.DecodeString(d.DevAddr)
-	if err != nil {
-		return fmt.Errorf("failed to decode file's dev addr: %w", err)
-	}
+	Addr   []byte
+	DevEui []byte
 
-	nwksKey, err := hex.DecodeString(d.NwkSKey)
-	if err != nil {
-		return fmt.Errorf("failed to decode file's nwk session key: %w", err)
-	}
+	DecoderPath string
+	NodeName    string
+	JoinType    string
 
-	device.AppSKey = appsKey
-	device.Addr = savedAddr
-	device.NwkSKey = nwksKey
+	FCntDown  uint16
+	FPort     byte     // for downlinks, only required when frame payload exists.
+	Downlinks [][]byte // list of downlink frame payloads to send
+}
 
-	// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
-	device.FCntDown = math.MaxUint16
-	if d.FCntDown != nil {
-		device.FCntDown = *d.FCntDown
+// updateDeviceInfo adds the device to the gateway's devices map.
+// If deviceInfo was provided, include them with the device.
+func (g *gateway) updateDeviceInfo(device gatewayNode, d deviceInfo) error {
+	if d.DevEUI != "" {
+		// Update the fields in the map with the info from the file.
+		appsKey, err := hex.DecodeString(d.AppSKey)
+		if err != nil {
+			return fmt.Errorf("failed to decode file's app session key: %w", err)
+		}
+
+		savedAddr, err := hex.DecodeString(d.DevAddr)
+		if err != nil {
+			return fmt.Errorf("failed to decode file's dev addr: %w", err)
+		}
+
+		nwksKey, err := hex.DecodeString(d.NwkSKey)
+		if err != nil {
+			return fmt.Errorf("failed to decode file's nwk session key: %w", err)
+		}
+		switch device.JoinType {
+		case node.JoinTypeOTAA:
+			// if join type is OTAA - keep the appSKey, dev addr from the old node.
+			// These fields were determined by the gateway if the join procedure was done.
+			device.AppSKey = appsKey
+			device.Addr = savedAddr
+		case node.JoinTypeABP:
+			// if join type is ABP get the new appSKey and addr from the new config.
+		default:
+			// we should already have validated the JoinType, but still throw an error here if this hits.
+			return errUnexpectedJoinType
+		}
+
+		device.NwkSKey = nwksKey
+
+		// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
+		device.FCntDown = math.MaxUint16
+		if d.FCntDown != nil {
+			device.FCntDown = *d.FCntDown
+		}
 	}
 
 	// Update the device in the map.
@@ -598,63 +618,49 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	return nil
 }
 
-// mergeNodes merge the fields from the oldNode and the newNode sent from reconfigure.
-func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
-	mergedNode := &node.Node{}
-	mergedNode.DecoderPath = newNode.DecoderPath
-	mergedNode.NodeName = newNode.NodeName
-	mergedNode.JoinType = newNode.JoinType
-	mergedNode.FPort = newNode.FPort
-
-	switch mergedNode.JoinType {
-	case "OTAA":
-		// if join type is OTAA - keep the appSKey, dev addr from the old node.
-		// These fields were determined by the gateway if the join procedure was done.
-		mergedNode.Addr = oldNode.Addr
-		mergedNode.AppSKey = oldNode.AppSKey
-		// The appkey and deveui are obtained by the config in OTAA,
-		// if these were changed during reconfigure the join procedure needs to be redone
-		mergedNode.AppKey = newNode.AppKey
-		mergedNode.DevEui = newNode.DevEui
-	case "ABP":
-		// if join type is ABP get the new appSKey and addr from the new config.
-		// Don't need appkey and DevEui for ABP.
-		mergedNode.Addr = newNode.Addr
-		mergedNode.AppSKey = newNode.AppSKey
-	default:
-		return nil, errUnexpectedJoinType
-	}
-
-	return mergedNode, nil
-}
-
 // convertToNode converts the map from the docommand into the node struct.
-func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
-	node := &node.Node{DecoderPath: mapNode["DecoderPath"].(string)}
+// the mapNode fields must match the fields in the node.Node struct.
+func convertToGatewayNode(mapNode map[string]interface{}) (gatewayNode, error) {
+	newNode := gatewayNode{DecoderPath: mapNode["DecoderPath"].(string)}
 
 	var err error
-	node.AppKey, err = convertToBytes(mapNode["AppKey"])
+	newNode.AppKey, err = convertToBytes(mapNode["AppKey"])
 	if err != nil {
-		return nil, err
+		return gatewayNode{}, err
 	}
-	node.AppSKey, err = convertToBytes(mapNode["AppSKey"])
+	newNode.AppSKey, err = convertToBytes(mapNode["AppSKey"])
 	if err != nil {
-		return nil, err
+		return gatewayNode{}, err
 	}
-	node.DevEui, err = convertToBytes(mapNode["DevEui"])
+	newNode.DevEui, err = convertToBytes(mapNode["DevEui"])
 	if err != nil {
-		return nil, err
+		return gatewayNode{}, err
 	}
-	node.Addr, err = convertToBytes(mapNode["Addr"])
+	newNode.Addr, err = convertToBytes(mapNode["Addr"])
 	if err != nil {
-		return nil, err
+		return gatewayNode{}, err
 	}
 
-	node.FPort = byte(mapNode["FPort"].(float64))
-	node.NodeName = mapNode["NodeName"].(string)
-	node.JoinType = mapNode["JoinType"].(string)
+	if fPortFloat, ok := mapNode["FPort"].(float64); ok && fPortFloat != 0 {
+		newNode.FPort = byte(fPortFloat)
+	} else {
+		return gatewayNode{}, fmt.Errorf("FPort must be non-zero, got %v", mapNode["FPort"])
+	}
 
-	return node, nil
+	if nodeName, ok := mapNode["NodeName"].(string); ok && nodeName != "" {
+		newNode.NodeName = nodeName
+	} else {
+		return gatewayNode{}, fmt.Errorf("NodeName cannot be empty, got %v", mapNode["NodeName"])
+	}
+
+	if joinType, ok := mapNode["JoinType"].(string); ok &&
+		(joinType == node.JoinTypeOTAA || joinType == node.JoinTypeABP) {
+		newNode.JoinType = joinType
+	} else {
+		return gatewayNode{}, errUnexpectedJoinType
+	}
+
+	return newNode, nil
 }
 
 // convertToBytes converts the interface{} field from the docommand map into a byte array.

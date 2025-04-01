@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/robertkrimen/otto"
-	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -103,10 +102,15 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := g.createDownlink(ctx, device, downlinkPayload, requests, sendAck, snr, sf)
+			payload, err := g.createDownlink(ctx, &device, downlinkPayload, requests, sendAck, snr, sf)
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
+
+			g.logger.Info("yo devices: ", g.devices)
+			// update state in gatewayNodes
+			g.devices[device.NodeName] = device
+
 			if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 			}
@@ -179,13 +183,13 @@ func convertTo32Bit(readings map[string]interface{}) map[string]interface{} {
 	return readings
 }
 
-func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node, error) {
+func matchDeviceAddr(devAddr []byte, devices map[string]gatewayNode) (gatewayNode, error) {
 	for _, dev := range devices {
 		if bytes.Equal(devAddr, dev.Addr) {
 			return dev, nil
 		}
 	}
-	return nil, fmt.Errorf("no match for DeviceAddress %v", devAddr)
+	return gatewayNode{}, fmt.Errorf("no match for DeviceAddress %v", devAddr)
 }
 
 func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
@@ -279,7 +283,7 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 }
 
 // returns a list of the fopt mac commands the module supports sending a downlink for.
-func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
+func (g *gateway) getFOptsToSend(fopts []byte, device gatewayNode) []byte {
 	requests := make([]byte, 0)
 	for _, b := range fopts {
 		switch b {
