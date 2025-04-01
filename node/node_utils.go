@@ -174,10 +174,9 @@ func CheckCaptureFrequency(c resource.Config, interval float64, logger logging.L
 // WriteDecoderFile writes an embedded decoderFile into the data folder of the module.
 func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, error) {
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
-	filePath := filepath.Join(moduleDataDir, decoderFilename)
+	filePath := filepath.Clean(filepath.Join(moduleDataDir, decoderFilename))
 
 	// check if the decoder was already written
-	//nolint:gosec
 	if _, err := os.Stat(filePath); errors.Is(err, os.ErrNotExist) {
 		// the decoder hasn't been written yet, so lets write it.
 		// load the decoder from the binary
@@ -185,7 +184,7 @@ func WriteDecoderFile(decoderFilename string, decoderFile embed.FS) (string, err
 		if err != nil {
 			return "", err
 		}
-		file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o666)
+		file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
 		if err != nil {
 			return "", err
 		}

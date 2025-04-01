@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -17,6 +18,7 @@ import (
 )
 
 func TestCreateDownlink(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		name                string
 		device              *node.Node
@@ -178,19 +180,19 @@ func TestCreateDownlink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temporary data file for testing
-			testFile := createDataFile(t)
-
 			// Set up the gateway for testing
 			g := &gateway{
-				logger:   logging.NewTestLogger(t),
-				dataFile: testFile,
+				logger: logging.NewTestLogger(t),
 			}
+
+			dataDirectory1 := t.TempDir()
+			err := g.setupSqlite(context.Background(), dataDirectory1)
+			test.That(t, err, test.ShouldBeNil)
 
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
+			payload, err := g.createDownlink(ctx, tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -250,7 +252,7 @@ func TestCreateDownlink(t *testing.T) {
 				// Verify FCntDown was incremented
 				test.That(t, tt.device.FCntDown, test.ShouldEqual, initialFCntDown+1)
 
-				deviceInfoList, err := readFromFile(g.dataFile)
+				deviceInfoList, err := g.getAllDevicesFromDB(context.Background())
 				test.That(t, err, test.ShouldBeNil)
 
 				found := false

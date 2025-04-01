@@ -2,8 +2,8 @@ package gateway
 
 import (
 	"context"
-	"fmt"
-	"os"
+	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,12 +139,11 @@ func TestParseJoinRequestPacket(t *testing.T) {
 }
 
 func TestGenerateJoinAccept(t *testing.T) {
-	testFile := createDataFile(t)
+	dataDirectory1 := t.TempDir()
 	tests := []struct {
 		name            string
 		joinRequest     joinRequest
 		device          *node.Node
-		file            *os.File
 		checkFile       bool // whether to check file contents after test
 		expectedFileLen int
 		region          regions.Region
@@ -159,7 +158,6 @@ func TestGenerateJoinAccept(t *testing.T) {
 			device: &node.Node{
 				AppKey: testAppKey,
 			},
-			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
 			region:          regions.US,
@@ -174,7 +172,6 @@ func TestGenerateJoinAccept(t *testing.T) {
 			device: &node.Node{
 				AppKey: testAppKey,
 			},
-			file:            testFile,
 			expectedFileLen: 1,
 			checkFile:       true,
 			region:          regions.US,
@@ -189,7 +186,6 @@ func TestGenerateJoinAccept(t *testing.T) {
 			device: &node.Node{
 				AppKey: testAppKey,
 			},
-			file:            testFile,
 			expectedFileLen: 2,
 			checkFile:       true,
 			region:          regions.US,
@@ -204,7 +200,6 @@ func TestGenerateJoinAccept(t *testing.T) {
 			device: &node.Node{
 				AppKey: testAppKey,
 			},
-			file:      nil,
 			checkFile: false,
 			region:    regions.US,
 		},
@@ -213,16 +208,14 @@ func TestGenerateJoinAccept(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			var file *os.File
-			if tt.file != nil {
-				var err error
-				file, err = os.OpenFile(tt.file.Name(), os.O_RDWR|os.O_CREATE, 0o644)
-				test.That(t, err, test.ShouldBeNil)
-			}
 
 			g := &gateway{
-				dataFile: file,
-				logger:   logging.NewTestLogger(t),
+				logger: logging.NewTestLogger(t),
+			}
+			// generate the db for the test if we want to check the db afterwards
+			if tt.checkFile {
+				err := g.setupSqlite(ctx, dataDirectory1)
+				test.That(t, err, test.ShouldBeNil)
 			}
 
 			switch tt.region {
@@ -251,16 +244,16 @@ func TestGenerateJoinAccept(t *testing.T) {
 			test.That(t, decrypted[12:28], test.ShouldResemble, g.regionInfo.CfList)
 
 			if tt.checkFile {
-				devices, err := readFromFile(g.dataFile)
+				devices, err := g.getAllDevicesFromDB(ctx)
 				test.That(t, err, test.ShouldBeNil)
 				test.That(t, len(devices), test.ShouldEqual, tt.expectedFileLen)
 				// Find the device in the file
 				found := false
 				devEUIBE := reverseByteArray(tt.joinRequest.devEUI)
 				for _, d := range devices {
-					if d.DevEUI == fmt.Sprintf("%X", devEUIBE) {
-						test.That(t, d.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", tt.device.Addr))
-						test.That(t, d.AppSKey, test.ShouldEqual, fmt.Sprintf("%X", tt.device.AppSKey))
+					if d.DevEUI == strings.ToUpper(hex.EncodeToString(devEUIBE)) {
+						test.That(t, d.DevAddr, test.ShouldEqual, strings.ToUpper(hex.EncodeToString(tt.device.Addr)))
+						test.That(t, d.AppSKey, test.ShouldEqual, strings.ToUpper(hex.EncodeToString(tt.device.AppSKey)))
 						found = true
 						break
 					}
@@ -274,100 +267,6 @@ func TestGenerateJoinAccept(t *testing.T) {
 	}
 }
 
-func TestSearchAndRemove(t *testing.T) {
-	tests := []struct {
-		name          string
-		initialData   []deviceInfo
-		devEUIToFind  []byte
-		expectError   bool
-		expectedCount int // number of devices expected after removal
-	}{
-		{
-			name: "device exists and is removed",
-			initialData: []deviceInfo{
-				{DevEUI: "100F0E0D0C0B0A09", DevAddr: "01020304", AppSKey: "0102030405060708090A0B0C0D0E0F10"},
-			},
-			devEUIToFind:  testDevEUI,
-			expectError:   false,
-			expectedCount: 0,
-		},
-		{
-			name: "device doesn't exist",
-			initialData: []deviceInfo{
-				{DevEUI: "100F0E0D0C0B0A09", DevAddr: "01020304", AppSKey: "0102030405060708090A0B0C0D0E0F10"},
-			},
-			devEUIToFind:  []byte{0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
-			expectError:   false,
-			expectedCount: 1,
-		},
-		{
-			name:          "empty file",
-			initialData:   []deviceInfo{},
-			devEUIToFind:  testDevEUI,
-			expectError:   false,
-			expectedCount: 0,
-		},
-		{
-			name: "multiple devices, one removed",
-			initialData: []deviceInfo{
-				{DevEUI: "100F0E0D0C0B0A09", DevAddr: "01020304", AppSKey: "0102030405060708090A0B0C0D0E0F10"},
-				{DevEUI: "2021222324252627", DevAddr: "01020305", AppSKey: "0102030405060708090A0B0C0D0E0F11"},
-			},
-			devEUIToFind:  testDevEUI,
-			expectError:   false,
-			expectedCount: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			file := createDataFile(t)
-
-			g := gateway{}
-
-			// Initialize file with test data
-			err := writeToFile(file, tt.initialData)
-			test.That(t, err, test.ShouldBeNil)
-
-			// Test searchAndRemove
-			err = g.searchAndRemove(file, tt.devEUIToFind)
-			if tt.expectError {
-				test.That(t, err, test.ShouldNotBeNil)
-			} else {
-				test.That(t, err, test.ShouldBeNil)
-			}
-
-			// Verify remaining devices
-			devices, err := readFromFile(file)
-			test.That(t, err, test.ShouldBeNil)
-			test.That(t, len(devices), test.ShouldEqual, tt.expectedCount)
-
-			// If we removed a device, verify it's not in the file
-			if tt.expectedCount < len(tt.initialData) {
-				devEUIHex := fmt.Sprintf("%X", tt.devEUIToFind)
-				for _, device := range devices {
-					test.That(t, device.DevEUI, test.ShouldNotEqual, devEUIHex)
-				}
-			}
-		})
-	}
-}
-
-func TestAddAndRemoveDeviceInfoToFile(t *testing.T) {
-	g := gateway{}
-	file := createDataFile(t)
-	info := deviceInfo{DevEUI: fmt.Sprintf("%X", testDevEUI), DevAddr: "123456", AppSKey: fmt.Sprintf("%X", testAppSKey)}
-	err := g.addDeviceInfoToFile(file, info)
-	test.That(t, err, test.ShouldBeNil)
-
-	deviceInfo, err := readFromFile(file)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deviceInfo), test.ShouldEqual, 1)
-	test.That(t, deviceInfo[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
-	test.That(t, deviceInfo[0].DevAddr, test.ShouldEqual, "123456")
-	test.That(t, deviceInfo[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", testAppSKey))
-}
-
 func TestHandleJoin(t *testing.T) {
 	devices := make(map[string]*node.Node)
 	testDevice := &node.Node{
@@ -378,10 +277,12 @@ func TestHandleJoin(t *testing.T) {
 	devices[testNodeName] = testDevice
 
 	g := &gateway{
-		logger:   logging.NewTestLogger(t),
-		devices:  devices,
-		dataFile: createDataFile(t),
+		logger:  logging.NewTestLogger(t),
+		devices: devices,
 	}
+	dataDirectory1 := t.TempDir()
+	err := g.setupSqlite(context.Background(), dataDirectory1)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Create valid join request payload
 	payload := []byte{0x00} // MHDR

@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -19,8 +18,6 @@ import (
 
 // setupTestGateway creates a test gateway with a configured test device.
 func setupTestGateway(t *testing.T) *gateway {
-	// Create a temp device data file for testing
-	file := createDataFile(t)
 
 	testDevices := make(map[string]*node.Node)
 	testNode := &node.Node{
@@ -32,16 +29,15 @@ func setupTestGateway(t *testing.T) *gateway {
 	testDevices[testNodeName] = testNode
 
 	return &gateway{
-		logger:   logging.NewTestLogger(t),
-		devices:  testDevices,
-		dataFile: file,
-		region:   regions.US,
+		logger:  logging.NewTestLogger(t),
+		devices: testDevices,
+		region:  regions.US,
 	}
 }
 
 // creates a test gateway with device info populated in the file.
 func setupFileAndGateway(t *testing.T) *gateway {
-	g := setupTestGateway(t)
+	g := createTestGateway(t)
 
 	// Write device info to file
 	devices := []deviceInfo{
@@ -51,10 +47,10 @@ func setupFileAndGateway(t *testing.T) *gateway {
 			AppSKey: fmt.Sprintf("%X", testAppSKey),
 		},
 	}
-	data, err := json.MarshalIndent(devices, "", "  ")
-	test.That(t, err, test.ShouldBeNil)
-	_, err = g.dataFile.Write(data)
-	test.That(t, err, test.ShouldBeNil)
+	for _, device := range devices {
+		err := g.insertOrUpdateDeviceInDB(context.Background(), device)
+		test.That(t, err, test.ShouldBeNil)
+	}
 
 	return g
 }
@@ -475,42 +471,8 @@ func TestStartCLogging(t *testing.T) {
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 }
 
-func TestSearchForDeviceInFile(t *testing.T) {
-	g := setupTestGateway(t)
-
-	// Device found in file should return device info
-	devices := []deviceInfo{
-		{
-			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-			AppSKey: "5572404C694E6B4C6F526132303138323",
-		},
-	}
-	data, err := json.MarshalIndent(devices, "", "  ")
-	test.That(t, err, test.ShouldBeNil)
-	_, err = g.dataFile.Write(data)
-	test.That(t, err, test.ShouldBeNil)
-
-	device, err := g.searchForDeviceInFile(testDevEUI)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, device, test.ShouldNotBeNil)
-	test.That(t, device.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
-
-	//  Device not found in file should return errNoDevice
-	unknownAddr := []byte{0x01, 0x02, 0x03, 0x04}
-	device, err = g.searchForDeviceInFile(unknownAddr)
-	test.That(t, err, test.ShouldBeError, errNoDevice)
-	test.That(t, device, test.ShouldBeNil)
-
-	// Test File read error
-	g.dataFile.Close()
-	_, err = g.searchForDeviceInFile(testDeviceAddr)
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to read device info from file")
-}
-
 func TestUpdateDeviceInfo(t *testing.T) {
-	g := setupTestGateway(t)
+	g := createTestGateway(t)
 
 	newAppSKey := []byte{
 		0x55, 0x72, 0x40, 0x4C,
@@ -551,6 +513,9 @@ func TestClose(t *testing.T) {
 		logger:  logging.NewTestLogger(t),
 		started: true,
 	}
+	dataDirectory1 := t.TempDir()
+	err := g.setupSqlite(context.Background(), dataDirectory1)
+	test.That(t, err, test.ShouldBeNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -561,7 +526,7 @@ func TestClose(t *testing.T) {
 	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
 
 	// Call Close and verify cleanup
-	err := g.Close(ctx)
+	err = g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Verify gateway is reset
@@ -571,21 +536,23 @@ func TestClose(t *testing.T) {
 	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
 
 	// Verify file handles are closed
-	if g.logWriter != nil {
+	{
 		buf := make([]byte, 1)
 		_, err = g.logWriter.Write(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
-	if g.logReader != nil {
+	{
 		buf := make([]byte, 1)
 		_, err = g.logReader.Read(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
-	if g.dataFile != nil {
-		buf := make([]byte, 1)
-		_, err = g.dataFile.Read(buf)
-		test.That(t, err, test.ShouldNotBeNil)
-	}
+
+	_, err = g.getAllDevicesFromDB(ctx)
+	test.That(t, err, test.ShouldNotBeNil)
+
+	// call close again
+	err = g.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestNativeConfig(t *testing.T) {
