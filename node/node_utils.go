@@ -15,12 +15,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
 // TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
@@ -85,8 +87,10 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		if err != nil {
 			return err
 		}
+
 		n.DecoderPath = decoderFilePath
 	} else if err := isValidFilePath(n.DecoderPath); err != nil {
+		n.logger.Infof("HERE NOT VALID ERROR")
 		return fmt.Errorf("provided decoder file path is not valid: %w", err)
 	}
 	n.JoinType = cfg.JoinType
@@ -321,6 +325,8 @@ const (
 // SendIntervalDownlink formats a payload to send to the gateway using an IntervalRequest.
 // The function does not support interval downlinks with more than 8 bytes.
 func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]interface{}, error) {
+	n.logger.Infof("HERE SENDING INTERVAL DOWNLINK")
+	n.logger.Infof("%f", n.MinIntervalSeconds)
 	var formattedInterval uint64
 	if req.Header == "" {
 		return nil, errors.New("cannot send interval downlink, downlink header is empty")
@@ -351,10 +357,16 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 		 uplink interval complies with this restriction to avoid transmission issues`)
 	}
 
+	n.logger.Infof("%f", req.IntervalMin*60.0)
+
 	if n.MinIntervalSeconds != 0 {
-		if n.MinIntervalSeconds > req.IntervalMin*60 {
-			n.logger.Warnf(`requested uplink interval (%.2f minutes) may exceed the legal duty cycle limit.
-			The device may not transmit at this interval`, req.IntervalMin)
+		n.logger.Info("here")
+		n.logger.Infof("%f", n.MinIntervalSeconds)
+		n.logger.Infof("%f", req.IntervalMin*60.0)
+		if n.MinIntervalSeconds > (req.IntervalMin * 60.0) {
+			n.logger.Infof("HERE ERROR")
+			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f,
+			increase the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
 		}
 	}
 
@@ -411,4 +423,30 @@ func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[str
 	}
 
 	return n.SendDownlink(ctx, fullPayload, false)
+}
+
+func (n *Node) PollGateway(ctx context.Context) {
+	cmd := map[string]interface{}{GetIntervalKey: n.NodeName}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		resp, err := n.gateway.DoCommand(ctx, cmd)
+		if err != nil {
+			n.logger.Errorf("error getting node info: %w", err)
+		}
+		if interval, ok := resp[GetIntervalKey]; ok {
+			minInterval, ok := interval.(float64)
+			if !ok {
+				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(interval))
+			}
+			n.logger.Infof("updating the minumum interval")
+			n.MinIntervalSeconds = minInterval
+		}
+		// wait 30 seconds between checking for updates
+		utils.SelectContextOrWait(ctx, time.Second*30)
+
+	}
 }

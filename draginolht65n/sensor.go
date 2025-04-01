@@ -11,6 +11,7 @@ import (
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
 const (
@@ -106,6 +107,8 @@ func newLHT65N(
 	if err != nil {
 		return nil, err
 	}
+
+	n.node.Workers = utils.NewBackgroundStoppableWorkers(n.node.PollGateway)
 
 	return n, nil
 }

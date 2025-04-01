@@ -558,6 +558,30 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
 	}
 
+	if nodeName, ok := cmd[node.GetIntervalKey]; ok {
+		g.logger.Infof("GOT INTERVAL DO COMMAND")
+		strNodeName, ok := nodeName.(string)
+		if !ok {
+			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(nodeName))
+		}
+		dev, ok := g.devices[strNodeName]
+		if !ok {
+			return nil, fmt.Errorf("node with name %s not found", strNodeName)
+		}
+
+		g.logger.Infof("%v", dev.MinIntervalUpdated.Load())
+		g.logger.Infof("%v", dev.MinIntervalSeconds)
+		if dev.MinIntervalUpdated.Load() {
+			g.logger.Infof("GIVING RESPONSE")
+			resp := map[string]interface{}{node.GetIntervalKey: dev.MinIntervalSeconds}
+			dev.MinIntervalUpdated.Store(false)
+			return resp, nil
+		} else {
+			// the interval has not been updated
+			return map[string]interface{}{}, nil
+		}
+	}
+
 	return map[string]interface{}{}, nil
 }
 
@@ -625,6 +649,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.NodeName = newNode.NodeName
 	mergedNode.JoinType = newNode.JoinType
 	mergedNode.FPort = newNode.FPort
+	mergedNode.MinIntervalSeconds = newNode.MinIntervalSeconds
 
 	switch mergedNode.JoinType {
 	case "OTAA":

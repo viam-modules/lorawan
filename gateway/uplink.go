@@ -13,7 +13,6 @@ import (
 
 	"github.com/robertkrimen/otto"
 	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -101,11 +100,12 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	// set the duty cycle in first downlink if in EU region.
 	setDutyCycle := false
-	if device.Region == regions.EU && device.FCntDown == 0 {
+	if device.FCntDown == 0 {
 		setDutyCycle = true
 		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
 		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
 		device.MinIntervalSeconds = minInterval
+		device.MinIntervalUpdated.Store(true)
 	}
 
 	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {
@@ -297,6 +297,8 @@ func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 			requests = append(requests, b)
 		case linkCheckCID:
 			requests = append(requests, b)
+		case dutyCycleCID:
+			// do nothing, response
 		default:
 			// unsupported mac command
 			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)

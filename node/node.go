@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
 // LorawanFamily is the model family for the Lorawan module.
@@ -57,6 +59,8 @@ const (
 
 // NoReadings is the return for a sensor that has not received data.
 var NoReadings = map[string]interface{}{"": "no readings available yet"}
+
+var GetIntervalKey = "get_interval"
 
 // Config defines the node's config.
 type Config struct {
@@ -192,6 +196,9 @@ type Node struct {
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval
+	MinIntervalUpdated atomic.Bool
+
+	Workers *utils.StoppableWorkers
 }
 
 func newNode(
@@ -218,6 +225,7 @@ func newNode(
 
 // Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	n.logger.Infof("GENERIC NODE RECONFIUTRE")
 	n.reconfigureMu.Lock()
 	defer n.reconfigureMu.Unlock()
 	cfg, err := resource.NativeConfig[*Config](conf)
@@ -227,6 +235,7 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 
 	err = n.ReconfigureWithConfig(ctx, deps, cfg)
 	if err != nil {
+		n.logger.Infof("GENERIC NODE ERROR")
 		return err
 	}
 
@@ -288,6 +297,7 @@ func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sens
 
 // Close removes the device from the gateway.
 func (n *Node) Close(ctx context.Context) error {
+	n.Workers.Stop()
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
 	_, err := n.gateway.DoCommand(ctx, cmd)
