@@ -33,6 +33,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		return err
 	}
 	// create the table if it does not exist
+	// if we want to change the fields in the table, a migration function needs to be created
 	cmd := `create table if not exists ` +
 		`devices(devEui TEXT NOT NULL PRIMARY KEY, appSKey TEXT, nwkSKey TEXT, devAddr TEXT, fCntDown INTEGER, nodeName TEXT);`
 	if _, err = db.ExecContext(ctx, cmd); err != nil {
@@ -123,7 +124,7 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	return devices, nil
 }
 
-// Function to migrate the device info from the persitent data file into a sqlite db
+// Function to migrate the device info from the persitent data file into a sqlite db.
 func (g *gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
 	// check if the machine has an old devicedata file for us to migrate
 	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
