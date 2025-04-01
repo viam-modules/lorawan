@@ -516,20 +516,23 @@ func TestClose(t *testing.T) {
 	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
 
 	// Verify file handles are closed
-	if g.logWriter != nil {
+	{
 		buf := make([]byte, 1)
 		_, err = g.logWriter.Write(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
-	if g.logReader != nil {
+	{
 		buf := make([]byte, 1)
 		_, err = g.logReader.Read(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
-	if g.db != nil {
-		_, err = g.getAllDevicesFromDB(ctx)
-		test.That(t, err, test.ShouldNotBeNil)
-	}
+
+	_, err = g.getAllDevicesFromDB(ctx)
+	test.That(t, err, test.ShouldNotBeNil)
+
+	// call close again
+	err = g.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestNativeConfig(t *testing.T) {
