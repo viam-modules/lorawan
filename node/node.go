@@ -59,8 +59,6 @@ const (
 // NoReadings is the return for a sensor that has not received data.
 var NoReadings = map[string]interface{}{"": "no readings available yet"}
 
-var GetIntervalKey = "get_interval"
-
 // Config defines the node's config.
 type Config struct {
 	JoinType string   `json:"join_type,omitempty"`
@@ -223,7 +221,6 @@ func newNode(
 
 // Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-	n.logger.Infof("GENERIC NODE RECONFIUTRE")
 	n.reconfigureMu.Lock()
 	defer n.reconfigureMu.Unlock()
 	cfg, err := resource.NativeConfig[*Config](conf)
@@ -233,7 +230,6 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 
 	err = n.ReconfigureWithConfig(ctx, deps, cfg)
 	if err != nil {
-		n.logger.Infof("GENERIC NODE ERROR")
 		return err
 	}
 
@@ -295,7 +291,9 @@ func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sens
 
 // Close removes the device from the gateway.
 func (n *Node) Close(ctx context.Context) error {
-	n.Workers.Stop()
+	if n.Workers != nil {
+		n.Workers.Stop()
+	}
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
 	_, err := n.gateway.DoCommand(ctx, cmd)

@@ -25,9 +25,12 @@ import (
 	"go.viam.com/utils"
 )
 
-// TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
-const TestKey = "test_only"
-const GetDeviceKey = "get_device"
+const (
+	// TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
+	TestKey = "test_only"
+	// GetDeviceKey is a DoCommand key to get device info from a device.
+	GetDeviceKey = "get_device"
+)
 
 // NewSensor creates a new Node struct. This can be used by external implementers.
 func NewSensor(conf resource.Config, logger logging.Logger) Node {
@@ -324,7 +327,6 @@ const (
 // SendIntervalDownlink formats a payload to send to the gateway using an IntervalRequest.
 // The function does not support interval downlinks with more than 8 bytes.
 func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]interface{}, error) {
-	n.logger.Infof("HERE SENDING INTERVAL DOWNLINK")
 	var formattedInterval uint64
 	if req.Header == "" {
 		return nil, errors.New("cannot send interval downlink, downlink header is empty")
@@ -350,19 +352,20 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 			req.IntervalMin, req.NumBytes)
 	}
 
-	n.logger.Infof("Min interval: %f", n.MinIntervalSeconds)
-
 	if n.Region == regions.EU {
 		n.logger.Warnf(`the duty cycle limit in the EU region is 1%%. Ensure your
 		 uplink interval complies with this restriction to avoid transmission issues`)
 	}
 
+	// Lock to prevent minInterval from updating during read.
+	n.reconfigureMu.Lock()
 	if n.MinIntervalSeconds != 0 {
 		if n.MinIntervalSeconds > (req.IntervalMin * 60.0) {
 			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f,
 			increase the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
 		}
 	}
+	n.reconfigureMu.Unlock()
 
 	// we format the hex with uppercase, ensure the header is too.
 	intervalString := strings.ToUpper(req.Header)
@@ -419,6 +422,7 @@ func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[str
 	return n.SendDownlink(ctx, fullPayload, false)
 }
 
+// PollGateway sends a do command to the gateway every 30 seconds to updated new device info.
 func (n *Node) PollGateway(ctx context.Context) {
 	eui := hex.EncodeToString(n.DevEui)
 	cmd := map[string]interface{}{GetDeviceKey: eui}
@@ -432,12 +436,12 @@ func (n *Node) PollGateway(ctx context.Context) {
 		if err != nil {
 			n.logger.Errorf("error getting node info: %v", err.Error())
 		}
+
 		if device, ok := resp[GetDeviceKey]; ok {
 			dev, ok := device.(map[string]interface{})
 			if !ok {
 				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
 			}
-
 			// update node struct with info
 			if err := n.updateNode(dev); err != nil {
 				n.logger.Errorf("error getting device info: %w", err)
@@ -445,35 +449,44 @@ func (n *Node) PollGateway(ctx context.Context) {
 		}
 		// wait 30 seconds between checking for updates
 		utils.SelectContextOrWait(ctx, time.Second*30)
-
 	}
 }
 
-// convertToNode converts the map from the docommand into the node struct.
+// updateNode converts the map from the docommand into the node struct.
 func (n *Node) updateNode(mapNode map[string]interface{}) error {
-	var err error
-
-	n.AppSKey, err = hex.DecodeString(mapNode["app_skey"].(string))
+	// Parse all values before acquiring lock
+	appSKey, err := hex.DecodeString(mapNode["app_skey"].(string))
 	if err != nil {
 		return fmt.Errorf("error saving app S key: %w", err)
 	}
 
-	n.DevEui, err = hex.DecodeString(mapNode["dev_eui"].(string))
+	devEui, err := hex.DecodeString(mapNode["dev_eui"].(string))
 	if err != nil {
 		return fmt.Errorf("error saving dev eui: %w", err)
 	}
 
-	n.NwkSKey, err = hex.DecodeString(mapNode["nwk_skey"].(string))
+	nwkSKey, err := hex.DecodeString(mapNode["nwk_skey"].(string))
 	if err != nil {
 		return fmt.Errorf("error saving nwk S key: %w", err)
 	}
 
-	n.Addr, err = hex.DecodeString(mapNode["dev_addr"].(string))
+	addr, err := hex.DecodeString(mapNode["dev_addr"].(string))
 	if err != nil {
 		return fmt.Errorf("error saving dev addr: %w", err)
 	}
 
-	n.MinIntervalSeconds = mapNode["min_uplink_interval"].(float64)
-	n.FCntDown = uint16(mapNode["fcnt_down"].(float64))
+	minInterval := mapNode["min_uplink_interval"].(float64)
+	fcntDown := uint16(mapNode["fcnt_down"].(float64))
+
+	// Update all fields atomically under lock
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
+
+	n.AppSKey = appSKey
+	n.DevEui = devEui
+	n.NwkSKey = nwkSKey
+	n.Addr = addr
+	n.MinIntervalSeconds = minInterval
+	n.FCntDown = fcntDown
 	return nil
 }

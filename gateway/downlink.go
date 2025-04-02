@@ -10,6 +10,7 @@ import (
 
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/utils"
@@ -128,7 +129,7 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 	}
 
 	// Send the dutycycleReq on the first downlink if EU region
-	if device.FCntDown == 0 {
+	if device.Region == regions.EU && device.FCntDown == 0 {
 		dutyCycleReq := createDutyCycleReq()
 		fopts = append(fopts, dutyCycleReq...)
 		g.logger.Debugf("sending duty cycle request to %s", device.NodeName)

@@ -908,3 +908,110 @@ func testDoCommandResp(t *testing.T, resp map[string]interface{}, err error,
 		}
 	}
 }
+
+func TestUpdateNode(t *testing.T) {
+	n := &Node{}
+
+	validNodeInfo := map[string]interface{}{
+		"app_skey":            testAppSKey,
+		"dev_eui":             testDevEUI,
+		"nwk_skey":            testNwkSKey,
+		"dev_addr":            testDevAddr,
+		"min_uplink_interval": float64(60),
+		"fcnt_down":           float64(123),
+	}
+
+	err := n.updateNode(validNodeInfo)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Verify all fields were updated correctly
+	expectedAppSKey, _ := hex.DecodeString(testAppSKey)
+	test.That(t, n.AppSKey, test.ShouldResemble, expectedAppSKey)
+
+	expectedDevEui, _ := hex.DecodeString(testDevEUI)
+	test.That(t, n.DevEui, test.ShouldResemble, expectedDevEui)
+
+	expectedNwkSKey, _ := hex.DecodeString(testNwkSKey)
+	test.That(t, n.NwkSKey, test.ShouldResemble, expectedNwkSKey)
+
+	expectedAddr, _ := hex.DecodeString(testDevAddr)
+	test.That(t, n.Addr, test.ShouldResemble, expectedAddr)
+
+	test.That(t, n.MinIntervalSeconds, test.ShouldEqual, float64(60))
+	test.That(t, n.FCntDown, test.ShouldEqual, uint16(123))
+
+	// Test invalid hex strings
+	invalidNodeInfo := map[string]interface{}{
+		"app_skey":            "invalid hex",
+		"dev_eui":             testDevEUI,
+		"nwk_skey":            testNwkSKey,
+		"dev_addr":            testDevAddr,
+		"min_uplink_interval": float64(60),
+		"fcnt_down":           float64(123),
+	}
+
+	err = n.updateNode(invalidNodeInfo)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving app S key")
+
+	invalidNodeInfo["app_skey"] = testAppSKey
+	invalidNodeInfo["dev_eui"] = "invalid hex"
+	err = n.updateNode(invalidNodeInfo)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving dev eui")
+
+	invalidNodeInfo["dev_eui"] = testDevEUI
+	invalidNodeInfo["nwk_skey"] = "invalid hex"
+	err = n.updateNode(invalidNodeInfo)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving nwk S key")
+
+	invalidNodeInfo["nwk_skey"] = testNwkSKey
+	invalidNodeInfo["dev_addr"] = "invalid hex"
+	err = n.updateNode(invalidNodeInfo)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving dev addr")
+}
+
+func TestPollGateway(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	deps, tmpDir := testutils.NewNodeTestEnv(t, gatewayNames, nodeNames, "decoder.js")
+	testDecoderPath := fmt.Sprintf("%s/%s", tmpDir, "decoder.js")
+
+	validConf := resource.Config{
+		Name: testNodeName,
+		ConvertedAttributes: &Config{
+			Decoder:  testDecoderPath,
+			Interval: &testInterval,
+			JoinType: JoinTypeOTAA,
+			DevEUI:   testDevEUI,
+			AppKey:   testAppKey,
+		},
+	}
+
+	n, err := newNode(ctx, deps, validConf, logger)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, n, test.ShouldNotBeNil)
+	node := n.(*Node)
+
+	// Test successful polling
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+
+	// Start polling in a goroutine
+	go node.PollGateway(ctx)
+
+	// Wait a bit to allow for at least one poll
+	time.Sleep(40 * time.Millisecond)
+
+	// Verify node was updated with mock gateway's response
+	node.reconfigureMu.Lock()
+	minInterval := node.MinIntervalSeconds
+	fcntDown := node.FCntDown
+	node.reconfigureMu.Unlock()
+
+	test.That(t, minInterval, test.ShouldEqual, float64(60))
+	test.That(t, fcntDown, test.ShouldEqual, uint16(1))
+}

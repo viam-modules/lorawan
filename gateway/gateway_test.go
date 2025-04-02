@@ -16,25 +16,6 @@ import (
 	"go.viam.com/utils/protoutils"
 )
 
-// setupTestGateway creates a test gateway with a configured test device.
-func setupTestGateway(t *testing.T) *gateway {
-
-	testDevices := make(map[string]*node.Node)
-	testNode := &node.Node{
-		NodeName:    testNodeName,
-		DecoderPath: testDecoderPath,
-		JoinType:    "OTAA",
-		DevEui:      testDevEUI,
-	}
-	testDevices[testNodeName] = testNode
-
-	return &gateway{
-		logger:  logging.NewTestLogger(t),
-		devices: testDevices,
-		region:  regions.US,
-	}
-}
-
 // creates a test gateway with device info populated in the file.
 func setupFileAndGateway(t *testing.T) *gateway {
 	g := createTestGateway(t)

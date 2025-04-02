@@ -13,6 +13,7 @@ import (
 
 	"github.com/robertkrimen/otto"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -100,12 +101,12 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	// set the duty cycle in first downlink if in EU region.
 	setDutyCycle := false
-	if device.FCntDown == 0 {
+	if device.Region == regions.EU && device.FCntDown == 0 {
 		setDutyCycle = true
 		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
 		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
 
-		// create new deviceInfo to update the minumum interval in the file.
+		// create new DeviceInfo to update the minimum interval in the file.
 		deviceInfo := deviceInfo{
 			DevEUI:            fmt.Sprintf("%X", device.DevEui),
 			DevAddr:           fmt.Sprintf("%X", device.Addr),
