@@ -27,6 +27,7 @@ import (
 
 // TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
 const TestKey = "test_only"
+const GetDeviceKey = "get_device"
 
 // NewSensor creates a new Node struct. This can be used by external implementers.
 func NewSensor(conf resource.Config, logger logging.Logger) Node {
@@ -90,7 +91,6 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 
 		n.DecoderPath = decoderFilePath
 	} else if err := isValidFilePath(n.DecoderPath); err != nil {
-		n.logger.Infof("HERE NOT VALID ERROR")
 		return fmt.Errorf("provided decoder file path is not valid: %w", err)
 	}
 	n.JoinType = cfg.JoinType
@@ -325,7 +325,6 @@ const (
 // The function does not support interval downlinks with more than 8 bytes.
 func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]interface{}, error) {
 	n.logger.Infof("HERE SENDING INTERVAL DOWNLINK")
-	n.logger.Infof("%f", n.MinIntervalSeconds)
 	var formattedInterval uint64
 	if req.Header == "" {
 		return nil, errors.New("cannot send interval downlink, downlink header is empty")
@@ -351,19 +350,15 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 			req.IntervalMin, req.NumBytes)
 	}
 
+	n.logger.Infof("Min interval: %f", n.MinIntervalSeconds)
+
 	if n.Region == regions.EU {
 		n.logger.Warnf(`the duty cycle limit in the EU region is 1%%. Ensure your
 		 uplink interval complies with this restriction to avoid transmission issues`)
 	}
 
-	n.logger.Infof("%f", req.IntervalMin*60.0)
-
 	if n.MinIntervalSeconds != 0 {
-		n.logger.Info("here")
-		n.logger.Infof("%f", n.MinIntervalSeconds)
-		n.logger.Infof("%f", req.IntervalMin*60.0)
 		if n.MinIntervalSeconds > (req.IntervalMin * 60.0) {
-			n.logger.Infof("HERE ERROR")
 			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f,
 			increase the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
 		}
@@ -425,7 +420,8 @@ func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[str
 }
 
 func (n *Node) PollGateway(ctx context.Context) {
-	cmd := map[string]interface{}{GetIntervalKey: n.NodeName}
+	eui := hex.EncodeToString(n.DevEui)
+	cmd := map[string]interface{}{GetDeviceKey: eui}
 	for {
 		select {
 		case <-ctx.Done():
@@ -434,18 +430,50 @@ func (n *Node) PollGateway(ctx context.Context) {
 		}
 		resp, err := n.gateway.DoCommand(ctx, cmd)
 		if err != nil {
-			n.logger.Errorf("error getting node info: %w", err)
+			n.logger.Errorf("error getting node info: %v", err.Error())
 		}
-		if interval, ok := resp[GetIntervalKey]; ok {
-			minInterval, ok := interval.(float64)
+		if device, ok := resp[GetDeviceKey]; ok {
+			dev, ok := device.(map[string]interface{})
 			if !ok {
-				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(interval))
+				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
 			}
-			n.logger.Infof("updating the minumum interval")
-			n.MinIntervalSeconds = minInterval
+
+			// update node struct with info
+			if err := n.updateNode(dev); err != nil {
+				n.logger.Errorf("error getting device info: %w", err)
+			}
 		}
 		// wait 30 seconds between checking for updates
 		utils.SelectContextOrWait(ctx, time.Second*30)
 
 	}
+}
+
+// convertToNode converts the map from the docommand into the node struct.
+func (n *Node) updateNode(mapNode map[string]interface{}) error {
+	var err error
+
+	n.AppSKey, err = hex.DecodeString(mapNode["app_skey"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving app S key: %w", err)
+	}
+
+	n.DevEui, err = hex.DecodeString(mapNode["dev_eui"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving dev eui: %w", err)
+	}
+
+	n.NwkSKey, err = hex.DecodeString(mapNode["nwk_skey"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving nwk S key: %w", err)
+	}
+
+	n.Addr, err = hex.DecodeString(mapNode["dev_addr"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving dev addr: %w", err)
+	}
+
+	n.MinIntervalSeconds = mapNode["min_uplink_interval"].(float64)
+	n.FCntDown = uint16(mapNode["fcnt_down"].(float64))
+	return nil
 }

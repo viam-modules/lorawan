@@ -104,8 +104,22 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		setDutyCycle = true
 		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
 		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
-		device.MinIntervalSeconds = minInterval
-		device.MinIntervalUpdated.Store(true)
+
+		// create new deviceInfo to update the minumum interval in the file.
+		deviceInfo := deviceInfo{
+			DevEUI:            fmt.Sprintf("%X", device.DevEui),
+			DevAddr:           fmt.Sprintf("%X", device.Addr),
+			AppSKey:           fmt.Sprintf("%X", device.AppSKey),
+			NwkSKey:           fmt.Sprintf("%X", device.NwkSKey),
+			FCntDown:          &device.FCntDown,
+			NodeName:          device.NodeName,
+			MinUplinkInterval: minInterval,
+		}
+		ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		if err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo); err != nil {
+			return "", map[string]interface{}{}, fmt.Errorf("failed to update device info in db: %w", err)
+		}
 	}
 
 	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {

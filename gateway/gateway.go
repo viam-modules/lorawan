@@ -553,29 +553,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
 	}
 
-	if nodeName, ok := cmd[node.GetIntervalKey]; ok {
-		g.logger.Infof("GOT INTERVAL DO COMMAND")
-		strNodeName, ok := nodeName.(string)
-		if !ok {
-			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(nodeName))
-		}
-		dev, ok := g.devices[strNodeName]
-		if !ok {
-			return nil, fmt.Errorf("node with name %s not found", strNodeName)
-		}
-
-		g.logger.Infof("%v", dev.MinIntervalUpdated.Load())
-		g.logger.Infof("%v", dev.MinIntervalSeconds)
-		if dev.MinIntervalUpdated.Load() {
-			g.logger.Infof("GIVING RESPONSE")
-			resp := map[string]interface{}{node.GetIntervalKey: dev.MinIntervalSeconds}
-			dev.MinIntervalUpdated.Store(false)
-			return resp, nil
-		} else {
-			// the interval has not been updated
-			return map[string]interface{}{}, nil
-		}
-	}
 	// return all devices that have been registered on the gateway
 	if _, ok := cmd["return_devices"]; ok {
 		resp := map[string]interface{}{}
@@ -587,6 +564,22 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		for _, device := range devices {
 			resp[device.DevEUI] = device
 		}
+		return resp, nil
+	}
+
+	// return one device command
+	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
+		resp := map[string]interface{}{}
+		deveui, ok := (devEUI).(string)
+		if !ok {
+			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(devEUI))
+		}
+		// Read the device info from the db
+		device, err := g.findDeviceInDB(ctx, deveui)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		resp[node.GetDeviceKey] = device
 		return resp, nil
 	}
 
@@ -614,6 +607,7 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
 	device.NwkSKey = nwksKey
+	device.MinIntervalSeconds = d.MinUplinkInterval
 
 	// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
 	device.FCntDown = math.MaxUint16

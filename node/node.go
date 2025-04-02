@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"sync/atomic"
 
 	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/sensor"
@@ -196,7 +195,6 @@ type Node struct {
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval
-	MinIntervalUpdated atomic.Bool
 
 	Workers *utils.StoppableWorkers
 }
