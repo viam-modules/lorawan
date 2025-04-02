@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -36,11 +34,8 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime tim
 		return err
 	}
 
-	g.logger.Info("yo devices: ", g.devices)
 	// update state in gatewayNodes
 	g.devices[device.NodeName] = device
-
-	g.logger.Infof("sending join accept to %s", device.NodeName)
 
 	return g.sendDownlink(ctx, joinAccept, true, packetTime)
 }
@@ -167,10 +162,10 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *gat
 
 	// Save the OTAA info to the data file.
 	deviceInfo := deviceInfo{
-		DevEUI:   strings.ToUpper(hex.EncodeToString(devEUIBE)),
-		DevAddr:  strings.ToUpper(hex.EncodeToString(d.Addr)),
-		AppSKey:  strings.ToUpper(hex.EncodeToString(d.AppSKey)),
-		NwkSKey:  strings.ToUpper(hex.EncodeToString(d.NwkSKey)),
+		DevEUI:   devEUIBE,
+		DevAddr:  d.Addr,
+		AppSKey:  d.AppSKey,
+		NwkSKey:  d.NwkSKey,
 		FCntDown: &d.FCntDown,
 		NodeName: d.NodeName,
 	}

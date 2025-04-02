@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -229,10 +228,10 @@ func TestCreateDownlink(t *testing.T) {
 
 				found := false
 				for _, di := range deviceInfoList {
-					if di.DevEUI == fmt.Sprintf("%X", tt.device.DevEui) {
+					if bytes.Equal(di.DevEUI, tt.device.DevEui) {
 						found = true
 						test.That(t, *di.FCntDown, test.ShouldEqual, tt.device.FCntDown)
-						test.That(t, di.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", tt.device.Addr))
+						test.That(t, di.DevAddr, test.ShouldResemble, tt.device.Addr)
 						break
 					}
 				}

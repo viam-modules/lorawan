@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +13,12 @@ import (
 )
 
 func TestSetupSqlite(t *testing.T) {
+
+	// cmd := `create table if not exists devices(devEui TEXT NOT NULL PRIMARY KEY,` +
+	// 		`appSKey TEXT,nwkSKey TEXT,devAddr TEXT,fCntDown INTEGER,nodeName TEXT,minUplinkInterval REAL);`
+	// 	if _, err = db.ExecContext(ctx, cmd); err != nil {
+	// 		return err
+	// 	}
 	t.Run("Good setup with no previous db", func(t *testing.T) {
 		dataDirectory1 := t.TempDir()
 		g := gateway{
@@ -32,13 +37,20 @@ func TestSetupSqlite(t *testing.T) {
 		}
 
 		// Device found in file should return device info
-		devices := []deviceInfo{
+		devices := []deviceInfoOld{
 			{
 				DevEUI:  fmt.Sprintf("%X", testDevEUI),
 				DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-				AppSKey: "5572404C694E6B4C6F526132303138323",
+				AppSKey: fmt.Sprintf("%X", testAppSKey),
+				NwkSKey: fmt.Sprintf("%X", testNwkSKey),
 			},
 		}
+
+		expectedNewDevice, err := convertOldInfoToNew(devices[0])
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, devices[0].DevEUI, test.ShouldEqual, fmt.Sprintf("%X", expectedNewDevice.DevEUI))
+		test.That(t, devices[0].DevAddr, test.ShouldEqual, fmt.Sprintf("%X", expectedNewDevice.DevAddr))
+		test.That(t, devices[0].AppSKey, test.ShouldEqual, fmt.Sprintf("%X", expectedNewDevice.AppSKey))
 
 		data, err := json.MarshalIndent(devices, "", "  ")
 		test.That(t, err, test.ShouldBeNil)
@@ -59,7 +71,7 @@ func TestSetupSqlite(t *testing.T) {
 		dbDevices, err := g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, len(dbDevices), test.ShouldEqual, 1)
-		test.That(t, dbDevices[0], test.ShouldResemble, devices[0])
+		test.That(t, dbDevices[0], test.ShouldResemble, expectedNewDevice)
 	})
 
 	t.Run("Good setup that reuses a db", func(t *testing.T) {
@@ -72,14 +84,14 @@ func TestSetupSqlite(t *testing.T) {
 		// Device found in file should return device info
 		devices := []deviceInfo{
 			{
-				DevEUI:  fmt.Sprintf("%X", testDevEUI),
-				DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-				AppSKey: "5572404C694E6B4C6F526132303138323",
+				DevEUI:  testDevEUI,
+				DevAddr: testDeviceAddr,
+				AppSKey: testAppSKey,
 			},
 			{
-				DevEUI:  "DEVEUI2",
-				DevAddr: "REALDEVADDR",
-				AppSKey: "REAL-APPSKEY",
+				DevEUI:  []byte("DEVEUI2"),
+				DevAddr: []byte("REALDEVADDR"),
+				AppSKey: []byte("REAL-APPSKEY"),
 			},
 		}
 		for _, device := range devices {
@@ -120,9 +132,9 @@ func TestSearchForDeviceInDB(t *testing.T) {
 	// Device found in file should return device info
 	devices := []deviceInfo{
 		{
-			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-			AppSKey: "5572404C694E6B4C6F526132303138323",
+			DevEUI:  testDevEUI,
+			DevAddr: testDeviceAddr,
+			AppSKey: testAppSKey,
 		},
 	}
 	for _, device := range devices {
@@ -130,23 +142,23 @@ func TestSearchForDeviceInDB(t *testing.T) {
 	}
 
 	t.Run("device is found", func(t *testing.T) {
-		device, err := g.findDeviceInDB(context.Background(), hex.EncodeToString(testDevEUI))
+		device, err := g.findDeviceInDB(context.Background(), testDevEUI)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, device, test.ShouldNotBeNil)
-		test.That(t, device.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
+		test.That(t, device.DevAddr, test.ShouldResemble, testDeviceAddr)
 	})
 	t.Run("device is not found", func(t *testing.T) {
-		_, err := g.findDeviceInDB(context.Background(), "not-real")
+		_, err := g.findDeviceInDB(context.Background(), []byte("not-real"))
 		test.That(t, err, test.ShouldBeError, errNoDeviceInDB)
 	})
 	t.Run("gateway is closed", func(t *testing.T) {
 		g.Close(context.Background())
-		_, err := g.findDeviceInDB(context.Background(), hex.EncodeToString(testDevEUI))
+		_, err := g.findDeviceInDB(context.Background(), testDevEUI)
 		test.That(t, err, test.ShouldBeError, errDBClosed)
 	})
 	t.Run("no db is present", func(t *testing.T) {
 		badGateway := gateway{logger: logging.NewTestLogger(t)}
-		_, err := badGateway.findDeviceInDB(context.Background(), "not-real")
+		_, err := badGateway.findDeviceInDB(context.Background(), testDevEUI)
 		test.That(t, err, test.ShouldBeError, errNoDB)
 	})
 }
@@ -167,24 +179,24 @@ func TestInsertOrUpdateDeviceInDBAndgetAllDevicesFromDB(t *testing.T) {
 		// Device found in file should return device info
 		devices := []deviceInfo{
 			{
-				DevEUI:  fmt.Sprintf("%X", testDevEUI),
-				DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-				AppSKey: "5572404C694E6B4C6F526132303138323",
+				DevEUI:  testDevEUI,
+				DevAddr: testDeviceAddr,
+				AppSKey: testAppSKey,
 			},
 			{
-				DevEUI:  "DEVEUI2",
-				DevAddr: "REALDEVADDR",
-				AppSKey: "REAL-APPSKEY",
+				DevEUI:  []byte("DEVEUI2"),
+				DevAddr: []byte("REALDEVADDR"),
+				AppSKey: []byte("REAL-APPSKEY"),
 			},
 			{
-				DevEUI:  "DEVEUI3",
-				DevAddr: "0000REAL00",
-				AppSKey: "REAL-APPSKEY",
+				DevEUI:  []byte("DEVEUI3"),
+				DevAddr: []byte("0000REAL00"),
+				AppSKey: []byte("REAL-APPSKEY"),
 			},
 			{
-				DevEUI:  "DEVEUI2",
-				DevAddr: "REPEAT",
-				AppSKey: "REAL-APPSKEY",
+				DevEUI:  []byte("DEVEUI2"),
+				DevAddr: []byte("REPEAT"),
+				AppSKey: []byte("REAL-APPSKEY"),
 			},
 		}
 		for _, device := range devices {
@@ -209,9 +221,9 @@ func TestInsertOrUpdateDeviceInDBAndgetAllDevicesFromDB(t *testing.T) {
 		err = g.Close(context.Background())
 		test.That(t, err, test.ShouldBeNil)
 		device := deviceInfo{
-			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-			AppSKey: "5572404C694E6B4C6F526132303138323",
+			DevEUI:  testDevEUI,
+			DevAddr: testDeviceAddr,
+			AppSKey: testAppSKey,
 		}
 		err = g.insertOrUpdateDeviceInDB(context.Background(), device)
 		test.That(t, err, test.ShouldBeError, errDBClosed)

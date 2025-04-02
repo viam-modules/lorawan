@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -22,9 +21,9 @@ func setupFileAndGateway(t *testing.T) *gateway {
 	// Write device info to file
 	devices := []deviceInfo{
 		{
-			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-			AppSKey: fmt.Sprintf("%X", testAppSKey),
+			DevEUI:  testDevEUI,
+			DevAddr: testDeviceAddr,
+			AppSKey: testAppSKey,
 		},
 	}
 	for _, device := range devices {
@@ -377,9 +376,9 @@ func TestUpdateDeviceInfo(t *testing.T) {
 
 	// Test 1: Successful update
 	validInfo := deviceInfo{
-		DevEUI:  fmt.Sprintf("%X", testDevEUI), // matches dev EUI on the gateway map
-		DevAddr: fmt.Sprintf("%X", newDevAddr),
-		AppSKey: fmt.Sprintf("%X", newAppSKey),
+		DevEUI:  testDevEUI, // matches dev EUI on the gateway map
+		DevAddr: newDevAddr,
+		AppSKey: newAppSKey,
 	}
 
 	device := g.devices[testNodeName]

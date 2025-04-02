@@ -95,18 +95,6 @@ type Config struct {
 	Region    string `json:"region_code,omitempty"`
 }
 
-// deviceInfo is a struct containing OTAA device information.
-// This info is saved across module restarts for each device.
-type deviceInfo struct {
-	DevEUI            string  `json:"dev_eui"`
-	DevAddr           string  `json:"dev_addr"`
-	AppSKey           string  `json:"app_skey"`
-	NwkSKey           string  `json:"nwk_skey"`
-	FCntDown          *uint16 `json:"fcnt_down"`
-	NodeName          string  `json:"node_name"`
-	MinUplinkInterval float64 `json:"min_uplink_interval"`
-}
-
 func init() {
 	resource.RegisterComponent(
 		sensor.API,
@@ -486,7 +474,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 				return nil, err
 			}
 			// Check if the device is in the persistent data file, if it is add the OTAA info.
-			deviceInfo, err := g.findDeviceInDB(ctx, hex.EncodeToString(node.DevEui))
+			deviceInfo, err := g.findDeviceInDB(ctx, node.DevEui)
 			if err != nil {
 				if !errors.Is(err, errNoDeviceInDB) {
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)
@@ -546,7 +534,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			return nil, fmt.Errorf("failed to read device info from db: %w", err)
 		}
 		for _, device := range devices {
-			resp[device.DevEUI] = device
+			resp[fmt.Sprintf("%X", device.DevEUI)] = device
 		}
 		return resp, nil
 	}
@@ -554,49 +542,16 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	return map[string]interface{}{}, nil
 }
 
-// Node defines a lorawan node device.
-type gatewayNode struct {
-	AppSKey []byte
-	NwkSKey []byte
-	AppKey  []byte
-
-	Addr   []byte
-	DevEui []byte
-
-	DecoderPath string
-	NodeName    string
-	JoinType    string
-
-	FCntDown  uint16
-	FPort     byte     // for downlinks, only required when frame payload exists.
-	Downlinks [][]byte // list of downlink frame payloads to send
-}
-
 // updateDeviceInfo adds the device to the gateway's devices map.
 // If deviceInfo was provided, include them with the device.
 func (g *gateway) updateDeviceInfo(device gatewayNode, d deviceInfo) error {
-	if d.DevEUI != "" {
-		// Update the fields in the map with the info from the file.
-		appsKey, err := hex.DecodeString(d.AppSKey)
-		if err != nil {
-			return fmt.Errorf("failed to decode file's app session key: %w", err)
-		}
-
-		savedAddr, err := hex.DecodeString(d.DevAddr)
-		if err != nil {
-			return fmt.Errorf("failed to decode file's dev addr: %w", err)
-		}
-
-		nwksKey, err := hex.DecodeString(d.NwkSKey)
-		if err != nil {
-			return fmt.Errorf("failed to decode file's nwk session key: %w", err)
-		}
+	if len(d.DevEUI) != 0 {
 		switch device.JoinType {
 		case node.JoinTypeOTAA:
 			// if join type is OTAA - keep the appSKey, dev addr from the old node.
 			// These fields were determined by the gateway if the join procedure was done.
-			device.AppSKey = appsKey
-			device.Addr = savedAddr
+			device.AppSKey = d.AppSKey
+			device.Addr = d.DevAddr
 		case node.JoinTypeABP:
 			// if join type is ABP get the new appSKey and addr from the new config.
 		default:
@@ -604,7 +559,7 @@ func (g *gateway) updateDeviceInfo(device gatewayNode, d deviceInfo) error {
 			return errUnexpectedJoinType
 		}
 
-		device.NwkSKey = nwksKey
+		device.NwkSKey = d.NwkSKey
 
 		// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
 		device.FCntDown = math.MaxUint16
