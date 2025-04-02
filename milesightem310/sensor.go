@@ -130,7 +130,6 @@ func (n *em310Tilt) Reconfigure(ctx context.Context, deps resource.Dependencies,
 	if err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg); err != nil {
 		return err
 	}
-	n.logger.Infof("HERE")
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
