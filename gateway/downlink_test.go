@@ -219,7 +219,6 @@ func TestCreateDownlink(t *testing.T) {
 
 				currentPos := 8 // Start after MHDR(1) + DevAddr(4) + FCtrl(1) + FCnt(2)
 				if tt.expectedFOptsLength != 0 {
-					//fOpts := payload[8 : 8+tt.expectedFOptsLength]
 					for _, b := range tt.uplinkFopts {
 						if b == deviceTimeCID {
 							test.That(t, payload[currentPos], test.ShouldEqual, deviceTimeCID)

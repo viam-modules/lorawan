@@ -27,9 +27,11 @@ func createMockGateway(devices []string) *inject.Sensor {
 		}
 		if _, ok := cmd["get_device"]; ok {
 			resp := map[string]interface{}{}
-			resp["get_device"] = map[string]interface{}{"app_skey": "1234",
+			resp["get_device"] = map[string]interface{}{
+				"app_skey": "1234",
 				"nwk_skey": "1234", "dev_eui": "4321", "min_uplink_interval": 60.0,
-				"fcnt_down": 1.0, "dev_addr": "1234"}
+				"fcnt_down": 1.0, "dev_addr": "1234",
+			}
 			return resp, nil
 		}
 		return map[string]interface{}{}, nil
