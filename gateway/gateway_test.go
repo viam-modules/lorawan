@@ -193,6 +193,29 @@ func TestDoCommand(t *testing.T) {
 	doOverWire(s, removeCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 0)
 
+	// Test GetDevice command
+	cmd := make(map[string]interface{})
+	cmd[node.GetDeviceKey] = fmt.Sprintf("%X", testDevEUI)
+	resp, err = s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldBeNil)
+	deviceInfo, ok := resp[node.GetDeviceKey].(deviceInfo)
+	test.That(t, ok, test.ShouldBeTrue)
+	test.That(t, deviceInfo.DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
+	test.That(t, deviceInfo.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
+	test.That(t, deviceInfo.AppSKey, test.ShouldEqual, fmt.Sprintf("%X", testAppSKey))
+
+	// Test GetDeviceKey with invalid devEUI type
+	cmd[node.GetDeviceKey] = 123
+	_, err = s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "expected a string")
+
+	// Test GetDeviceKey with non-existent device
+	cmd[node.GetDeviceKey] = "09876655"
+	_, err = s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to read device info from db")
+
 	// test sendDownlink command
 	testDownLinkPayload := "ff03"
 

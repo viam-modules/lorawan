@@ -567,7 +567,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		return resp, nil
 	}
 
-	// return one device command
 	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
 		resp := map[string]interface{}{}
 		deveui, ok := (devEUI).(string)
