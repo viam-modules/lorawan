@@ -133,13 +133,11 @@ func (n *em310Tilt) Reconfigure(ctx context.Context, deps resource.Dependencies,
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
-		n.logger.Infof("HERE cfg interval change")
 		req := node.IntervalRequest{
 			IntervalMin: *nodeCfg.Interval, PayloadUnits: node.Seconds, Header: "ff03",
 			UseLittleEndian: true, NumBytes: 2, TestOnly: false,
 		}
 		if _, err := n.node.SendIntervalDownlink(ctx, req); err != nil {
-			n.logger.Infof("HERE ERROR RECONFIG")
 			return err
 		}
 	}
@@ -147,8 +145,6 @@ func (n *em310Tilt) Reconfigure(ctx context.Context, deps resource.Dependencies,
 	if err = node.CheckCaptureFrequency(conf, *nodeCfg.Interval, n.logger); err != nil {
 		return err
 	}
-
-	n.logger.Infof("no erro reconfig")
 
 	return nil
 }

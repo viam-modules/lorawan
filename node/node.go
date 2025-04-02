@@ -241,10 +241,10 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	return nil
 }
 
-// getGateway sends the validate docommand to the gateway to confirm the dependency.
-func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
+// validateGateway sends the validate docommand to the gateway, and saves region and gateway to struct.
+func (n *Node) validateGateway(ctx context.Context, deps resource.Dependencies) error {
 	if len(deps) == 0 {
-		return nil, errors.New("must add sx1302-gateway as dependency")
+		return errors.New("must add sx1302-gateway as dependency")
 	}
 	var dep resource.Resource
 
@@ -256,7 +256,7 @@ func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sens
 
 	gateway, ok := dep.(sensor.Sensor)
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("dependency must be the sx1302-gateway sensor")
 	}
 
 	cmd := make(map[string]interface{})
@@ -265,16 +265,16 @@ func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sens
 	// Validate that the dependency is the gateway - gateway will return the region.
 	ret, err := gateway.DoCommand(ctx, cmd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("dependency must be the sx1302-gateway sensor")
 	}
 	re, ok := retVal.(float64)
 	if !ok {
-		return nil, fmt.Errorf("expected float64 return, got %v", reflect.TypeOf(retVal))
+		return fmt.Errorf("expected float64 return, got %v", reflect.TypeOf(retVal))
 	}
 
 	switch re {
@@ -283,10 +283,12 @@ func (n *Node) getGateway(ctx context.Context, deps resource.Dependencies) (sens
 	case 2:
 		n.Region = regions.EU
 	default:
-		return nil, errors.New("gateway return unexpected region")
+		return errors.New("gateway return unexpected region")
 	}
 
-	return gateway, nil
+	n.gateway = gateway
+
+	return nil
 }
 
 // Close removes the device from the gateway.

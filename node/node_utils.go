@@ -110,7 +110,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		n.FPort = val[0]
 	}
 
-	gateway, err := n.getGateway(ctx, deps)
+	err := n.validateGateway(ctx, deps)
 	if err != nil {
 		return err
 	}
@@ -120,12 +120,11 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	// send the device to the gateway.
 	cmd["register_device"] = n
 
-	_, err = gateway.DoCommand(ctx, cmd)
+	_, err = n.gateway.DoCommand(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	n.gateway = gateway
 	return nil
 }
 
