@@ -26,22 +26,22 @@ var (
 	errDBClosedInternal    = errors.New("sql: database is closed")
 	errDBClosed            = errors.New("error gateway is closed")
 	errNoTableInternal     = "no such table"
-	errDupeColNameInternal = "dupicate column name"
+	errDupeColNameInternal = "duplicate column name"
 )
 
 // Node defines a lorawan node device.
 type gatewayNode struct {
 	AppSKey []byte
 	NwkSKey []byte
-	AppKey  []byte // 8
+	AppKey  []byte
 
 	Addr              []byte
 	DevEui            []byte
 	NodeName          string
 	MinUplinkInterval float64
 
-	DecoderPath string // 9
-	JoinType    string // 10
+	DecoderPath string
+	JoinType    string
 
 	FCntDown  uint16
 	FPort     byte     // 11 for downlinks, only required when frame payload exists.
@@ -60,23 +60,24 @@ const (
 	decoderPathDBKey       = "decoderPath"
 	joinTypeDBKey          = "joinType"
 	fPortDBKey             = "fPort"
+	isRegisteredDBKey      = "isRegistered"
 )
 
-var deviceInfoKeys = fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s",
-	devEUIDBKey, appSDBKey, nwkSDBKey, devAddrDBKey, fCntDownDBKey, nodeNameDBKey, minUplinkIntervalDBKey)
-
+// supportedCols defines the types of each column we currently support.
+// is additionally used to set defaults for the table.
 var supportedCols = [][]string{
-	{devEUIDBKey, "BLOB NOT NULL PRIMARY KEY"}, // should be BLOB
-	{appSDBKey, "BLOB"},                        // should be BLOB
-	{nwkSDBKey, "BLOB"},                        // should be BLOB
-	{devAddrDBKey, "BLOB"},                     // should be BLOB
+	{devEUIDBKey, "BLOB NOT NULL PRIMARY KEY"},
+	{appSDBKey, "BLOB"},
+	{nwkSDBKey, "BLOB"},
+	{devAddrDBKey, "BLOB"},
 	{fCntDownDBKey, "INTEGER"},
 	{nodeNameDBKey, "TEXT"},
 	{minUplinkIntervalDBKey, "REAL"},
-	{appKeyDBKey, "BLOB"}, // should be BLOB
+	{appKeyDBKey, "BLOB"},
 	{decoderPathDBKey, "TEXT"},
 	{joinTypeDBKey, "TEXT"},
 	{fPortDBKey, "INTEGER"},
+	{isRegisteredDBKey, "INTEGER DEFAULT 0"}, // bools do not exist
 }
 
 // Create or open a sqlite db file used to save device data across restarts.
@@ -93,19 +94,6 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		if strings.Contains(err.Error(), errNoTableInternal) {
 			// create the table if it does not exist
 			// if we want to change the fields in the table, a migration function needs to be created
-			// cmd := `create table devices(devEui TEXT NOT NULL PRIMARY KEY,` +
-			// 	`appSKey TEXT,` +
-			// 	`nwkSKey TEXT,` +
-			// 	`devAddr TEXT,` +
-			// 	`fCntDown INTEGER,` +
-			// 	`nodeName TEXT,` +
-			// 	`minUplinkInterval REAL,` +
-			// 	`appKey TEXT,` +
-			// 	`decoderPath TEXT,` +
-			// 	`joinType TEXT,` +
-			// 	`fPort INTEGER` +
-			// 	`);`
-
 			cmd := `create table devices(`
 			for index, fieldAndType := range supportedCols {
 				cmd += fmt.Sprintf("%s %s", fieldAndType[0], fieldAndType[1])
@@ -123,7 +111,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		if rows.Err() != nil {
 			return rows.Err()
 		}
-		fmt.Println(rows.Columns())
+		defer rows.Close()
 		cols, err := rows.Columns()
 		if err != nil {
 			return err
@@ -138,7 +126,13 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 				}
 			}
 		}
+	}
 
+	// unregister devices
+	cmd := "UPDATE devices SET " + isRegisteredDBKey + "=0"
+	_, err = db.ExecContext(ctx, cmd)
+	if err != nil {
+		return err
 	}
 
 	g.db = db
@@ -151,9 +145,15 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 		return errNoDB
 	}
 
-	// cmd := `insert or replace into ` +
-	// 	`devices(devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName, minUplinkInterval) VALUES(?, ?, ?, ?, ?, ?, ?);`
-	cmd := fmt.Sprintf("insert or replace into devices(%s) VALUES(?, ?, ?, ?, ?, ?, ?);", deviceInfoKeys)
+	cmd := "insert or replace into devices(" +
+		devEUIDBKey + ", " +
+		appSDBKey + ", " +
+		nwkSDBKey + ", " +
+		devAddrDBKey + ", " +
+		fCntDownDBKey + ", " +
+		nodeNameDBKey + ", " +
+		minUplinkIntervalDBKey +
+		") VALUES(?, ?, ?, ?, ?, ?, ?);"
 	_, err := g.db.ExecContext(ctx, cmd,
 		device.DevEUI,
 		device.AppSKey,
@@ -175,17 +175,16 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui []byte) (deviceInfo
 	}
 	var zero deviceInfo
 	newDevice := deviceInfo{}
-	cmd := fmt.Sprintf("select %s from devices where devEui = ?;", deviceInfoKeys)
-	// "appSKey":           " BLOB",
-	// "nwkSKey":           " BLOB",
-	// "devAddr":           " BLOB",
-	// "fCntDown":          " INTEGER",
-	// "nodeName":          " TEXT",
-	// "minUplinkInterval": " REAL",
-	// "appKey":            " BLOB",
-	// "decoderPath":       " TEXT",
-	// "joinType":          " TEXT",
-	// fmt.Println("yo cmd: ", cmd)
+	cmd := "select " +
+		devEUIDBKey + ", " +
+		appSDBKey + ", " +
+		nwkSDBKey + ", " +
+		devAddrDBKey + ", " +
+		fCntDownDBKey + ", " +
+		nodeNameDBKey + ", " +
+		minUplinkIntervalDBKey +
+		" from devices where devEui = ?;"
+
 	if err := g.db.QueryRowContext(ctx, cmd,
 		devEui).Scan(&newDevice.DevEUI, &newDevice.AppSKey, &newDevice.NwkSKey,
 		&newDevice.DevAddr, &newDevice.FCntDown, &newDevice.NodeName, &newDevice.MinUplinkInterval); err != nil {
@@ -204,7 +203,15 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 	if g.db == nil {
 		return nil, errNoDB
 	}
-	queryAll := "select " + deviceInfoKeys + " FROM devices;"
+	queryAll := "select " +
+		devEUIDBKey + ", " +
+		appSDBKey + ", " +
+		nwkSDBKey + ", " +
+		devAddrDBKey + ", " +
+		fCntDownDBKey + ", " +
+		nodeNameDBKey + ", " +
+		minUplinkIntervalDBKey +
+		" FROM devices;"
 	rows, err := g.db.QueryContext(ctx, queryAll)
 	if err != nil {
 		if err.Error() == errDBClosedInternal.Error() {
@@ -302,7 +309,6 @@ func (g *gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix str
 }
 
 func convertOldInfoToNew(old deviceInfoOld) (deviceInfo, error) {
-
 	// Update the fields in the map with the info from the file.
 	devEUI, err := hex.DecodeString(old.DevEUI)
 	if err != nil {
@@ -346,8 +352,10 @@ type deviceInfo struct {
 	MinUplinkInterval float64
 }
 
-// deviceInfo is a struct containing OTAA device information.
-// This info is saved across module restarts for each device.
+// deviceInfoOld is a struct containing OTAA device information.
+// this info is saved across module restarts for each device.
+// we can remove this once we are sure users no longer have the devicedata.txt files
+// and we do not want to support adding devices via json.
 type deviceInfoOld struct {
 	DevEUI            string  `json:"dev_eui"`
 	DevAddr           string  `json:"dev_addr"`
