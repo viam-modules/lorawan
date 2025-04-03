@@ -127,6 +127,11 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		return err
 	}
 
+	// Start the background routine only if it hasn't been started previously.
+	if n.Workers == nil {
+		n.Workers = utils.NewBackgroundStoppableWorkers(n.PollGateway)
+	}
+
 	return nil
 }
 

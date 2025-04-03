@@ -231,13 +231,6 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 		return err
 	}
 
-	// call this once outside of background thread to get any info gateway has before calling the interval request.
-	n.GetAndUpdateDeviceInfo(ctx)
-	// Start the background routine only if it hasn't been started previously.
-	if n.Workers == nil {
-		n.Workers = utils.NewBackgroundStoppableWorkers(n.PollGateway)
-	}
-
 	err = CheckCaptureFrequency(conf, *cfg.Interval, n.logger)
 	if err != nil {
 		return err

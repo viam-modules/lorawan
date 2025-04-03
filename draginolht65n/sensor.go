@@ -128,10 +128,6 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 
 	// call this once outside of background thread to get any info gateway has before calling the interval request.
 	n.node.GetAndUpdateDeviceInfo(ctx)
-	// Start the background routine only if it hasn't been started previously.
-	if n.node.Workers == nil {
-		n.node.Workers = utils.NewBackgroundStoppableWorkers(n.node.PollGateway)
-	}
 
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
