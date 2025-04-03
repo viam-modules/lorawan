@@ -85,6 +85,8 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		return err
 	}
 
+	// currently we do not handle table migrations. When we get to this point try this package
+	//  https://github.com/golang-migrate/migrate/tree/master/database/sqlite3
 	cmd := `create table if not exists devices(`
 	for index, fieldAndType := range supportedCols {
 		cmd += fmt.Sprintf("%s %s", fieldAndType[0], fieldAndType[1])
@@ -99,7 +101,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	}
 
 	// unregister devices
-	cmdUnregister := "UPDATE devices SET " + isRegisteredDBKey + "=0"
+	cmdUnregister := "UPDATE devices SET " + isRegisteredDBKey + "=0;"
 	_, err = db.ExecContext(ctx, cmdUnregister)
 	if err != nil {
 		return err

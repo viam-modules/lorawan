@@ -479,7 +479,6 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 				if !errors.Is(err, errNoDeviceInDB) {
 					return nil, fmt.Errorf("error while searching for device in file: %w", err)
 				}
-				g.devices[node.NodeName] = node
 			}
 			// device was found in the file, update the gateway's device map with the device info.
 			err = g.updateDeviceInfo(node, deviceInfo)
