@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -22,9 +21,9 @@ func setupFileAndGateway(t *testing.T) *gateway {
 	// Write device info to file
 	devices := []deviceInfo{
 		{
-			DevEUI:  fmt.Sprintf("%X", testDevEUI),
-			DevAddr: fmt.Sprintf("%X", testDeviceAddr),
-			AppSKey: fmt.Sprintf("%X", testAppSKey),
+			DevEUI:  testDevEUI,
+			DevAddr: testDeviceAddr,
+			AppSKey: testAppSKey,
 		},
 	}
 	for _, device := range devices {
@@ -125,6 +124,7 @@ func TestDoCommand(t *testing.T) {
 		DecoderPath: testDecoderPath,
 		NodeName:    testNodeName,
 		JoinType:    "OTAA",
+		FPort:       1,
 	}
 
 	// Test Validate response should be 1
@@ -146,7 +146,7 @@ func TestDoCommand(t *testing.T) {
 
 	// Test Register device command - device not in file
 	// clear devices
-	g.devices = map[string]*node.Node{}
+	g.devices = map[string]gatewayNode{}
 	registerCmd := make(map[string]interface{})
 	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
@@ -171,7 +171,7 @@ func TestDoCommand(t *testing.T) {
 	// Test that if device is in file, OTAA fields get populated
 	// clear map and device otaa info for the new test
 	dev = g.devices[testNodeName]
-	g.devices = map[string]*node.Node{}
+	g.devices = map[string]gatewayNode{}
 	dev.AppSKey = nil
 	dev.Addr = nil
 	registerCmd["register_device"] = dev
@@ -196,8 +196,8 @@ func TestDoCommand(t *testing.T) {
 	testDownLinkPayload := "ff03"
 
 	// Clear devices and add a device for testing
-	g.devices = map[string]*node.Node{}
-	g.devices[testNodeName] = &node.Node{
+	g.devices = map[string]gatewayNode{}
+	g.devices[testNodeName] = gatewayNode{
 		NodeName:    testNodeName,
 		DecoderPath: testDecoderPath,
 		JoinType:    "OTAA",
@@ -243,95 +243,6 @@ func TestDoCommand(t *testing.T) {
 	_, err = s.DoCommand(context.Background(), downlinkCmd)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to decode")
-}
-
-func TestMergeNodes(t *testing.T) {
-	tests := []struct {
-		name      string
-		newNode   *node.Node
-		oldNode   *node.Node
-		want      *node.Node
-		expectErr error
-	}{
-		{
-			name: "OTAA join type - keep old Addr and AppSKey from join procedure",
-			newNode: &node.Node{
-				DecoderPath: "new/decoder/path",
-				NodeName:    "NewNode",
-				JoinType:    "OTAA",
-				AppKey:      testAppKey,
-				DevEui:      testDevEUI,
-				AppSKey: []byte{
-					0x11, 0x11, 0x40, 0x4C,
-					0x69, 0x6E, 0x6B, 0x4C,
-					0x6F, 0x52, 0x61, 0x32,
-					0x30, 0x31, 0x38, 0x23,
-				},
-			},
-			oldNode: &node.Node{
-				Addr:    testDeviceAddr,
-				AppSKey: testAppSKey,
-			},
-			want: &node.Node{
-				DecoderPath: "new/decoder/path",
-				NodeName:    "NewNode",
-				JoinType:    "OTAA",
-				Addr:        testDeviceAddr,
-				AppSKey:     testAppSKey,
-				AppKey:      testAppKey,
-				DevEui:      testDevEUI,
-			},
-			expectErr: nil,
-		},
-		{
-			name: "ABP join type - use new Addr and AppSKey",
-			newNode: &node.Node{
-				DecoderPath: "new/decoder/path",
-				NodeName:    "NewNode",
-				JoinType:    "ABP",
-				Addr:        testDeviceAddr,
-				AppSKey:     testAppSKey,
-			},
-			oldNode: &node.Node{
-				Addr: []byte{1, 5, 6, 7},
-				AppSKey: []byte{
-					0x11, 0x11, 0x40, 0x4C,
-					0x69, 0x6E, 0x6B, 0x4C,
-					0x6F, 0x52, 0x61, 0x32,
-					0x30, 0x31, 0x38, 0x23,
-				},
-			},
-			want: &node.Node{
-				DecoderPath: "new/decoder/path",
-				NodeName:    "NewNode",
-				JoinType:    "ABP",
-				Addr:        testDeviceAddr,
-				AppSKey:     testAppSKey,
-			},
-			expectErr: nil,
-		},
-		{
-			name: "Invalid join type",
-			newNode: &node.Node{
-				JoinType: "INVALID",
-			},
-			oldNode:   &node.Node{},
-			want:      nil,
-			expectErr: errUnexpectedJoinType,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := mergeNodes(tt.newNode, tt.oldNode)
-			if tt.expectErr != nil {
-				test.That(t, err, test.ShouldBeError, tt.expectErr)
-			} else {
-				test.That(t, err, test.ShouldBeNil)
-				test.That(t, got, test.ShouldResemble, tt.want)
-			}
-		})
-	}
 }
 
 func TestUpdateReadings(t *testing.T) {
@@ -458,26 +369,25 @@ func TestUpdateDeviceInfo(t *testing.T) {
 		0x55, 0x72, 0x40, 0x4C,
 		0x69, 0x6E, 0x6B, 0x4C,
 		0x6F, 0x52, 0x61, 0x32,
-		0x31, 0x30, 0x32, 0x23,
+		0x31, 0x35, 0x32, 0x23,
 	}
 
 	newDevAddr := []byte{0xe2, 0x73, 0x65, 0x67}
 
 	// Test 1: Successful update
-	validInfo := &deviceInfo{
-		DevEUI:  fmt.Sprintf("%X", testDevEUI), // matches dev EUI on the gateway map
-		DevAddr: fmt.Sprintf("%X", newDevAddr),
-		AppSKey: fmt.Sprintf("%X", newAppSKey),
+	validInfo := deviceInfo{
+		DevEUI:  testDevEUI, // matches dev EUI on the gateway map
+		DevAddr: newDevAddr,
+		AppSKey: newAppSKey,
 	}
 
 	device := g.devices[testNodeName]
 
 	err := g.updateDeviceInfo(device, validInfo)
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, device, test.ShouldNotBeNil)
-	test.That(t, device.NodeName, test.ShouldEqual, testNodeName)
-	test.That(t, device.AppSKey, test.ShouldResemble, newAppSKey)
-	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
+	test.That(t, g.devices[device.NodeName].NodeName, test.ShouldEqual, testNodeName)
+	test.That(t, g.devices[device.NodeName].AppSKey, test.ShouldResemble, newAppSKey)
+	test.That(t, g.devices[device.NodeName].Addr, test.ShouldResemble, newDevAddr)
 }
 
 func TestClose(t *testing.T) {

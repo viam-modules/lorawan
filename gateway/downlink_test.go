@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"testing"
 	"time"
 
-	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"
@@ -20,7 +18,7 @@ func TestCreateDownlink(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {
 		name                string
-		device              *node.Node
+		device              gatewayNode
 		framePayload        []byte
 		expectedErr         bool
 		ack                 bool
@@ -31,7 +29,7 @@ func TestCreateDownlink(t *testing.T) {
 	}{
 		{
 			name: "valid downlink with standard payload",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -49,7 +47,7 @@ func TestCreateDownlink(t *testing.T) {
 		},
 		{
 			name: "valid downlink frame payload with an ACK",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -67,7 +65,7 @@ func TestCreateDownlink(t *testing.T) {
 		},
 		{
 			name: "downlink with only ACK",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -84,7 +82,7 @@ func TestCreateDownlink(t *testing.T) {
 		},
 		{
 			name: "downlink with device time request",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -102,7 +100,7 @@ func TestCreateDownlink(t *testing.T) {
 		},
 		{
 			name: "downlink with link check request",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -121,7 +119,7 @@ func TestCreateDownlink(t *testing.T) {
 		},
 		{
 			name: "invalid fport should return error",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -138,7 +136,7 @@ func TestCreateDownlink(t *testing.T) {
 		},
 		{
 			name: "downlink with devicetimeans, linkcheckans, and ignore unknown command",
-			device: &node.Node{
+			device: gatewayNode{
 				NodeName: testNodeName,
 				Addr:     testDeviceAddr,
 				AppSKey:  testAppSKey,
@@ -160,7 +158,8 @@ func TestCreateDownlink(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up the gateway for testing
 			g := &gateway{
-				logger: logging.NewTestLogger(t),
+				logger:  logging.NewTestLogger(t),
+				devices: make(map[string]gatewayNode),
 			}
 
 			dataDirectory1 := t.TempDir()
@@ -170,7 +169,7 @@ func TestCreateDownlink(t *testing.T) {
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(ctx, tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
+			payload, err := g.createDownlink(ctx, &tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -230,10 +229,10 @@ func TestCreateDownlink(t *testing.T) {
 
 				found := false
 				for _, di := range deviceInfoList {
-					if di.DevEUI == fmt.Sprintf("%X", tt.device.DevEui) {
+					if bytes.Equal(di.DevEUI, tt.device.DevEui) {
 						found = true
 						test.That(t, *di.FCntDown, test.ShouldEqual, tt.device.FCntDown)
-						test.That(t, di.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", tt.device.Addr))
+						test.That(t, di.DevAddr, test.ShouldResemble, tt.device.Addr)
 						break
 					}
 				}

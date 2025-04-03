@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/lorahw"
-	"github.com/viam-modules/gateway/node"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/utils"
@@ -91,7 +90,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
-func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePayload, uplinkFopts []byte,
+func (g *gateway) createDownlink(ctx context.Context, device *gatewayNode, framePayload, uplinkFopts []byte,
 	sendAck bool, snr float64, sf int) (
 	[]byte, error,
 ) {
@@ -171,10 +170,10 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 
 	// create new deviceInfo to update the fcntDown in the file.
 	deviceInfo := deviceInfo{
-		DevEUI:   fmt.Sprintf("%X", device.DevEui),
-		DevAddr:  fmt.Sprintf("%X", device.Addr),
-		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
-		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
+		DevEUI:   device.DevEui,
+		DevAddr:  device.Addr,
+		AppSKey:  device.AppSKey,
+		NwkSKey:  device.NwkSKey,
 		FCntDown: &device.FCntDown,
 		NodeName: device.NodeName,
 	}
@@ -183,6 +182,9 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 	if err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo); err != nil {
 		return nil, fmt.Errorf("failed to add device info to db: %w", err)
 	}
+
+	// update state in gatewayNodes
+	g.devices[device.NodeName] = *device
 
 	return payload, nil
 }

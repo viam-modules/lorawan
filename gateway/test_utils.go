@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -39,8 +38,8 @@ var (
 )
 
 func createTestGateway(t *testing.T) *gateway {
-	testDevices := make(map[string]*node.Node)
-	testNode := &node.Node{
+	testDevices := make(map[string]gatewayNode)
+	testNode := gatewayNode{
 		Addr:        testDeviceAddr,
 		AppSKey:     testAppSKey,
 		NwkSKey:     testNwkSKey,
