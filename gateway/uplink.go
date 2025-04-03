@@ -107,9 +107,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
 
-			// update state in gatewayNodes
-			g.devices[device.NodeName] = device
-
 			if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 			}
