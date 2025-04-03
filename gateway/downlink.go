@@ -183,6 +183,9 @@ func (g *gateway) createDownlink(ctx context.Context, device *gatewayNode, frame
 		return nil, fmt.Errorf("failed to add device info to db: %w", err)
 	}
 
+	// update state in gatewayNodes
+	g.devices[device.NodeName] = *device
+
 	return payload, nil
 }
 

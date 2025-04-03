@@ -158,7 +158,8 @@ func TestCreateDownlink(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up the gateway for testing
 			g := &gateway{
-				logger: logging.NewTestLogger(t),
+				logger:  logging.NewTestLogger(t),
+				devices: make(map[string]gatewayNode),
 			}
 
 			dataDirectory1 := t.TempDir()

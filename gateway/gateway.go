@@ -551,14 +551,13 @@ func (g *gateway) updateDeviceInfo(device gatewayNode, d deviceInfo) error {
 			// These fields were determined by the gateway if the join procedure was done.
 			device.AppSKey = d.AppSKey
 			device.Addr = d.DevAddr
+			device.NwkSKey = d.NwkSKey
 		case node.JoinTypeABP:
 			// if join type is ABP get the new appSKey and addr from the new config.
 		default:
 			// we should already have validated the JoinType, but still throw an error here if this hits.
 			return errUnexpectedJoinType
 		}
-
-		device.NwkSKey = d.NwkSKey
 
 		// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
 		device.FCntDown = math.MaxUint16
