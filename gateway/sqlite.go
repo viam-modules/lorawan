@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	// github.com/mattn/go-sqlite3 is for sqlite.
 	_ "github.com/mattn/go-sqlite3"
@@ -23,10 +22,8 @@ var (
 	errNoDeviceInDB = errors.New("error device not found")
 	errNoDB         = errors.New("error device file not found")
 	// errDBClosedInternal is needed because this error is not exported by sql. this can potentially break in the far future.
-	errDBClosedInternal    = errors.New("sql: database is closed")
-	errDBClosed            = errors.New("error gateway is closed")
-	errNoTableInternal     = "no such table"
-	errDupeColNameInternal = "duplicate column name"
+	errDBClosedInternal = errors.New("sql: database is closed")
+	errDBClosed         = errors.New("error gateway is closed")
 )
 
 // Node defines a lorawan node device.
@@ -88,50 +85,22 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		return err
 	}
 
-	// check if the table already exists
-	rows, err := db.QueryContext(ctx, "SELECT * FROM devices")
-	if err != nil {
-		if strings.Contains(err.Error(), errNoTableInternal) {
-			// create the table if it does not exist
-			// if we want to change the fields in the table, a migration function needs to be created
-			cmd := `create table devices(`
-			for index, fieldAndType := range supportedCols {
-				cmd += fmt.Sprintf("%s %s", fieldAndType[0], fieldAndType[1])
-				if index == len(supportedCols)-1 {
-					cmd += ");"
-				} else {
-					cmd += ","
-				}
-			}
-			if _, err = db.ExecContext(ctx, cmd); err != nil {
-				return err
-			}
+	cmd := `create table if not exists devices(`
+	for index, fieldAndType := range supportedCols {
+		cmd += fmt.Sprintf("%s %s", fieldAndType[0], fieldAndType[1])
+		if index == len(supportedCols)-1 {
+			cmd += ");"
+		} else {
+			cmd += ","
 		}
-	} else {
-		if rows.Err() != nil {
-			return rows.Err()
-		}
-		defer func() { goutils.UncheckedError(rows.Close()) }()
-
-		cols, err := rows.Columns()
-		if err != nil {
-			return err
-		}
-		if len(cols) != len(supportedCols) {
-			for _, fieldAndType := range supportedCols {
-				if _, err = db.ExecContext(ctx, "ALTER TABLE devices ADD COLUMN "+fieldAndType[0], fieldAndType[1]); err != nil {
-					if strings.Contains(err.Error(), errDupeColNameInternal) {
-						continue
-					}
-					return err
-				}
-			}
-		}
+	}
+	if _, err = db.ExecContext(ctx, cmd); err != nil {
+		return err
 	}
 
 	// unregister devices
-	cmd := "UPDATE devices SET " + isRegisteredDBKey + "=0"
-	_, err = db.ExecContext(ctx, cmd)
+	cmdUnregister := "UPDATE devices SET " + isRegisteredDBKey + "=0"
+	_, err = db.ExecContext(ctx, cmdUnregister)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -118,76 +117,6 @@ func TestSetupSqlite(t *testing.T) {
 		test.That(t, err, test.ShouldBeNil)
 		err = g.migrateDevicesFromJSONFile(context.Background(), dataDirectory1)
 		test.That(t, err.Error(), test.ShouldContainSubstring, errTXTMigration.Error())
-	})
-
-	t.Run("Good setup that migrates a db", func(t *testing.T) {
-		g := gateway{
-			logger: logging.NewTestLogger(t),
-		}
-		dataDirectory1 := t.TempDir()
-
-		// Device found in file should return device info
-		devicesOld := []deviceInfo{
-			{
-				DevEUI:  testDevEUI,
-				DevAddr: testDeviceAddr,
-				AppSKey: testAppSKey,
-			},
-			{
-				DevEUI:  []byte("DEVEUI2"),
-				DevAddr: []byte("REALDEVADDROLDO"),
-				AppSKey: []byte("REAL-APPSKEYOLDO"),
-			},
-		}
-
-		filePathDB := filepath.Join(dataDirectory1, "devicedata.db")
-		db, err := sql.Open("sqlite3", filePathDB)
-		test.That(t, err, test.ShouldBeNil)
-		cmd := `create table if not exists devices(devEui BLOB NOT NULL PRIMARY KEY,` +
-			`appSKey BLOB,nwkSKey BLOB,devAddr BLOB,fCntDown INTEGER,nodeName TEXT,minUplinkInterval REAL);`
-		_, err = db.ExecContext(context.Background(), cmd)
-		test.That(t, err, test.ShouldBeNil)
-
-		cmd = `insert or replace into ` +
-			`devices(devEui, appSKey, nwkSKey, devAddr, fCntDown, nodeName, minUplinkInterval) VALUES(?, ?, ?, ?, ?, ?, ?);`
-		_, err = db.ExecContext(context.Background(), cmd,
-			devicesOld[0].DevEUI,
-			devicesOld[0].AppSKey,
-			devicesOld[0].NwkSKey,
-			devicesOld[0].DevAddr,
-			devicesOld[0].FCntDown,
-			devicesOld[0].NodeName,
-			devicesOld[0].MinUplinkInterval,
-		)
-		test.That(t, err, test.ShouldBeNil)
-		test.That(t, db.Close(), test.ShouldBeNil)
-
-		err = g.setupSqlite(context.Background(), dataDirectory1)
-		test.That(t, err, test.ShouldBeNil)
-		// Device found in file should return device info
-		devices := []deviceInfo{
-			{
-				DevEUI:  testDevEUI,
-				DevAddr: testDeviceAddr,
-				AppSKey: testAppSKey,
-			},
-			{
-				DevEUI:  []byte("DEVEUI2"),
-				DevAddr: []byte("REALDEVADDR"),
-				AppSKey: []byte("REAL-APPSKEY"),
-			},
-		}
-		for _, device := range devices {
-			test.That(t, g.insertOrUpdateDeviceInDB(context.Background(), device), test.ShouldBeNil)
-		}
-		err = g.setupSqlite(context.Background(), dataDirectory1)
-		test.That(t, err, test.ShouldBeNil)
-		dbDevices, err := g.getAllDevicesFromDB(context.Background())
-		test.That(t, err, test.ShouldBeNil)
-
-		test.That(t, len(dbDevices), test.ShouldEqual, 2)
-		test.That(t, dbDevices[0], test.ShouldResemble, devices[0])
-		test.That(t, dbDevices[1], test.ShouldResemble, devices[1])
 	})
 }
 
