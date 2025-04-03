@@ -22,15 +22,6 @@ const (
 	// Common test values.
 	testDecoderPath = "/path/to/decoder.js"
 
-	// OTAA test values.
-	testDevEUI = "0123456789ABCDEF"
-	testAppKey = "0123456789ABCDEF0123456789ABAAAA"
-
-	// ABP test values.
-	testDevAddr = "01234567"
-	testAppSKey = "0123456789ABCDEF0123456789ABCDEE"
-	testNwkSKey = "0123456789ABCDEF0123456789ABCDEF"
-
 	// Gateway dependency.
 	testGatewayName = "gateway"
 	testNodeName    = "test-node"
@@ -51,8 +42,8 @@ func TestConfigValidate(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeOTAA,
-		DevEUI:   testDevEUI,
-		AppKey:   testAppKey,
+		DevEUI:   testutils.TestDevEUI,
+		AppKey:   testutils.TestAppKey,
 		Gateways: []string{testGatewayName},
 	}
 	deps, err := conf.Validate("")
@@ -99,7 +90,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeOTAA,
-		AppKey:   testAppKey,
+		AppKey:   testutils.TestAppKey,
 	}
 	_, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUIRequired))
@@ -110,7 +101,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		Interval: &testInterval,
 		JoinType: JoinTypeOTAA,
 		DevEUI:   "0123456", // Not 8 bytes
-		AppKey:   testAppKey,
+		AppKey:   testutils.TestAppKey,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUILength))
@@ -120,7 +111,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeOTAA,
-		DevEUI:   testDevEUI,
+		DevEUI:   testutils.TestDevEUI,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyRequired))
@@ -130,7 +121,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeOTAA,
-		DevEUI:   testDevEUI,
+		DevEUI:   testutils.TestDevEUI,
 		AppKey:   "0123456", // Not 16 bytes
 	}
 	_, err = conf.Validate("")
@@ -141,8 +132,8 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeOTAA,
-		DevEUI:   testDevEUI,
-		AppKey:   testAppKey,
+		DevEUI:   testutils.TestDevEUI,
+		AppKey:   testutils.TestAppKey,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -154,8 +145,8 @@ func TestValidateABPAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
-		NwkSKey:  testNwkSKey,
-		DevAddr:  testDevAddr,
+		NwkSKey:  testutils.TestNwkSKey,
+		DevAddr:  testutils.TestDevAddr,
 	}
 	_, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyRequired))
@@ -166,8 +157,8 @@ func TestValidateABPAttributes(t *testing.T) {
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
 		AppSKey:  "0123456", // Not 16 bytes
-		NwkSKey:  testNwkSKey,
-		DevAddr:  testDevAddr,
+		NwkSKey:  testutils.TestNwkSKey,
+		DevAddr:  testutils.TestDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyLength))
@@ -177,8 +168,8 @@ func TestValidateABPAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
-		AppSKey:  testAppSKey,
-		DevAddr:  testDevAddr,
+		AppSKey:  testutils.TestAppSKey,
+		DevAddr:  testutils.TestDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyRequired))
@@ -188,9 +179,9 @@ func TestValidateABPAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
-		AppSKey:  testAppSKey,
+		AppSKey:  testutils.TestAppSKey,
 		NwkSKey:  "0123456", // Not 16 bytes
-		DevAddr:  testDevAddr,
+		DevAddr:  testutils.TestDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyLength))
@@ -200,8 +191,8 @@ func TestValidateABPAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
-		AppSKey:  testAppSKey,
-		NwkSKey:  testNwkSKey,
+		AppSKey:  testutils.TestAppSKey,
+		NwkSKey:  testutils.TestNwkSKey,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrRequired))
@@ -211,8 +202,8 @@ func TestValidateABPAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
-		AppSKey:  testAppSKey,
-		NwkSKey:  testNwkSKey,
+		AppSKey:  testutils.TestAppSKey,
+		NwkSKey:  testutils.TestNwkSKey,
 		DevAddr:  "0123", // Not 4 bytes
 	}
 	_, err = conf.Validate("")
@@ -223,9 +214,9 @@ func TestValidateABPAttributes(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &testInterval,
 		JoinType: JoinTypeABP,
-		AppSKey:  testAppSKey,
-		NwkSKey:  testNwkSKey,
-		DevAddr:  testDevAddr,
+		AppSKey:  testutils.TestAppSKey,
+		NwkSKey:  testutils.TestNwkSKey,
+		DevAddr:  testutils.TestDevAddr,
 	}
 	_, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -246,8 +237,8 @@ func TestNewNode(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -267,9 +258,9 @@ func TestNewNode(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeABP,
-			AppSKey:  testAppSKey,
-			NwkSKey:  testNwkSKey,
-			DevAddr:  testDevAddr,
+			AppSKey:  testutils.TestAppSKey,
+			NwkSKey:  testutils.TestNwkSKey,
+			DevAddr:  testutils.TestDevAddr,
 		},
 	}
 
@@ -278,16 +269,18 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
+	testNode.reconfigureMu.Lock()
+	defer testNode.reconfigureMu.Unlock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, "test-node-abp")
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeABP)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
 
 	// Verify ABP byte arrays
-	expectedDevAddr, err := hex.DecodeString(testDevAddr)
+	expectedDevAddr, err := hex.DecodeString(testutils.TestDevAddr)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, testNode.Addr, test.ShouldResemble, expectedDevAddr)
 
-	expectedAppSKey, err := hex.DecodeString(testAppSKey)
+	expectedAppSKey, err := hex.DecodeString(testutils.TestAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, testNode.AppSKey, test.ShouldResemble, expectedAppSKey)
 	n.Close(ctx)
@@ -299,8 +292,8 @@ func TestNewNode(t *testing.T) {
 			Decoder:  testDecoderURL,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -322,8 +315,8 @@ func TestNewNode(t *testing.T) {
 			Decoder:  "/worong/path",
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -346,8 +339,8 @@ func TestReadings(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -366,8 +359,8 @@ func TestReadings(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -562,8 +555,8 @@ func TestDoCommand(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -636,8 +629,8 @@ func TestIntervalDownlink(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -709,12 +702,12 @@ func TestIntervalDownlink(t *testing.T) {
 		},
 		{
 			name:              "valid interval with the payload in uppercase",
-			interval:          0.5,
+			interval:          1.5,
 			payloadUnits:      Seconds,
 			numBytes:          4,
 			useLittleEndian:   false,
 			header:            "ff8e",
-			expectedReturn:    "FF8E0000001E", // 0.5 min -> 30 sec -> 0000001E  in big endian hex with 4 bytes
+			expectedReturn:    "FF8E0000005A", // 1.5 min -> 90 sec -> 0000005A  in big endian hex with 4 bytes
 			testGatewayReturn: false,
 		},
 		{
@@ -781,6 +774,18 @@ func TestIntervalDownlink(t *testing.T) {
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, interval of 256 minutes exceeds maximum number of bytes 1",
 		},
+		{
+			name:              "interval lower than min",
+			interval:          0.5,
+			payloadUnits:      Seconds,
+			numBytes:          4,
+			useLittleEndian:   false,
+			header:            "ff8e",
+			expectedReturn:    "",
+			testGatewayReturn: false,
+			expectedErr: `requested uplink interval (0.50 minutes) exceeds the legal duty cycle limit of 1.00 minutes,
+			increase the uplink interval`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -808,8 +813,8 @@ func TestResetDownlink(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 
@@ -913,10 +918,10 @@ func TestUpdateNode(t *testing.T) {
 	n := &Node{}
 
 	validNodeInfo := map[string]interface{}{
-		"app_skey":            testAppSKey,
-		"dev_eui":             testDevEUI,
-		"nwk_skey":            testNwkSKey,
-		"dev_addr":            testDevAddr,
+		"app_skey":            testutils.TestAppSKey,
+		"dev_eui":             testutils.TestDevEUI,
+		"nwk_skey":            testutils.TestNwkSKey,
+		"dev_addr":            testutils.TestDevAddr,
 		"min_uplink_interval": float64(60),
 		"fcnt_down":           float64(123),
 	}
@@ -925,16 +930,16 @@ func TestUpdateNode(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 
 	// Verify all fields were updated correctly
-	expectedAppSKey, _ := hex.DecodeString(testAppSKey)
+	expectedAppSKey, _ := hex.DecodeString(testutils.TestAppSKey)
 	test.That(t, n.AppSKey, test.ShouldResemble, expectedAppSKey)
 
-	expectedDevEui, _ := hex.DecodeString(testDevEUI)
+	expectedDevEui, _ := hex.DecodeString(testutils.TestDevEUI)
 	test.That(t, n.DevEui, test.ShouldResemble, expectedDevEui)
 
-	expectedNwkSKey, _ := hex.DecodeString(testNwkSKey)
+	expectedNwkSKey, _ := hex.DecodeString(testutils.TestNwkSKey)
 	test.That(t, n.NwkSKey, test.ShouldResemble, expectedNwkSKey)
 
-	expectedAddr, _ := hex.DecodeString(testDevAddr)
+	expectedAddr, _ := hex.DecodeString(testutils.TestDevAddr)
 	test.That(t, n.Addr, test.ShouldResemble, expectedAddr)
 
 	test.That(t, n.MinIntervalSeconds, test.ShouldEqual, float64(60))
@@ -943,9 +948,9 @@ func TestUpdateNode(t *testing.T) {
 	// Test invalid hex strings
 	invalidNodeInfo := map[string]interface{}{
 		"app_skey":            "invalid hex",
-		"dev_eui":             testDevEUI,
-		"nwk_skey":            testNwkSKey,
-		"dev_addr":            testDevAddr,
+		"dev_eui":             testutils.TestDevEUI,
+		"nwk_skey":            testutils.TestNwkSKey,
+		"dev_addr":            testutils.TestDevAddr,
 		"min_uplink_interval": float64(60),
 		"fcnt_down":           float64(123),
 	}
@@ -954,19 +959,19 @@ func TestUpdateNode(t *testing.T) {
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving app S key")
 
-	invalidNodeInfo["app_skey"] = testAppSKey
+	invalidNodeInfo["app_skey"] = testutils.TestAppSKey
 	invalidNodeInfo["dev_eui"] = "invalid hex"
 	err = n.updateNode(invalidNodeInfo)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving dev eui")
 
-	invalidNodeInfo["dev_eui"] = testDevEUI
+	invalidNodeInfo["dev_eui"] = testutils.TestDevEUI
 	invalidNodeInfo["nwk_skey"] = "invalid hex"
 	err = n.updateNode(invalidNodeInfo)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "error saving nwk S key")
 
-	invalidNodeInfo["nwk_skey"] = testNwkSKey
+	invalidNodeInfo["nwk_skey"] = testutils.TestNwkSKey
 	invalidNodeInfo["dev_addr"] = "invalid hex"
 	err = n.updateNode(invalidNodeInfo)
 	test.That(t, err, test.ShouldNotBeNil)
@@ -986,8 +991,8 @@ func TestPollGateway(t *testing.T) {
 			Decoder:  testDecoderPath,
 			Interval: &testInterval,
 			JoinType: JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
+			DevEUI:   testutils.TestDevEUI,
+			AppKey:   testutils.TestAppKey,
 		},
 	}
 

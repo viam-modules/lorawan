@@ -179,12 +179,13 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 
 	// create new deviceInfo to update the fcntDown in the file.
 	deviceInfo := deviceInfo{
-		DevEUI:   fmt.Sprintf("%X", device.DevEui),
-		DevAddr:  fmt.Sprintf("%X", device.Addr),
-		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
-		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
-		FCntDown: &device.FCntDown,
-		NodeName: device.NodeName,
+		DevEUI:            fmt.Sprintf("%X", device.DevEui),
+		DevAddr:           fmt.Sprintf("%X", device.Addr),
+		AppSKey:           fmt.Sprintf("%X", device.AppSKey),
+		NwkSKey:           fmt.Sprintf("%X", device.NwkSKey),
+		FCntDown:          &device.FCntDown,
+		NodeName:          device.NodeName,
+		MinUplinkInterval: device.MinIntervalSeconds,
 	}
 	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()

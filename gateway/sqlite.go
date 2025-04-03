@@ -61,6 +61,8 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 		device.NodeName,
 		device.MinUplinkInterval,
 	)
+
+	g.logger.Infof("updating min uplink interval: %f", device.MinUplinkInterval)
 	if err != nil && err.Error() == errDBClosedInternal.Error() {
 		return errDBClosed
 	}

@@ -221,8 +221,6 @@ func newNode(
 
 // Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-	n.reconfigureMu.Lock()
-	defer n.reconfigureMu.Unlock()
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -231,6 +229,13 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	err = n.ReconfigureWithConfig(ctx, deps, cfg)
 	if err != nil {
 		return err
+	}
+
+	// call this once outside of background thread to get any info gateway has before calling the interval request.
+	n.GetAndUpdateDeviceInfo(ctx)
+	// Start the background routine only if it hasn't been started previously.
+	if n.Workers == nil {
+		n.Workers = utils.NewBackgroundStoppableWorkers(n.PollGateway)
 	}
 
 	err = CheckCaptureFrequency(conf, *cfg.Interval, n.logger)

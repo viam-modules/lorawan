@@ -113,8 +113,6 @@ func newEM310Tilt(
 		return nil, err
 	}
 
-	n.node.Workers = utils.NewBackgroundStoppableWorkers(n.node.PollGateway)
-
 	return n, nil
 }
 
@@ -130,6 +128,13 @@ func (n *em310Tilt) Reconfigure(ctx context.Context, deps resource.Dependencies,
 	if err = n.node.ReconfigureWithConfig(ctx, deps, &nodeCfg); err != nil {
 		return err
 	}
+
+	// call this once outside of background thread to get any info gateway has before calling the interval request.
+	n.node.GetAndUpdateDeviceInfo(ctx)
+	if n.node.Workers == nil {
+		n.node.Workers = utils.NewBackgroundStoppableWorkers(n.node.PollGateway)
+	}
+
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {

@@ -44,6 +44,8 @@ func NewSensor(conf resource.Config, logger logging.Logger) Node {
 // ReconfigureWithConfig runs the reconfigure logic of a Node using the native Node Config.
 // For Specialized sensor implementations this function should be used within Reconfigure.
 func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependencies, cfg *Config) error {
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
 	switch cfg.JoinType {
 	case "OTAA", "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
@@ -360,7 +362,8 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 	n.reconfigureMu.Lock()
 	if n.MinIntervalSeconds != 0 {
 		if n.MinIntervalSeconds > (req.IntervalMin * 60.0) {
-			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f,
+			n.reconfigureMu.Unlock()
+			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f minutes,
 			increase the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
 		}
 	}
@@ -423,29 +426,13 @@ func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[str
 
 // PollGateway sends a do command to the gateway every 30 seconds to updated new device info.
 func (n *Node) PollGateway(ctx context.Context) {
-	eui := hex.EncodeToString(n.DevEui)
-	cmd := map[string]interface{}{GetDeviceKey: eui}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		resp, err := n.gateway.DoCommand(ctx, cmd)
-		if err != nil {
-			n.logger.Errorf("error getting node info: %v", err.Error())
-		}
-
-		if device, ok := resp[GetDeviceKey]; ok {
-			dev, ok := device.(map[string]interface{})
-			if !ok {
-				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
-			}
-			// update node struct with info
-			if err := n.updateNode(dev); err != nil {
-				n.logger.Errorf("error getting device info: %w", err)
-			}
-		}
+		n.GetAndUpdateDeviceInfo(ctx)
 		// wait 30 seconds between checking for updates
 		utils.SelectContextOrWait(ctx, time.Second*30)
 	}
@@ -477,15 +464,34 @@ func (n *Node) updateNode(mapNode map[string]interface{}) error {
 	minInterval := mapNode["min_uplink_interval"].(float64)
 	fcntDown := uint16(mapNode["fcnt_down"].(float64))
 
-	// Update all fields atomically under lock
-	n.reconfigureMu.Lock()
-	defer n.reconfigureMu.Unlock()
-
 	n.AppSKey = appSKey
 	n.DevEui = devEui
 	n.NwkSKey = nwkSKey
 	n.Addr = addr
 	n.MinIntervalSeconds = minInterval
 	n.FCntDown = fcntDown
+
 	return nil
+}
+
+// GetAndUpdateDeviceInfo sends the docommand to gateway to receive device info, and saves info to the struct.
+func (n *Node) GetAndUpdateDeviceInfo(ctx context.Context) {
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
+	eui := hex.EncodeToString(n.DevEui)
+	cmd := map[string]interface{}{GetDeviceKey: eui}
+	resp, err := n.gateway.DoCommand(ctx, cmd)
+	if err != nil {
+		n.logger.Errorf("error getting node info: %v", err.Error())
+	}
+	if device, ok := resp[GetDeviceKey]; ok {
+		dev, ok := device.(map[string]interface{})
+		if !ok {
+			n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
+		}
+		// update node struct with info
+		if err := n.updateNode(dev); err != nil {
+			n.logger.Errorf("error getting device info: %w", err)
+		}
+	}
 }
