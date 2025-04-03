@@ -111,7 +111,8 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 		if rows.Err() != nil {
 			return rows.Err()
 		}
-		defer rows.Close()
+		defer func() { goutils.UncheckedError(rows.Close()) }()
+
 		cols, err := rows.Columns()
 		if err != nil {
 			return err

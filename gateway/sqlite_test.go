@@ -184,9 +184,7 @@ func TestSetupSqlite(t *testing.T) {
 		test.That(t, err, test.ShouldBeNil)
 		dbDevices, err := g.getAllDevicesFromDB(context.Background())
 		test.That(t, err, test.ShouldBeNil)
-		for index, device := range dbDevices {
-			fmt.Printf("%v yo device: %X\n", index, device.DevEUI)
-		}
+
 		test.That(t, len(dbDevices), test.ShouldEqual, 2)
 		test.That(t, dbDevices[0], test.ShouldResemble, devices[0])
 		test.That(t, dbDevices[1], test.ShouldResemble, devices[1])
