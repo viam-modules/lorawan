@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
@@ -134,7 +135,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	retVal, ok := resp["validate"]
 	test.That(t, ok, test.ShouldBeTrue)
-	test.That(t, retVal.(int), test.ShouldEqual, 1)
+	test.That(t, retVal.(regions.Region), test.ShouldEqual, regions.US)
 
 	// need to simulate what happens when the DoCommand message is serialized/deserialized into proto
 	doOverWire := func(gateway sensor.Sensor, cmd map[string]interface{}) {
@@ -191,6 +192,29 @@ func TestDoCommand(t *testing.T) {
 	removeCmd["remove_device"] = n.NodeName
 	doOverWire(s, removeCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 0)
+
+	// Test GetDevice command
+	cmd := make(map[string]interface{})
+	cmd[node.GetDeviceKey] = fmt.Sprintf("%X", testDevEUI)
+	resp, err = s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldBeNil)
+	deviceInfo, ok := resp[node.GetDeviceKey].(deviceInfo)
+	test.That(t, ok, test.ShouldBeTrue)
+	test.That(t, deviceInfo.DevEUI, test.ShouldEqual, fmt.Sprintf("%X", testDevEUI))
+	test.That(t, deviceInfo.DevAddr, test.ShouldEqual, fmt.Sprintf("%X", testDeviceAddr))
+	test.That(t, deviceInfo.AppSKey, test.ShouldEqual, fmt.Sprintf("%X", testAppSKey))
+
+	// Test GetDeviceKey with invalid devEUI type
+	cmd[node.GetDeviceKey] = 123
+	_, err = s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "expected a string")
+
+	// Test GetDeviceKey with non-existent device
+	cmd[node.GetDeviceKey] = "09876655"
+	ret, err := s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, ret[node.GetDeviceKey], test.ShouldBeNil)
 
 	// test sendDownlink command
 	testDownLinkPayload := "ff03"

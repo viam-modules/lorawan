@@ -15,15 +15,22 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
-// TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
-const TestKey = "test_only"
+const (
+	// TestKey is a DoCommand key to skip sending commands downstream to the generic node and/or gateway.
+	TestKey = "test_only"
+	// GetDeviceKey is a DoCommand key to get device info from a device.
+	GetDeviceKey = "get_device"
+)
 
 // NewSensor creates a new Node struct. This can be used by external implementers.
 func NewSensor(conf resource.Config, logger logging.Logger) Node {
@@ -37,6 +44,8 @@ func NewSensor(conf resource.Config, logger logging.Logger) Node {
 // ReconfigureWithConfig runs the reconfigure logic of a Node using the native Node Config.
 // For Specialized sensor implementations this function should be used within Reconfigure.
 func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependencies, cfg *Config) error {
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
 	switch cfg.JoinType {
 	case "OTAA", "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
@@ -84,6 +93,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		if err != nil {
 			return err
 		}
+
 		n.DecoderPath = decoderFilePath
 	} else if err := isValidFilePath(n.DecoderPath); err != nil {
 		return fmt.Errorf("provided decoder file path is not valid: %w", err)
@@ -102,7 +112,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		n.FPort = val[0]
 	}
 
-	gateway, err := getGateway(ctx, deps)
+	err := n.validateGateway(ctx, deps)
 	if err != nil {
 		return err
 	}
@@ -112,12 +122,16 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	// send the device to the gateway.
 	cmd["register_device"] = n
 
-	_, err = gateway.DoCommand(ctx, cmd)
+	_, err = n.gateway.DoCommand(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	n.gateway = gateway
+	// Start the background routine only if it hasn't been started previously.
+	if n.Workers == nil {
+		n.Workers = utils.NewBackgroundStoppableWorkers(n.PollGateway)
+	}
+
 	return nil
 }
 
@@ -344,6 +358,22 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 			req.IntervalMin, req.NumBytes)
 	}
 
+	if n.Region == regions.EU {
+		n.logger.Warnf(`the duty cycle limit in the EU region is 1%%. Ensure your
+		 uplink interval complies with this restriction to avoid transmission issues`)
+	}
+
+	// Lock to prevent minInterval from updating during read.
+	n.reconfigureMu.Lock()
+	if n.MinIntervalSeconds != 0 {
+		if n.MinIntervalSeconds > (req.IntervalMin * 60.0) {
+			n.reconfigureMu.Unlock()
+			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f minutes,
+			increase the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
+		}
+	}
+	n.reconfigureMu.Unlock()
+
 	// we format the hex with uppercase, ensure the header is too.
 	intervalString := strings.ToUpper(req.Header)
 	if req.UseLittleEndian {
@@ -363,6 +393,7 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 	if req.TestOnly {
 		return map[string]interface{}{IntervalKey: intervalString}, nil
 	}
+
 	return n.SendDownlink(ctx, intervalString, false)
 }
 
@@ -396,4 +427,78 @@ func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[str
 	}
 
 	return n.SendDownlink(ctx, fullPayload, false)
+}
+
+// PollGateway sends a do command to the gateway every 30 seconds to updated new device info.
+func (n *Node) PollGateway(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		n.GetAndUpdateDeviceInfo(ctx)
+		// wait 30 seconds between checking for updates
+		utils.SelectContextOrWait(ctx, time.Second*30)
+	}
+}
+
+// updateNode converts the map from the docommand into the node struct.
+func (n *Node) updateNode(mapNode map[string]interface{}) error {
+	// Parse all values before acquiring lock
+	appSKey, err := hex.DecodeString(mapNode["app_skey"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving app S key: %w", err)
+	}
+
+	devEui, err := hex.DecodeString(mapNode["dev_eui"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving dev eui: %w", err)
+	}
+
+	nwkSKey, err := hex.DecodeString(mapNode["nwk_skey"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving nwk S key: %w", err)
+	}
+
+	addr, err := hex.DecodeString(mapNode["dev_addr"].(string))
+	if err != nil {
+		return fmt.Errorf("error saving dev addr: %w", err)
+	}
+
+	minInterval := mapNode["min_uplink_interval"].(float64)
+	fcntDown := uint16(mapNode["fcnt_down"].(float64))
+
+	n.AppSKey = appSKey
+	n.DevEui = devEui
+	n.NwkSKey = nwkSKey
+	n.Addr = addr
+	n.MinIntervalSeconds = minInterval
+	n.FCntDown = fcntDown
+
+	return nil
+}
+
+// GetAndUpdateDeviceInfo sends the docommand to gateway to receive device info, and saves info to the struct.
+func (n *Node) GetAndUpdateDeviceInfo(ctx context.Context) {
+	n.reconfigureMu.Lock()
+	defer n.reconfigureMu.Unlock()
+	eui := hex.EncodeToString(n.DevEui)
+	cmd := map[string]interface{}{GetDeviceKey: eui}
+	resp, err := n.gateway.DoCommand(ctx, cmd)
+	if err != nil {
+		n.logger.Errorf("error getting node info: %v", err.Error())
+	}
+	if device, ok := resp[GetDeviceKey]; ok {
+		if device != nil {
+			dev, ok := device.(map[string]interface{})
+			if !ok {
+				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
+			}
+			// update node struct with info
+			if err := n.updateNode(dev); err != nil {
+				n.logger.Errorf("error getting device info: %w", err)
+			}
+		}
+	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/robertkrimen/otto"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -98,7 +99,16 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		device.Downlinks = device.Downlinks[1:]
 	}
 
-	if downlinkPayload != nil || len(requests) > 0 || sendAck {
+	// set the duty cycle in first downlink if in EU region.
+	setDutyCycle := false
+	if g.region == regions.EU && device.FCntDown == 0 {
+		setDutyCycle = true
+		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
+		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
+		device.MinIntervalSeconds = minInterval
+	}
+
+	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {
 		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint16 {
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
@@ -287,10 +297,48 @@ func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 			requests = append(requests, b)
 		case linkCheckCID:
 			requests = append(requests, b)
+		case dutyCycleCID:
+			// do nothing, response
 		default:
 			// unsupported mac command
 			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
 		}
 	}
 	return requests
+}
+
+// Calculate an estimated minimum uplink interval based on the sf and size of the uplink.
+// Formula for TOA can be found in semtech's sx1262 datasheet 6.1.4:
+// https://semtech.my.salesforce.com/sfc/p/#E0000000JelG/a/2R000000Un7F/yT.fKdAr9ZAo3cJLc4F2cBdUsMftpT2vsOICP7NmvMo
+func calculateMinUplinkInterval(sf, size int) float64 {
+	bw := 125000.0
+	dutyCycle := 0.0078125      // 0.78% duty cycle
+	preambleSymbols := 8        // symbols in lora packet preamble
+	overheadSymbols := 4.25     // other symbols in lora packet
+	syncWordSymbols := 8        // overhead for sync word
+	explicitHeaderSymbols := 20 // lora explicit header
+	codeRate := 1               // lora packets using 4/5 coderate so use 1
+	crcNumBits := 16            // num bits in crc
+
+	payloadBits := 8 * size // get the number of bits of the payload
+	payloadBits += crcNumBits
+	payloadBits -= 4 * (sf) // Unclear what the -4 does, not explained in datasheet.
+	payloadBits += 8        // Mystery number from datasheet formula
+	payloadBits += explicitHeaderSymbols
+
+	bitsPerSymbol := float64(sf)
+
+	payloadSymbols := math.Ceil(float64(max(payloadBits, 0))/(4*bitsPerSymbol)) * float64(codeRate+4)
+	totalSymbols := payloadSymbols + float64(preambleSymbols) + overheadSymbols + float64(syncWordSymbols)
+
+	// calculate time on air
+	timePerSymbol := math.Pow(2, float64(sf)) / bw
+	toa := totalSymbols * timePerSymbol
+
+	// total time available for uplinks in an hour
+	timeav := dutyCycle * 3600
+	uplinksPerHour := timeav / toa
+	minIntervalSeconds := 3600 / uplinksPerHour
+
+	return minIntervalSeconds
 }

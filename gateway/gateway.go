@@ -176,6 +176,7 @@ type gateway struct {
 	logWriter  *os.File
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
+	region     regions.Region
 }
 
 // NewGateway creates a new gateway.
@@ -282,13 +283,16 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	region := regions.GetRegion(cfg.Region)
+
 	switch region {
 	case regions.US, regions.Unspecified:
 		g.logger.Infof("configuring gateway for US915 band")
 		g.regionInfo = regions.RegionInfoUS
+		g.region = regions.US
 	case regions.EU:
 		g.logger.Infof("configuring gateway for EU868 band")
 		g.regionInfo = regions.RegionInfoEU
+		g.region = regions.EU
 	}
 
 	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
@@ -473,9 +477,9 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Validate that the dependency is correct.
+	// Validate that the dependency is correct, returns the gateway's region.
 	if _, ok := cmd["validate"]; ok {
-		return map[string]interface{}{"validate": 1}, nil
+		return map[string]interface{}{"validate": g.region}, nil
 	}
 
 	// Add the nodes to the list of devices.
@@ -548,6 +552,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
 	}
+
 	// return all devices that have been registered on the gateway
 	if _, ok := cmd["return_devices"]; ok {
 		resp := map[string]interface{}{}
@@ -559,6 +564,26 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		for _, device := range devices {
 			resp[device.DevEUI] = device
 		}
+		return resp, nil
+	}
+
+	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
+		resp := map[string]interface{}{}
+		deveui, ok := (devEUI).(string)
+		if !ok {
+			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(devEUI))
+		}
+		// Read the device info from the db
+		device, err := g.findDeviceInDB(ctx, deveui)
+		if err != nil {
+			if errors.Is(err, errNoDeviceInDB) {
+				// the device hasn't joined yet - return nil to device
+				resp[node.GetDeviceKey] = nil
+				return resp, nil
+			}
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		resp[node.GetDeviceKey] = device
 		return resp, nil
 	}
 
@@ -586,6 +611,7 @@ func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	device.AppSKey = appsKey
 	device.Addr = savedAddr
 	device.NwkSKey = nwksKey
+	device.MinIntervalSeconds = d.MinUplinkInterval
 
 	// if we don't have an FCntDown in the device file, set it to a max number so we can tell.
 	device.FCntDown = math.MaxUint16
@@ -605,6 +631,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.NodeName = newNode.NodeName
 	mergedNode.JoinType = newNode.JoinType
 	mergedNode.FPort = newNode.FPort
+	mergedNode.MinIntervalSeconds = newNode.MinIntervalSeconds
 
 	switch mergedNode.JoinType {
 	case "OTAA":

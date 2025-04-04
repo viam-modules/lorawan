@@ -10,22 +10,20 @@ import (
 
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/utils"
 )
 
 const (
-	joinDelay      = 6         // rx2 delay in seconds for sending join accept message.
-	downlinkDelay  = 2         // rx2 delay in seconds for downlink messages.
-	rx2FrequencyUS = 923300000 // rx2 default freq for US
-	rx2FrequencyEU = 869525000 // rx2 default freq for EU region
-	rx2SF          = 12        // spreading factor for rx2 window, used for both US and EU
-	rx2BandwidthUS = 0x06      // 500k bandwidth for US downlinks
-	rx2BandwidthEU = 0x04      // 125k bandwidth for EU downlinks
+	joinDelay     = 6  // rx2 delay in seconds for sending join accept message.
+	downlinkDelay = 2  // rx2 delay in seconds for downlink messages.
+	rx2SF         = 12 // spreading factor for rx2 window, used for both US and EU
 	// command identifiers of supported mac commands.
 	deviceTimeCID = 0x0D
 	linkCheckCID  = 0x02
+	dutyCycleCID  = 0x04
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
@@ -91,8 +89,12 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
-func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePayload, uplinkFopts []byte,
-	sendAck bool, snr float64, sf int) (
+func (g *gateway) createDownlink(ctx context.Context,
+	device *node.Node,
+	framePayload, uplinkFopts []byte,
+	sendAck bool,
+	snr float64,
+	sf int) (
 	[]byte, error,
 ) {
 	payload := make([]byte, 0)
@@ -121,10 +123,19 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 				g.logger.Debugf("got link check request from %s", device.NodeName)
 				linkCheckAns := createLinkCheckAns(snr, sf)
 				fopts = append(fopts, linkCheckAns...)
+			case dutyCycleCID:
+				g.logger.Debugf("got duty cycle answer from %s", device.NodeName)
 			default:
 				// unknown mac command - this shouldn't happen since we remove these in parseDataUplink.
 			}
 		}
+	}
+
+	// Send the dutycycleReq on the first downlink if EU region
+	if device.Region == regions.EU && device.FCntDown == 0 {
+		dutyCycleReq := createDutyCycleReq()
+		fopts = append(fopts, dutyCycleReq...)
+		g.logger.Debugf("sending duty cycle request to %s", device.NodeName)
 	}
 
 	//  FCtrl: ADR (1), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
@@ -171,12 +182,13 @@ func (g *gateway) createDownlink(ctx context.Context, device *node.Node, framePa
 
 	// create new deviceInfo to update the fcntDown in the file.
 	deviceInfo := deviceInfo{
-		DevEUI:   fmt.Sprintf("%X", device.DevEui),
-		DevAddr:  fmt.Sprintf("%X", device.Addr),
-		AppSKey:  fmt.Sprintf("%X", device.AppSKey),
-		NwkSKey:  fmt.Sprintf("%X", device.NwkSKey),
-		FCntDown: &device.FCntDown,
-		NodeName: device.NodeName,
+		DevEUI:            fmt.Sprintf("%X", device.DevEui),
+		DevAddr:           fmt.Sprintf("%X", device.Addr),
+		AppSKey:           fmt.Sprintf("%X", device.AppSKey),
+		NwkSKey:           fmt.Sprintf("%X", device.NwkSKey),
+		FCntDown:          &device.FCntDown,
+		NodeName:          device.NodeName,
+		MinUplinkInterval: device.MinIntervalSeconds,
 	}
 	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
@@ -239,5 +251,14 @@ func createLinkCheckAns(snr float64, sf int) []byte {
 	payload = append(payload, byte(margin))
 	payload = append(payload, byte(gwCnt))
 
+	return payload
+}
+
+// EU devices have limitations on how often they can use the frequency band.
+// duty cycle = 1/2^(MaxDCycle).
+func createDutyCycleReq() []byte {
+	payload := make([]byte, 0)
+	payload = append(payload, dutyCycleCID)
+	payload = append(payload, 0x07) // 2^-7 = 0.78% duty cyle, closest to 1% we can get.
 	return payload
 }

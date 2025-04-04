@@ -123,6 +123,9 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 		return err
 	}
 
+	// call this once outside of background thread to get any info gateway has before calling the interval request.
+	n.node.GetAndUpdateDeviceInfo(ctx)
+
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {

@@ -9,10 +9,12 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
 // LorawanFamily is the model family for the Lorawan module.
@@ -188,6 +190,11 @@ type Node struct {
 	FCntDown  uint16
 	FPort     byte     // for downlinks, only required when frame payload exists.
 	Downlinks [][]byte // list of downlink frame payloads to send
+
+	Region             regions.Region
+	MinIntervalSeconds float64 // estimated minimum uplink interval
+
+	Workers *utils.StoppableWorkers
 }
 
 func newNode(
@@ -214,8 +221,6 @@ func newNode(
 
 // Reconfigure reconfigure's the node.
 func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-	n.reconfigureMu.Lock()
-	defer n.reconfigureMu.Unlock()
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return err
@@ -234,10 +239,10 @@ func (n *Node) Reconfigure(ctx context.Context, deps resource.Dependencies, conf
 	return nil
 }
 
-// getGateway sends the validate docommand to the gateway to confirm the dependency.
-func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor, error) {
+// validateGateway sends the validate docommand to the gateway, and saves region and gateway to struct.
+func (n *Node) validateGateway(ctx context.Context, deps resource.Dependencies) error {
 	if len(deps) == 0 {
-		return nil, errors.New("must add sx1302-gateway as dependency")
+		return errors.New("must add sx1302-gateway as dependency")
 	}
 	var dep resource.Resource
 
@@ -249,30 +254,46 @@ func getGateway(ctx context.Context, deps resource.Dependencies) (sensor.Sensor,
 
 	gateway, ok := dep.(sensor.Sensor)
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("dependency must be the sx1302-gateway sensor")
 	}
 
 	cmd := make(map[string]interface{})
 	cmd["validate"] = 1
 
-	// Validate that the dependency is the gateway - gateway will return 1.
+	// Validate that the dependency is the gateway - gateway will return the region.
 	ret, err := gateway.DoCommand(ctx, cmd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("dependency must be the sx1302-gateway sensor")
 	}
-	if retVal.(float64) != 1 {
-		return nil, errors.New("dependency must be the sx1302-gateway sensor")
+	re, ok := retVal.(float64)
+	if !ok {
+		return fmt.Errorf("expected float64 return, got %v", reflect.TypeOf(retVal))
 	}
-	return gateway, nil
+
+	switch re {
+	case 1:
+		n.Region = regions.US
+	case 2:
+		n.Region = regions.EU
+	default:
+		return errors.New("gateway return unexpected region")
+	}
+
+	n.gateway = gateway
+
+	return nil
 }
 
 // Close removes the device from the gateway.
 func (n *Node) Close(ctx context.Context) error {
+	if n.Workers != nil {
+		n.Workers.Stop()
+	}
 	cmd := make(map[string]interface{})
 	cmd["remove_device"] = n.NodeName
 	_, err := n.gateway.DoCommand(ctx, cmd)

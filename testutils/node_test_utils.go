@@ -14,6 +14,19 @@ import (
 	"go.viam.com/test"
 )
 
+const (
+	// TestDevEUI is a fake deveui for tests.
+	TestDevEUI = "0123456789ABCDEF"
+	// TestAppKey is fake app key for tests.
+	TestAppKey = "0123456789ABCDEF0123456789ABAAAA"
+	// TestDevAddr is fake dev addr for tests.
+	TestDevAddr = "01234567"
+	// TestAppSKey is fake appskey for tests.
+	TestAppSKey = "0123456789ABCDEF0123456789ABCDEE"
+	// TestNwkSKey is fake nwkskey for tests.
+	TestNwkSKey = "0123456789ABCDEF0123456789ABCDEF"
+)
+
 const gatewaySendDownlinkKey = "add_downlink_to_queue"
 
 func createMockGateway(devices []string) *inject.Sensor {
@@ -25,8 +38,18 @@ func createMockGateway(devices []string) *inject.Sensor {
 		if _, ok := cmd[gatewaySendDownlinkKey]; ok {
 			return map[string]interface{}{gatewaySendDownlinkKey: "downlink added"}, nil
 		}
+		if _, ok := cmd["get_device"]; ok {
+			resp := map[string]interface{}{}
+			resp["get_device"] = map[string]interface{}{
+				"app_skey": TestAppSKey,
+				"nwk_skey": TestNwkSKey, "dev_eui": TestDevEUI, "min_uplink_interval": 60.0,
+				"fcnt_down": 1.0, "dev_addr": TestDevAddr,
+			}
+			return resp, nil
+		}
 		return map[string]interface{}{}, nil
 	}
+
 	testNodeReadings := map[string]interface{}{"reading": 1}
 
 	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {

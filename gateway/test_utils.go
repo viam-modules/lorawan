@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )
@@ -56,6 +57,7 @@ func createTestGateway(t *testing.T) *gateway {
 	g := gateway{
 		logger:  logging.NewTestLogger(t),
 		devices: testDevices,
+		region:  regions.US,
 	}
 	err := g.setupSqlite(context.Background(), dataDirectory1)
 	test.That(t, err, test.ShouldBeNil)

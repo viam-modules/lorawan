@@ -245,3 +245,9 @@ func TestConvertTo32Bit(t *testing.T) {
 	result = convertTo32Bit(input)
 	test.That(t, result, test.ShouldEqual, input)
 }
+
+func TestCalculateMinUplinkInterval(t *testing.T) {
+	expected := 47.448063999999995
+	actual := calculateMinUplinkInterval(10, 24)
+	test.That(t, expected, test.ShouldEqual, actual)
+}
