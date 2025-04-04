@@ -490,13 +490,15 @@ func (n *Node) GetAndUpdateDeviceInfo(ctx context.Context) {
 		n.logger.Errorf("error getting node info: %v", err.Error())
 	}
 	if device, ok := resp[GetDeviceKey]; ok {
-		dev, ok := device.(map[string]interface{})
-		if !ok {
-			n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
-		}
-		// update node struct with info
-		if err := n.updateNode(dev); err != nil {
-			n.logger.Errorf("error getting device info: %w", err)
+		if device != nil {
+			dev, ok := device.(map[string]interface{})
+			if !ok {
+				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
+			}
+			// update node struct with info
+			if err := n.updateNode(dev); err != nil {
+				n.logger.Errorf("error getting device info: %w", err)
+			}
 		}
 	}
 }

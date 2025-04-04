@@ -576,6 +576,11 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		// Read the device info from the db
 		device, err := g.findDeviceInDB(ctx, deveui)
 		if err != nil {
+			if errors.Is(err, errNoDeviceInDB) {
+				// the device hasn't joined yet - return nil to device
+				resp[node.GetDeviceKey] = nil
+				return resp, nil
+			}
 			return nil, fmt.Errorf("failed to read device info from db: %w", err)
 		}
 		resp[node.GetDeviceKey] = device

@@ -212,9 +212,9 @@ func TestDoCommand(t *testing.T) {
 
 	// Test GetDeviceKey with non-existent device
 	cmd[node.GetDeviceKey] = "09876655"
-	_, err = s.DoCommand(context.Background(), cmd)
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "failed to read device info from db")
+	ret, err := s.DoCommand(context.Background(), cmd)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, ret[node.GetDeviceKey], test.ShouldBeNil)
 
 	// test sendDownlink command
 	testDownLinkPayload := "ff03"
