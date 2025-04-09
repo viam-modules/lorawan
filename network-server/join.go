@@ -43,9 +43,11 @@ func (g *NetworkServer) handleJoin(ctx context.Context, payload []byte, packetTi
 
 	downlink := gatewaypoc.DownlinkInfo{
 		Payload:      joinAccept,
-		Time:         packetTime.Format(time.RFC3339),
+		Time:         packetTime.Format(time.RFC3339Nano),
 		IsJoinAccept: true,
 	}
+
+	g.logger.Infof("packet time network server %v", packetTime)
 
 	cmd := map[string]interface{}{"send_downlink": downlink}
 	_, err = gateway.DoCommand(ctx, cmd)

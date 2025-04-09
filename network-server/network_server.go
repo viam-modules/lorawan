@@ -150,12 +150,13 @@ func NewNetworkServer(
 		return nil, errors.New("must add sx1302-gateway as dependency")
 	}
 
-	gateway, err := sensor.FromDependencies(deps, cfg.Gateways[0])
-	if err != nil {
-		return nil, err
+	for _, gateway := range cfg.Gateways {
+		g, err := sensor.FromDependencies(deps, gateway)
+		if err != nil {
+			return nil, err
+		}
+		ns.gateways = append(ns.gateways, g)
 	}
-
-	ns.gateways = append(ns.gateways, gateway)
 
 	// maintain devices and lastReadings through reconfigure.
 	if ns.devices == nil {
@@ -188,7 +189,6 @@ func (ns *NetworkServer) receivePackets(ctx context.Context) {
 				continue
 			}
 			if ps, ok := packets["get_packets"].([]interface{}); ok {
-				ns.logger.Infof("NS got a packet length of ps : %d", len(ps))
 				for _, p := range ps {
 					packet, ok := p.(map[string]interface{})
 					if !ok {
@@ -207,6 +207,7 @@ func (ns *NetworkServer) receivePackets(ctx context.Context) {
 			}
 
 			// de duplicate packets from dif gateways
+			// send docoammand for all gateways at same time
 
 		}
 	}

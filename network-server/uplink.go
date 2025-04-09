@@ -122,7 +122,7 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 
 			downlink := gatewaypoc.DownlinkInfo{
 				Payload:      payload,
-				Time:         packetTime.Format(time.RFC3339),
+				Time:         packetTime.Format(time.RFC3339Nano),
 				IsJoinAccept: false,
 			}
 

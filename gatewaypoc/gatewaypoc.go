@@ -382,7 +382,7 @@ func (g *gateway) sendDownlink(ctx context.Context, downlink DownlinkInfo) error
 		Size:      uint(len(downlink.Payload)),
 		Payload:   downlink.Payload,
 	}
-	timeFormat := time.RFC3339
+	timeFormat := time.RFC3339Nano
 	packetTime, err := time.Parse(timeFormat, downlink.Time)
 	if err != nil {
 		return fmt.Errorf("error converting time: %w", err)
@@ -397,7 +397,7 @@ func (g *gateway) sendDownlink(ctx context.Context, downlink DownlinkInfo) error
 	if !accurateSleep(ctx, waitDuration) {
 		return fmt.Errorf("error sending downlink: %w", ctx.Err())
 	}
-	g.logger.Info("sending packet to lora hardware")
+	g.logger.Infof("sending packet to lora hardware on gateway %s", g.Name())
 	err = lorahw.SendPacket(ctx, txPkt)
 	if err != nil {
 		return err
