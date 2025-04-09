@@ -4,8 +4,10 @@ package main
 import (
 	"github.com/viam-modules/gateway/draginolht65n"
 	"github.com/viam-modules/gateway/gateway"
+	"github.com/viam-modules/gateway/gatewaypoc"
 	"github.com/viam-modules/gateway/milesightct101"
 	"github.com/viam-modules/gateway/milesightem310"
+	networkserver "github.com/viam-modules/gateway/network-server"
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
@@ -21,5 +23,7 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: draginolht65n.Model},
 		resource.APIModel{API: sensor.API, Model: milesightem310.Model},
 		resource.APIModel{API: sensor.API, Model: milesightct101.Model},
+		resource.APIModel{API: sensor.API, Model: gatewaypoc.Model},
+		resource.APIModel{API: sensor.API, Model: networkserver.Model},
 	)
 }

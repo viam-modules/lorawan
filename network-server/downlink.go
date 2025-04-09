@@ -1,0 +1,202 @@
+package networkserver
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
+	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
+)
+
+const (
+	joinDelay     = 6  // rx2 delay in seconds for sending join accept message.
+	downlinkDelay = 2  // rx2 delay in seconds for downlink messages.
+	rx2SF         = 12 // spreading factor for rx2 window, used for both US and EU
+	// command identifiers of supported mac commands.
+	deviceTimeCID = 0x0D
+	linkCheckCID  = 0x02
+	dutyCycleCID  = 0x04
+)
+
+// Downlink payload structure
+// | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
+// | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
+func (g *NetworkServer) createDownlink(ctx context.Context,
+	device *node.Node,
+	framePayload, uplinkFopts []byte,
+	sendAck bool,
+	snr float64,
+	sf int) (
+	[]byte, error,
+) {
+	payload := make([]byte, 0)
+
+	// Mhdr unconfirmed data down
+	payload = append(payload, unconfirmedDownLinkMHdr)
+
+	devAddrLE := reverseByteArray(device.Addr)
+
+	payload = append(payload, devAddrLE...)
+
+	fopts := make([]byte, 0)
+
+	// Handle any mac commands sent in the uplink fopts.
+	if len(uplinkFopts) != 0 {
+		for _, b := range uplinkFopts {
+			switch b {
+			case deviceTimeCID:
+				g.logger.Debugf("got device time request from %s", device.NodeName)
+				deviceTimeAns, err := createDeviceTimeAns()
+				if err != nil {
+					g.logger.Errorf("failed to create device time answer: %w", err)
+				}
+				fopts = append(fopts, deviceTimeAns...)
+			case linkCheckCID:
+				g.logger.Debugf("got link check request from %s", device.NodeName)
+				linkCheckAns := createLinkCheckAns(snr, sf)
+				fopts = append(fopts, linkCheckAns...)
+			case dutyCycleCID:
+				g.logger.Debugf("got duty cycle answer from %s", device.NodeName)
+			default:
+				// unknown mac command - this shouldn't happen since we remove these in parseDataUplink.
+			}
+		}
+	}
+
+	// Send the dutycycleReq on the first downlink if EU region
+	if device.Region == regions.EU && device.FCntDown == 0 {
+		dutyCycleReq := createDutyCycleReq()
+		fopts = append(fopts, dutyCycleReq...)
+		g.logger.Debugf("sending duty cycle request to %s", device.NodeName)
+	}
+
+	//  FCtrl: ADR (1), RFU (0), ACK(0/1), FPending (0), FOptsLen (0000)
+	fctrl := byte(0x80)
+	if sendAck {
+		fctrl = 0xA0
+	}
+
+	// append 4 bit foptsLength to first 4 bits of fctrl.
+	fOptsLength := len(fopts) & 0x0F
+	fctrl |= byte(fOptsLength)
+	payload = append(payload, fctrl)
+
+	fCntBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(fCntBytes, device.FCntDown+1)
+	payload = append(payload, fCntBytes...)
+
+	payload = append(payload, fopts...)
+
+	// If there is a framePayload to send, add it to the downlink.
+	if framePayload != nil {
+		if device.FPort == 0 {
+			return nil, errors.New("invalid downlink fport, ensure fport attribute is correctly set in the node config")
+		}
+		payload = append(payload, device.FPort)
+		encrypted, err := crypto.EncryptDownlink(
+			types.AES128Key(device.AppSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown)+1, framePayload)
+		if err != nil {
+			return nil, err
+		}
+		payload = append(payload, encrypted...)
+	}
+
+	mic, err := crypto.ComputeLegacyDownlinkMIC(
+		types.AES128Key(device.NwkSKey), *types.MustDevAddr(device.Addr), uint32(device.FCntDown)+1, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	payload = append(payload, mic[:]...)
+
+	// increment fCntDown
+	device.FCntDown++
+
+	// create new deviceInfo to update the fcntDown in the file.
+	deviceInfo := deviceInfo{
+		DevEUI:            fmt.Sprintf("%X", device.DevEui),
+		DevAddr:           fmt.Sprintf("%X", device.Addr),
+		AppSKey:           fmt.Sprintf("%X", device.AppSKey),
+		NwkSKey:           fmt.Sprintf("%X", device.NwkSKey),
+		FCntDown:          &device.FCntDown,
+		NodeName:          device.NodeName,
+		MinUplinkInterval: device.MinIntervalSeconds,
+	}
+	ctxTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	if err = g.insertOrUpdateDeviceInDB(ctxTimeout, deviceInfo); err != nil {
+		return nil, fmt.Errorf("failed to add device info to db: %w", err)
+	}
+
+	return payload, nil
+}
+
+// Helper function to calculate the downlink freq to be used for RX1.
+// Not currently being used.
+//
+//nolint:unused
+func findDownLinkFreq(uplinkFreq int) int {
+	// channel number between 0-64
+	upLinkFreqNum := (uplinkFreq - 902300000) / 200000
+	downLinkChan := upLinkFreqNum % 8
+	downLinkFreq := downLinkChan*600000 + 923300000
+	return downLinkFreq
+}
+
+func createDeviceTimeAns() ([]byte, error) {
+	// Create buffer for the complete PHYPayload
+	payload := make([]byte, 0)
+
+	// add command identifier
+	payload = append(payload, deviceTimeCID)
+
+	// Create frame payload
+	// Time is represented as seconds since GPS epoch
+	gpsEpoch := time.Date(1980, 1, 6, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
+	secondsSinceGPSEpoch := uint32(now.Sub(gpsEpoch).Seconds())
+
+	buf := new(bytes.Buffer)
+	if err := binary.Write(buf, binary.LittleEndian, secondsSinceGPSEpoch); err != nil {
+		return nil, err
+	}
+
+	payload = append(payload, buf.Bytes()...)
+
+	// using zero for fractional seconds to match chirpstack's behavior.
+	payload = append(payload, 0)
+
+	return payload, nil
+}
+
+func createLinkCheckAns(snr float64, sf int) []byte {
+	payload := make([]byte, 0)
+	payload = append(payload, linkCheckCID)
+
+	// calculate margin value
+	minSNR := sfToSNRMin[sf]
+
+	// margin represents the margin above which the last uplink from the demodulation floor.
+	margin := snr - minSNR
+	gwCnt := 1
+
+	payload = append(payload, byte(margin))
+	payload = append(payload, byte(gwCnt))
+
+	return payload
+}
+
+// EU devices have limitations on how often they can use the frequency band.
+// duty cycle = 1/2^(MaxDCycle).
+func createDutyCycleReq() []byte {
+	payload := make([]byte, 0)
+	payload = append(payload, dutyCycleCID)
+	payload = append(payload, 0x07) // 2^-7 = 0.78% duty cyle, closest to 1% we can get.
+	return payload
+}
