@@ -37,7 +37,7 @@ func TestNewDragino(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65ndecoderFileName)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65nDecoderFileName)
 
 	t.Run("Test LHT65N Model", func(t *testing.T) {
 		validConf := resource.Config{
@@ -89,7 +89,7 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65ndecoderFileName)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65nDecoderFileName)
 
 	t.Run("Test Good Readings", func(t *testing.T) {
 		// Test OTAA config
@@ -147,7 +147,7 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65ndecoderFileName)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65nDecoderFileName)
 
 	validConf := resource.Config{
 		Name: testlht65n,

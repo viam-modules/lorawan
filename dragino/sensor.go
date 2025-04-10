@@ -17,8 +17,8 @@ import (
 const (
 	LHT65N                = "dragino-LHT65N"
 	WQSLB                 = "dragino-WQS-LB"
-	lht65ndecoderFileName = "LHT65NChirpstack4decoder.js"
-	wqsdecoderURL         = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/" +
+	lht65nDecoderFileName = "LHT65NChirpstack4decoder.js"
+	wqsDecoderURL         = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/" +
 		"5a2855dbddba7977e06ba710f33fbee27de124e5/WQS-LB/WQS-LB_ChirpstackV4_Decoder.txt"
 )
 
@@ -31,6 +31,9 @@ var (
 		LHT65N: ModelLHT65N,
 		WQSLB:  ModelWQSLB,
 	}
+
+	//go:embed LHT65NChirpstack4decoder.js
+	lht65nDecoderFile embed.FS
 
 	defaultIntervalMin = 20. // minutes
 )
@@ -112,11 +115,12 @@ func getDecoderSource(modelName string) DecoderSource {
 	switch modelName {
 	case WQSLB:
 		return DecoderSource{
-			URL: wqsdecoderURL,
+			URL: wqsDecoderURL,
 		}
 	default: // ModelLHT65N
 		return DecoderSource{
-			Filename: lht65ndecoderFileName,
+			Filename: lht65nDecoderFileName,
+			Embedded: lht65nDecoderFile,
 		}
 	}
 }

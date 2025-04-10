@@ -52,7 +52,6 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		if err != nil {
 			return err
 		}
-		n.logger.Infof("app key %x", appKey)
 		n.AppKey = appKey
 
 		devEui, err := hex.DecodeString(cfg.DevEUI)
