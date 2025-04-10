@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/viam-modules/gateway/gatewaypoc"
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
@@ -205,10 +206,6 @@ func (ns *NetworkServer) receivePackets(ctx context.Context) {
 			} else {
 				ns.logger.Errorf("expected []map[string]interface{}, got %v", reflect.TypeOf(packets["get_packets"]))
 			}
-
-			// de duplicate packets from dif gateways
-			// send docoammand for all gateways at same time
-
 		}
 	}
 }
@@ -231,41 +228,48 @@ func convertToRxPacket(packet map[string]interface{}) (lorahw.RxPacket, error) {
 
 func (ns *NetworkServer) handlePacket(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, gateway sensor.Sensor) {
 	// first byte is MHDR - specifies message type
+	var downlink []byte
+	var err error
+	var readings map[string]interface{}
+	var name string
+	var join bool
 	switch packet.Payload[0] {
 	case joinRequestMHdr:
 		ns.logger.Debugf("received join request")
-		if err := ns.handleJoin(ctx, packet.Payload, packetTime, gateway); err != nil {
-			// don't log as error if it was a request from unknown device.
-			if errors.Is(errNoDevice, err) {
-				return
-			}
-			ns.logger.Errorf("couldn't handle join request: %v", err)
-		}
+		join = true
+		err = ns.handleJoin(ctx, packet.Payload, packetTime, gateway)
 	case unconfirmedUplinkMHdr:
-		name, readings, err := ns.parseDataUplink(ctx, packet.Payload, packetTime, packet.SNR, packet.DataRate, gateway)
-		if err != nil {
-			// don't log as error if it was a request from unknown device.
-			if errors.Is(errNoDevice, err) {
-				return
-			}
-			ns.logger.Errorf("error parsing uplink message: %v", err)
-			return
-		}
-		ns.updateReadings(name, readings)
+		name, readings, downlink, err = ns.parseDataUplink(ctx, packet.Payload, packetTime, packet.SNR, packet.DataRate, gateway)
 	case confirmedUplinkMHdr:
-		name, readings, err := ns.parseDataUplink(ctx, packet.Payload, packetTime, packet.SNR, packet.DataRate, gateway)
-		if err != nil {
-			// don't log as error if it was a request from unknown device.
-			if errors.Is(errNoDevice, err) {
-				return
-			}
-			ns.logger.Errorf("error parsing uplink message: %v", err)
-			return
-		}
-		ns.updateReadings(name, readings)
-
+		name, readings, downlink, err = ns.parseDataUplink(ctx, packet.Payload, packetTime, packet.SNR, packet.DataRate, gateway)
 	default:
 		ns.logger.Warnf("received unsupported packet type with mhdr %x", packet.Payload[0])
+	}
+	if err != nil {
+		// don't log as error if it was a request from unknown device.
+		if errors.Is(errNoDevice, err) {
+			return
+		}
+		ns.logger.Errorf("error parsing message: %v, message type join = %v", err, join)
+		return
+	}
+	if len(downlink) != 0 {
+		downlink := gatewaypoc.DownlinkInfo{
+			Payload:      downlink,
+			Time:         packetTime.Format(time.RFC3339Nano),
+			IsJoinAccept: join,
+		}
+
+		cmd := map[string]interface{}{"send_downlink": downlink}
+		_, err = gateway.DoCommand(ctx, cmd)
+		if err != nil {
+			ns.logger.Errorf("error sending downlink to %s: %w", name, err)
+		}
+		ns.logger.Debugf("sent a downlink to %s", name)
+	}
+
+	if !join {
+		ns.updateReadings(name, readings)
 	}
 }
 

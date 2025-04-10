@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/robertkrimen/otto"
-	"github.com/viam-modules/gateway/gatewaypoc"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -35,11 +34,11 @@ var errInvalidLength = errors.New("unexpected payload length")
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
 func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, gateway sensor.Sensor) (
-	string, map[string]interface{}, error,
+	string, map[string]interface{}, []byte, error,
 ) {
 	// payload should be at least 13 bytes
 	if len(phyPayload) < 13 {
-		return "", map[string]interface{}{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
+		return "", map[string]interface{}{}, []byte{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
 	}
 
 	devAddr := phyPayload[1:5]
@@ -50,7 +49,7 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 	device, err := matchDeviceAddr(devAddrBE, g.devices)
 	if err != nil {
 		g.logger.Debugf("received packet from unknown device, ignoring")
-		return "", map[string]interface{}{}, errNoDevice
+		return "", map[string]interface{}{}, []byte{}, errNoDevice
 	}
 
 	uplinkType := Unconfirmed
@@ -68,7 +67,7 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 	foptsLength := fctrl & 0x0F
 
 	if len(phyPayload) < 8+int(foptsLength) {
-		return "", map[string]interface{}{}, fmt.Errorf("%w, got fopts length of %d but don't have enough bytes", errInvalidLength, foptsLength)
+		return "", map[string]interface{}{}, []byte{}, fmt.Errorf("%w, got fopts length of %d but don't have enough bytes", errInvalidLength, foptsLength)
 	}
 
 	fopts := phyPayload[8 : 8+foptsLength]
@@ -76,20 +75,25 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 	// get the supported requests from fopts.
 	requests := g.getFOptsToSend(fopts, device)
 
-	// frame count - should increase by 1 with each packet sent
-	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
+	// fcntUp - should increase by 1 with each packet sent
+	fCntUp := binary.LittleEndian.Uint16(phyPayload[6:8])
+
+	if fCntUp <= device.FCntUp && device.FCntUp != math.MaxUint16 {
+		return "", map[string]interface{}{}, []byte{}, errors.New("packet already parsed")
+	}
+	device.FCntUp = fCntUp
 
 	// only validate the MIC if we have a NwkSKey set
 	if len(device.NwkSKey) != 0 {
 		// Validate the MIC
 		mic, err := crypto.ComputeLegacyUplinkMIC(
-			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
+			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(fCntUp), phyPayload[:len(phyPayload)-4])
 		if err != nil {
-			return "", map[string]interface{}{}, err
+			return "", map[string]interface{}{}, []byte{}, err
 		}
 
 		if !bytes.Equal(phyPayload[len(phyPayload)-4:], mic[:]) {
-			return "", map[string]interface{}{}, errInvalidMIC
+			return "", map[string]interface{}{}, []byte{}, errInvalidMIC
 		}
 	}
 
@@ -110,28 +114,29 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 		device.MinIntervalSeconds = minInterval
 	}
 
+	var downlinkToSend []byte
 	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {
 		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint16 {
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := g.createDownlink(ctx, device, downlinkPayload, requests, sendAck, snr, sf)
+			downlinkToSend, err = g.createDownlink(ctx, device, downlinkPayload, requests, sendAck, snr, sf)
 			if err != nil {
-				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+				return "", map[string]interface{}{}, []byte{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
 
-			downlink := gatewaypoc.DownlinkInfo{
-				Payload:      payload,
-				Time:         packetTime.Format(time.RFC3339Nano),
-				IsJoinAccept: false,
-			}
+			// downlink := gatewaypoc.DownlinkInfo{
+			// 	Payload:      payload,
+			// 	Time:         packetTime.Format(time.RFC3339Nano),
+			// 	IsJoinAccept: false,
+			// }
 
-			cmd := map[string]interface{}{"send_downlink": downlink}
-			_, err = gateway.DoCommand(ctx, cmd)
-			if err != nil {
-				return "", map[string]interface{}{}, fmt.Errorf("error sending downlink: %w", err)
-			}
-			g.logger.Debugf("sent a downlink to %s", device.NodeName)
+			// cmd := map[string]interface{}{"send_downlink": downlink}
+			// _, err = gateway.DoCommand(ctx, cmd)
+			// if err != nil {
+			// 	return "", map[string]interface{}{}, []byte{}, fmt.Errorf("error sending downlink: %w", err)
+			// }
+			// g.logger.Debugf("sent a downlink to %s", device.NodeName)
 		}
 	}
 
@@ -140,7 +145,7 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 
 	// Ensure there is a frame payload in the packet.
 	if int(8+foptsLength+1) >= (len(phyPayload) - 4) {
-		return "", map[string]interface{}{}, fmt.Errorf("device %s sent packet with no data", device.NodeName)
+		return "", map[string]interface{}{}, []byte{}, fmt.Errorf("device %s sent packet with no data", device.NodeName)
 	}
 
 	// framepayload is the device readings.
@@ -149,20 +154,20 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 	dAddr := types.MustDevAddr(devAddrBE)
 
 	// decrypt the frame payload
-	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(frameCnt), framePayload)
+	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(fCntUp), framePayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
+		return "", map[string]interface{}{}, []byte{}, fmt.Errorf("error while decrypting uplink message: %w", err)
 	}
 
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload of device %s: %w", device.NodeName, err)
+		return "", map[string]interface{}{}, []byte{}, fmt.Errorf("error decoding payload of device %s: %w", device.NodeName, err)
 	}
 
 	// payload was empty or unparsable
 	if len(readings) == 0 {
-		return "", map[string]interface{}{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
+		return "", map[string]interface{}{}, []byte{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
 	}
 
 	// Ensure all types in map are protobuf compatible.
@@ -176,7 +181,7 @@ func (g *NetworkServer) parseDataUplink(ctx context.Context, phyPayload []byte, 
 	timestamp := t.Format(time.RFC3339)
 	readings["time"] = timestamp
 
-	return device.NodeName, readings, nil
+	return device.NodeName, readings, downlinkToSend, nil
 }
 
 // 8 and 16 bit integers are not supported in protobuf.

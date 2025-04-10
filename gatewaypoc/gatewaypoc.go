@@ -416,7 +416,6 @@ type DownlinkInfo struct {
 
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	if _, ok := cmd["get_packets"]; ok {
-		g.logger.Infof("in get packets returning packets")
 		g.readingsMu.Lock()
 		defer g.readingsMu.Unlock()
 		resp := map[string]interface{}{"get_packets": g.lastReadings}
@@ -522,18 +521,5 @@ func (g *gateway) Close(ctx context.Context) error {
 
 // Readings returns all the node's readings.
 func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
-	// g.readingsMu.Lock()
-	// defer g.readingsMu.Unlock()
-
-	// // no readings available yet
-	// if len(g.lastReadings) == 0 || g.lastReadings == nil {
-	// 	// Tell the collector not to capture the empty data.
-	// 	if extra[data.FromDMString] == true {
-	// 		return map[string]interface{}{}, data.ErrNoCaptureToStore
-	// 	}
-	// 	return noReadings, nil
-	// }
-
-	// return g.lastReadings, nil
-	return nil, nil
+	return noReadings, nil
 }
