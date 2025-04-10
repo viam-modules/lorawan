@@ -11,6 +11,7 @@ This module provides the following models:
 - `sx1302-hat-generic`: Sensor model for other SX1302 LoRaWAN concentrator hats.
 - `node`: Sensor model for any class A, US915/EU868 LoraWAN end device.
 - `dragino-LHT65N`: Sensor model for the dragino LHT65N temperature and humidity sensor.
+- `dragino-WQSLB`: Sensor model for the dragino WQS-LB water quality sensor.
 - `milesight-ct101`: Sensor model for the milesight ct101 current transformer.
 - `milesight-em310-tilt`: Sensor model for the milesight em310 tilt sensor.
 

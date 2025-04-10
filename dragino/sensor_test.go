@@ -1,4 +1,4 @@
-package draginolht65n
+package dragino
 
 import (
 	"context"
@@ -19,52 +19,29 @@ const (
 
 	// Gateway dependency.
 	testGatewayName = "gateway"
-	testNodeName    = "test-lht65n"
+	testlht65n      = "test-lht65n"
+	testwqslb       = "test-wqslb"
+
+	// Test model type
+	testModel = LHT65N
 )
 
 var (
 	testNodeReadings = map[string]interface{}{"reading": 1}
 	testInterval     = 5.0
 	gateways         = []string{testGatewayName}
-	nodes            = []string{testNodeName}
+	nodes            = []string{testlht65n, testwqslb}
 )
 
-func TestNewLHT65N(t *testing.T) {
+func TestNewDragino(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65ndecoderFileName)
 
-	validConf := resource.Config{
-		Name: nodes[0],
-		ConvertedAttributes: &Config{
-			Interval: &testInterval,
-			JoinType: node.JoinTypeOTAA,
-			DevEUI:   testDevEUI,
-			AppKey:   testAppKey,
-		},
-	}
-
-	n, err := newLHT65N(ctx, deps, validConf, logger)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, n, test.ShouldNotBeNil)
-
-	// Readings should behave the same
-	readings, err := n.Readings(ctx, nil)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, readings, test.ShouldResemble, testNodeReadings)
-}
-
-func TestReadings(t *testing.T) {
-	ctx := context.Background()
-	logger := logging.NewTestLogger(t)
-
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
-
-	t.Run("Test Good Readings", func(t *testing.T) {
-		// Test OTAA config
+	t.Run("Test LHT65N Model", func(t *testing.T) {
 		validConf := resource.Config{
-			Name: testNodeName,
+			Name: testlht65n,
 			ConvertedAttributes: &Config{
 				Interval: &testInterval,
 				JoinType: node.JoinTypeOTAA,
@@ -73,7 +50,60 @@ func TestReadings(t *testing.T) {
 			},
 		}
 
-		n, err := newLHT65N(ctx, deps, validConf, logger)
+		n, err := newDraginoSensor(ctx, deps, validConf, logger, LHT65N)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, n, test.ShouldNotBeNil)
+		node := n.(*DraginoSensor)
+		test.That(t, node.model, test.ShouldEqual, LHT65N)
+
+		readings, err := n.Readings(ctx, nil)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, readings, test.ShouldResemble, testNodeReadings)
+	})
+
+	t.Run("Test WQSLB Model", func(t *testing.T) {
+		validConf := resource.Config{
+			Name: testwqslb,
+			ConvertedAttributes: &Config{
+				Interval: &testInterval,
+				JoinType: node.JoinTypeOTAA,
+				DevEUI:   testDevEUI,
+				AppKey:   testAppKey,
+			},
+		}
+
+		n, err := newDraginoSensor(ctx, deps, validConf, logger, WQSLB)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, n, test.ShouldNotBeNil)
+		node := n.(*DraginoSensor)
+		test.That(t, node.model, test.ShouldEqual, WQSLB)
+
+		// Readings should behave the same
+		readings, err := n.Readings(ctx, nil)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, readings, test.ShouldResemble, testNodeReadings)
+	})
+}
+
+func TestReadings(t *testing.T) {
+	ctx := context.Background()
+	logger := logging.NewTestLogger(t)
+
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65ndecoderFileName)
+
+	t.Run("Test Good Readings", func(t *testing.T) {
+		// Test OTAA config
+		validConf := resource.Config{
+			Name: testwqslb,
+			ConvertedAttributes: &Config{
+				Interval: &testInterval,
+				JoinType: node.JoinTypeOTAA,
+				DevEUI:   testDevEUI,
+				AppKey:   testAppKey,
+			},
+		}
+
+		n, err := newDraginoSensor(ctx, deps, validConf, logger, testModel)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, n, test.ShouldNotBeNil)
 
@@ -93,7 +123,7 @@ func TestReadings(t *testing.T) {
 			},
 		}
 
-		n, err := newLHT65N(ctx, deps, validConf, logger)
+		n, err := newDraginoSensor(ctx, deps, validConf, logger, testModel)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, n, test.ShouldNotBeNil)
 
@@ -117,10 +147,10 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, lht65ndecoderFileName)
 
 	validConf := resource.Config{
-		Name: testNodeName,
+		Name: testlht65n,
 		ConvertedAttributes: &Config{
 			Interval: &testInterval,
 			JoinType: node.JoinTypeOTAA,
@@ -129,7 +159,7 @@ func TestDoCommand(t *testing.T) {
 		},
 	}
 
-	n, err := newLHT65N(ctx, deps, validConf, logger)
+	n, err := newDraginoSensor(ctx, deps, validConf, logger, testModel)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 

@@ -1,12 +1,12 @@
 function decodeUplink(input) {
-        return { 
+        return {
             data: Decode(input.fPort, input.bytes, input.variables)
-        };   
+        };
 }
 
 function str_pad(byte){
     var zero = '00';
-    var hex= byte.toString(16);    
+    var hex= byte.toString(16);
     var tmp  = 2-hex.length;
     return zero.substr(0,tmp) + hex + " ";
 }
@@ -24,7 +24,7 @@ function datalog(i,bytes){
 }
 	else if(Ext=='4')
 {
-	var Exti_pin_level=bytes[0+i] ? "High":"Low";  
+	var Exti_pin_level=bytes[0+i] ? "High":"Low";
     var Exti_status=bytes[1+i] ? "True":"False";
     bb=Exti_pin_level+Exti_status;
 }
@@ -47,33 +47,33 @@ function datalog(i,bytes){
   var cc= parseFloat(((bytes[2+i]<<24>>16 | bytes[3+i])/100).toFixed(2));
   var dd= parseFloat((((bytes[4+i]<<8 | bytes[5+i])&0xFFF)/10).toFixed(1));
   var ee= getMyDate((bytes[7+i]<<24 | bytes[8+i]<<16 | bytes[9+i]<<8 | bytes[10+i]).toString(10));
-  var string='['+bb+','+cc+','+dd+','+ee+']'+',';  
-  
+  var string='['+bb+','+cc+','+dd+','+ee+']'+',';
+
   return string;
 }
 
-function getzf(c_num){ 
+function getzf(c_num){
   if(parseInt(c_num) < 10)
-    c_num = '0' + c_num; 
+    c_num = '0' + c_num;
 
-  return c_num; 
+  return c_num;
 }
 
-function getMyDate(str){ 
+function getMyDate(str){
   var c_Date;
   if(str > 9999999999)
      c_Date = new Date(parseInt(str));
-  else 
+  else
      c_Date = new Date(parseInt(str) * 1000);
-  
-  var c_Year = c_Date.getFullYear(), 
-  c_Month = c_Date.getMonth()+1, 
+
+  var c_Year = c_Date.getFullYear(),
+  c_Month = c_Date.getMonth()+1,
   c_Day = c_Date.getDate(),
-  c_Hour = c_Date.getHours(), 
-  c_Min = c_Date.getMinutes(), 
+  c_Hour = c_Date.getHours(),
+  c_Min = c_Date.getMinutes(),
   c_Sen = c_Date.getSeconds();
-  var c_Time = c_Year +'-'+ getzf(c_Month) +'-'+ getzf(c_Day) +' '+ getzf(c_Hour) +':'+ getzf(c_Min) +':'+getzf(c_Sen); 
-  
+  var c_Time = c_Year +'-'+ getzf(c_Month) +'-'+ getzf(c_Day) +' '+ getzf(c_Hour) +':'+ getzf(c_Min) +':'+getzf(c_Sen);
+
   return c_Time;
 }
 
@@ -82,9 +82,9 @@ var Ext= bytes[6]&0x0F;
 var poll_message_status=((bytes[6]>>7)&0x01);
 var Connect=(bytes[6]&0x80)>>7;
 var decode = {};
- switch (poll_message_status) {		
-case 0:	
-{ 
+ switch (poll_message_status) {
+case 0:
+{
 if(Ext==0x09)
 {
   decode.TempC_DS=parseFloat(((bytes[0]<<24>>16 | bytes[1])/100).toFixed(2));
@@ -123,7 +123,7 @@ else if(Ext=='2')
 else if(Ext=='4')
 {
   decode.Work_mode="Interrupt Sensor send";
-  decode.Exti_pin_level=bytes[7] ? "High":"Low";  
+  decode.Exti_pin_level=bytes[7] ? "High":"Low";
   decode.Exti_status=bytes[8] ? "True":"False";
 }
 else if(Ext=='5')
