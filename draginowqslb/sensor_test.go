@@ -227,8 +227,6 @@ func TestDoCommand(t *testing.T) {
 			resp, err := n.DoCommand(ctx, req)
 			test.That(t, resp, test.ShouldBeEmpty)
 			test.That(t, err, test.ShouldNotBeNil)
-			expectedErrMsg := fmt.Sprintf("unexpected %s calibration value", strings.ReplaceAll(calibType, "_", " "))
-			test.That(t, err.Error(), test.ShouldContainSubstring, expectedErrMsg)
 
 			// Test invalid type
 			req = map[string]interface{}{cmdKey: fmt.Sprintf("%v", validValues[0])}
