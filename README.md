@@ -370,19 +370,19 @@ The PH probe uses a 3 point calibration, follow the below steps to calibrate:
 1. Wash the electrode with distilled water and place it in a 9.18 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
 ```json
 {
-  "calibrate_ph_9": ""
+  "calibrate_ph": 9
 }
 ```
 2. Wash the electrode with distilled water and place it in a 6.86 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
 ```json
 {
-  "calibrate_ph_6": ""
+  "calibrate_ph": 6
 }
 ```
 3. Wash the electrode with distilled water and place it in a 4.01 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
 ```json
 {
-  "calibrate_ph_4": ""
+  "calibrate_ph": 4
 }
 ```
 
@@ -394,7 +394,7 @@ If K=1 (1-2000 uS/cm) use the following steps to calibrate:
 2. When data is stable, send the following downlink:
 ```json
 {
-  "calibrate_ec_1": ""
+  "calibrate_ec": 1
 }
 ```
 
@@ -403,7 +403,7 @@ If K=10 (10-20000 mS/cm), use the following steps to calibrate:
 2. When data is stable, send the following downlink:
 ```json
 {
-  "calibrate_ec_10": ""
+  "calibrate_ec_10": 10
 }
 ```
 
@@ -412,43 +412,14 @@ The turbidity probe uses a one-point calibration, use the following steps to cal
 
 1. Prepare a 0 NTU, 200 NTU, 400 NTU, 600 NTU, 800 NTU, or 1000 NTU solution
 2. Place the probe in the solution
-3. Send the corresponding downlink to the node:
-0NTU solution:
+3. Send the downlink with NTU value to your node:
+for a 200 NTU solution:
 ```json
 {
-  "calibrate_t_0": ""
+  "calibrate_t": 200
 }
 ```
-200NTU solution:
-```json
-{
-  "calibrate_t_2": ""
-}
-```
-400NTU solution:
-```json
-{
-  "calibrate_t_4": ""
-}
-```
-600NTU solution:
-```json
-{
-  "calibrate_t": "6"
-}
-```
-800NTU solution:
-```json
-{
-  "calibrate_t_8": ""
-}
-```
-1000NTU solution:
-```json
-{
-  "calibrate_t_10": ""
-}
-```
+
 
 ### Calibrate the orp probe
 The orp probe use 2-point calibration. To calibrate, follow these steps:
@@ -456,7 +427,7 @@ The orp probe use 2-point calibration. To calibrate, follow these steps:
 2. Once the data is stable, send the following downlink to the node:
 ```json
 {
-  "calibrate_orp_86": ""
+  "calibrate_orp" : 86
 }
 ```
 
@@ -464,7 +435,7 @@ The orp probe use 2-point calibration. To calibrate, follow these steps:
 4. Once the data is stable, send the following downlink to the node:
 ```json
 {
-  "calibrate_orp_256": ""
+  "calibrate_orp": 256
 }
 ```
 

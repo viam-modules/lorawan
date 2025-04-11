@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/viam-modules/gateway/dragino"
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -13,14 +14,13 @@ import (
 )
 
 const (
-	Model      = "dragino-WQS-LB"
 	decoderURL = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/" +
 		"5a2855dbddba7977e06ba710f33fbee27de124e5/WQS-LB/WQS-LB_ChirpstackV4_Decoder.txt"
 )
 
 var (
-	// ModelWQSLB represents the WQS-LB sensor model
-	ModelWQSLB         = node.LorawanFamily.WithModel(Model)
+	// Model represents the WQS-LB sensor model
+	Model              = node.LorawanFamily.WithModel("dragino-WQS-LB")
 	defaultIntervalMin = 20. // minutes
 )
 
@@ -39,7 +39,7 @@ type Config struct {
 func init() {
 	resource.RegisterComponent(
 		sensor.API,
-		ModelWQSLB,
+		Model,
 		resource.Registration[sensor.Sensor, *Config]{
 			Constructor: func(ctx context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
 				return newWQSLB(ctx, deps, conf, logger)
@@ -120,11 +120,10 @@ func (n *WQSLB) Reconfigure(ctx context.Context, deps resource.Dependencies, con
 	// call this once outside of background thread to get any info gateway has before calling the interval request
 	n.node.GetAndUpdateDeviceInfo(ctx)
 
-	// set the interval if one was provided
-	// we do not send a default in case the user has already set an interval they prefer
+	// Set the interval if one was provided
+	// We do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
-		req := node.IntervalRequest{IntervalMin: *nodeCfg.Interval, PayloadUnits: node.Seconds, Header: "01", NumBytes: 3, TestOnly: false}
-		if _, err := n.node.SendIntervalDownlink(ctx, req); err != nil {
+		if _, err := dragino.SendIntervalDownlink(ctx, &n.node, *nodeCfg.Interval, false); err != nil {
 			return err
 		}
 	}
@@ -152,58 +151,95 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
-			req := node.IntervalRequest{IntervalMin: intervalFloat, PayloadUnits: node.Seconds, Header: "01", NumBytes: 3, TestOnly: testOnly}
-			return n.node.SendIntervalDownlink(ctx, req)
+			return dragino.SendIntervalDownlink(ctx, &n.node, intervalFloat, testOnly)
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
-		// 04 is the header and FFFF is the command for the downlink
-		req := node.ResetRequest{Header: "04", PayloadHex: "FFFF", TestOnly: testOnly}
-		return n.node.SendResetDownlink(ctx, req)
+		return dragino.SendResetDownlink(ctx, &n.node, testOnly)
 	}
-
 	// WQSLB specific calibration commands
-	if _, ok := cmd["calibrate_ph_9"]; ok {
-		return n.node.SendDownlink(ctx, "FB09", testOnly)
-	}
-	if _, ok := cmd["calibrate_ph_6"]; ok {
-		return n.node.SendDownlink(ctx, "FB06", testOnly)
-	}
-	if _, ok := cmd["calibrate_ph_4"]; ok {
-		return n.node.SendDownlink(ctx, "FB04", testOnly)
-	}
-	if _, ok := cmd["calibrate_ec_1"]; ok {
-		return n.node.SendDownlink(ctx, "FD01", testOnly)
-	}
-	if _, ok := cmd["calibrate_ec_10"]; ok {
-		return n.node.SendDownlink(ctx, "FD10", testOnly)
-	}
-	if _, ok := cmd["calibrate_t_0"]; ok {
-		return n.node.SendDownlink(ctx, "FE00", testOnly)
-	}
-	if _, ok := cmd["calibrate_t_2"]; ok {
-		return n.node.SendDownlink(ctx, "FE02", testOnly)
-	}
-	if _, ok := cmd["calibrate_t_4"]; ok {
-		return n.node.SendDownlink(ctx, "FE04", testOnly)
-	}
-	if _, ok := cmd["calibrate_t_6"]; ok {
-		return n.node.SendDownlink(ctx, "FE06", testOnly)
-	}
-	if _, ok := cmd["calibrate_t_8"]; ok {
-		return n.node.SendDownlink(ctx, "FE08", testOnly)
-	}
-	if _, ok := cmd["calibrate_t_10"]; ok {
-		return n.node.SendDownlink(ctx, "FE0S", testOnly)
-	}
-	if _, ok := cmd["calibrate_orp_86"]; ok {
-		return n.node.SendDownlink(ctx, "FC0056", testOnly)
-	}
-	if _, ok := cmd["calibrate_orp_10"]; ok {
-		return n.node.SendDownlink(ctx, "FC0100", testOnly)
+	if ph, ok := cmd["calibrate_ph"]; ok {
+		phFloat, ok := ph.(float64)
+		if !ok {
+			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(ph))
+		}
+		payload := "FB"
+		switch phFloat {
+		case 9:
+			payload += "09"
+		case 6:
+			payload += "06"
+		case 4:
+			payload += "04"
+		default:
+			return map[string]interface{}{}, fmt.Errorf("unexpected ph calibration value %f, valid values are 4, 6, or 9", phFloat)
+
+		}
+		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
 
+	if ec, ok := cmd["calibrate_ec"]; ok {
+		ecFloat, ok := ec.(float64)
+		if !ok {
+			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(ec))
+		}
+		payload := "FD"
+		switch ecFloat {
+		case 1:
+			payload += "01"
+		case 10:
+			payload += "10"
+		default:
+			return map[string]interface{}{}, fmt.Errorf("unexpected electrical conductivity calibration value %f, valid values are 1 or 10", ecFloat)
+		}
+
+		return n.node.SendDownlink(ctx, payload, testOnly)
+	}
+
+	// turbidity calibration
+	if t, ok := cmd["calibrate_t"]; ok {
+		tFloat, ok := t.(float64)
+		if !ok {
+			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(t))
+		}
+		payload := "FE"
+		switch tFloat {
+		case 0:
+			payload += "00"
+		case 200:
+			payload += "02"
+		case 400:
+			payload += "04"
+		case 600:
+			payload += "06"
+		case 800:
+			payload += "08"
+		case 1000:
+			payload += "0A"
+		default:
+			return map[string]interface{}{}, fmt.Errorf("unexpected turbidity calibration value %f, expected values are 0,200,400,600,800,or 1000", tFloat)
+		}
+		return n.node.SendDownlink(ctx, payload, testOnly)
+	}
+
+	// orp calibration
+	if orp, ok := cmd["calibrate_orp"]; ok {
+		orpFloat, ok := orp.(float64)
+		if !ok {
+			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(orp))
+		}
+		payload := "FC"
+		switch orpFloat {
+		case 86:
+			payload += "0056"
+		case 256:
+			payload += "0100"
+		default:
+			return map[string]interface{}{}, fmt.Errorf("unexpected orp calibration value %f, expected values are 86 or 256", orpFloat)
+		}
+		return n.node.SendDownlink(ctx, payload, testOnly)
+	}
 	// do generic node if no sensor specific key was found
 	return n.node.DoCommand(ctx, cmd)
 }
