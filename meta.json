@@ -26,8 +26,14 @@
        {
         "api": "rdk:component:sensor",
         "model": "viam:lorawan:dragino-LHT65N",
-        "markdown_link": "README.md#configure-your-viamlorawandragino-lht65n",
+        "markdown_link": "README.md#configure-your-dragino-sensor",
         "short_description": "A sensor component for a dragino LHT65N LoRaWAN node."
+     },
+     {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:dragino-WQS-LB",
+      "markdown_link": "README.md#configure-your-dragino-sensor",
+      "short_description": "A sensor component for a dragino WQS-LB LoRaWAN node."
      },
      {
       "api": "rdk:component:sensor",
