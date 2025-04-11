@@ -174,7 +174,6 @@ func TestDoCommand(t *testing.T) {
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
-		logger.Info(resp)
 
 		// we should not receive a success from the gateway
 		gatewayResp, gatewayOk := resp[node.GatewaySendDownlinkKey].(string)
@@ -205,7 +204,6 @@ func TestDoCommand(t *testing.T) {
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
-		logger.Info(resp)
 
 		// we should not receive a success from the gateway
 		gatewayResp, gatewayOk := resp[node.GatewaySendDownlinkKey].(string)
