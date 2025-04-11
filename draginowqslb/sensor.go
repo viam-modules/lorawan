@@ -80,18 +80,6 @@ type WQSLB struct {
 	resource.Named
 	logger logging.Logger
 	node   node.Node
-
-	// bools to indicate which probes have been calibrated
-	phCalibrationStep1Complete  bool
-	phCalibrationStep2Complete  bool
-	phCalibrationStep3Complete  bool
-	phCalibrated                bool
-	ecK1Calibrated              bool
-	ecK10Calibrated             bool
-	orpCalibrationStep1Complete bool
-	orpCalibrationStep2Complete bool
-	orpCalibrated               bool
-	turbidityCalibrated         bool
 }
 
 func newWQSLB(
@@ -159,35 +147,6 @@ func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map
 		return map[string]interface{}{}, err
 	}
 
-	// warn if the reading has not been calibrated
-	_, ok := reading["turbidity"]
-	if ok && !n.turbidityCalibrated {
-		n.logger.Warnf("the turbiditiy probe has not been calibrated yet." +
-			"Please follow calibration instructions in README to ensure accurate readings")
-	}
-
-	_, ok = reading["ORP"]
-	if ok && !n.orpCalibrated {
-		n.logger.Warnf("the orp probe has not been calibrated yet." +
-			"Please follow calibration instructions in README to ensure accurate readings")
-	}
-
-	_, ok = reading["EC_K10"]
-	if ok && !n.ecK10Calibrated {
-		n.logger.Warnf("the K10 conductivity probe has not been calibrated yet." +
-			"Please follow calibration instructions in README to ensure accurate readings")
-	}
-	_, ok = reading["EC_K1"]
-	if ok && !n.ecK1Calibrated {
-		n.logger.Warnf("the K10 conductivity probe has not been calibrated yet." +
-			"Please follow calibration instructions in README to ensure accurate readings")
-	}
-	_, ok = reading["PH"]
-	if ok && !n.phCalibrated {
-		n.logger.Warnf("the ph probe has not been calibrated yet." +
-			"Please follow calibration instructions in README to ensure accurate readings")
-	}
-
 	return reading, nil
 }
 
@@ -218,20 +177,14 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		// probe in 9.18 buffer soluton
 		case 9:
 			payload += "09"
-			n.phCalibrationStep1Complete = true
 		// probe in 6.86 buffer soluton
 		case 6:
 			payload += "06"
-			n.phCalibrationStep2Complete = true
 		// probe in 4.01 buffer soluton
 		case 4:
 			payload += "04"
-			n.phCalibrationStep3Complete = true
 		default:
 			return map[string]interface{}{}, fmt.Errorf("unexpected ph calibration value %f, valid values are 4, 6, or 9", phFloat)
-		}
-		if n.phCalibrationStep1Complete && n.phCalibrationStep2Complete && n.phCalibrationStep3Complete {
-			n.phCalibrated = true
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
@@ -246,11 +199,9 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		// for DR-ECK1.0 probe
 		case 1:
 			payload += "01"
-			n.ecK1Calibrated = true
 		// for DR-ECK10.0 probe
 		case 10:
 			payload += "10"
-			n.ecK10Calibrated = true
 		default:
 			return map[string]interface{}{}, fmt.Errorf("unexpected electrical conductivity calibration value %f, valid values are 1 or 10", ecFloat)
 		}
@@ -283,7 +234,6 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 			return map[string]interface{}{}, fmt.Errorf("unexpected turbidity calibration value %f,"+
 				"expected values are 0,200,400,600,800,or 1000", tFloat)
 		}
-		n.turbidityCalibrated = true
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
 
@@ -298,16 +248,11 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		// probe in 86mV standard buffer
 		case 86:
 			payload += "0056"
-			n.orpCalibrationStep1Complete = true
 		// probe in 256mV standard buffer
 		case 256:
 			payload += "0100"
-			n.orpCalibrationStep2Complete = true
 		default:
 			return map[string]interface{}{}, fmt.Errorf("unexpected orp calibration value %f, expected values are 86 or 256", orpFloat)
-		}
-		if n.orpCalibrationStep1Complete && n.orpCalibrationStep2Complete {
-			n.orpCalibrated = true
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
