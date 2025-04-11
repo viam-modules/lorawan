@@ -2,7 +2,9 @@ package draginowqslb
 
 import (
 	"context"
+	"fmt"
 	"path"
+	"strings"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -200,137 +202,51 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, err, test.ShouldBeNil)
 	})
 
-	t.Run("Test pH calibration commands", func(t *testing.T) {
-		// Test valid pH values
-		validPHValues := []float64{4, 6, 9}
-		expectedPayloads := []string{"FB04", "FB06", "FB09"}
+	// Helper function to test calibration commands
+	testCalibration := func(t *testing.T, calibType string, validValues []float64, expectedPayloads []string, invalidValue float64) {
+		t.Helper()
+		cmdKey := "calibrate_" + calibType
 
-		for i, ph := range validPHValues {
-			req := map[string]interface{}{node.TestKey: "", "calibrate_ph": ph}
+		t.Run(fmt.Sprintf("Test %s calibration commands", strings.ToUpper(calibType)), func(t *testing.T) {
+			// Test valid values
+			for i, val := range validValues {
+				req := map[string]interface{}{node.TestKey: "", cmdKey: val}
+				resp, err := n.DoCommand(ctx, req)
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, resp, test.ShouldNotBeNil)
+
+				nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
+				test.That(t, nodeOk, test.ShouldBeTrue)
+				payload, ok := nodeResp[testNodeName].(string)
+				test.That(t, ok, test.ShouldBeTrue)
+				test.That(t, payload, test.ShouldEqual, expectedPayloads[i])
+			}
+
+			// Test invalid value
+			req := map[string]interface{}{node.TestKey: "", cmdKey: invalidValue}
 			resp, err := n.DoCommand(ctx, req)
-			test.That(t, err, test.ShouldBeNil)
-			test.That(t, resp, test.ShouldNotBeNil)
+			test.That(t, resp, test.ShouldBeEmpty)
+			test.That(t, err, test.ShouldNotBeNil)
+			expectedErrMsg := fmt.Sprintf("unexpected %s calibration value", strings.ReplaceAll(calibType, "_", " "))
+			test.That(t, err.Error(), test.ShouldContainSubstring, expectedErrMsg)
 
-			nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
-			test.That(t, nodeOk, test.ShouldBeTrue)
-			payload, ok := nodeResp[testNodeName].(string)
-			test.That(t, ok, test.ShouldBeTrue)
-			test.That(t, payload, test.ShouldEqual, expectedPayloads[i])
-		}
+			// Test invalid type
+			req = map[string]interface{}{cmdKey: fmt.Sprintf("%v", validValues[0])}
+			resp, err = n.DoCommand(ctx, req)
+			test.That(t, resp, test.ShouldBeEmpty)
+			test.That(t, err, test.ShouldNotBeNil)
+			test.That(t, err.Error(), test.ShouldContainSubstring, "expected float64")
+		})
+	}
 
-		// Test invalid pH value
-		req := map[string]interface{}{node.TestKey: "", "calibrate_ph": 5.5}
-		resp, err := n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "unexpected ph calibration value")
-
-		// Test invalid type
-		req = map[string]interface{}{"calibrate_ph": "4"}
-		resp, err = n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "expected float64")
-	})
-
-	t.Run("Test EC calibration commands", func(t *testing.T) {
-		// Test valid EC values
-		validECValues := []float64{1, 10}
-		expectedPayloads := []string{"FD01", "FD10"}
-
-		for i, ec := range validECValues {
-			req := map[string]interface{}{node.TestKey: "", "calibrate_ec": ec}
-			resp, err := n.DoCommand(ctx, req)
-			test.That(t, err, test.ShouldBeNil)
-			test.That(t, resp, test.ShouldNotBeNil)
-
-			nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
-			test.That(t, nodeOk, test.ShouldBeTrue)
-			payload, ok := nodeResp[testNodeName].(string)
-			test.That(t, ok, test.ShouldBeTrue)
-			test.That(t, payload, test.ShouldEqual, expectedPayloads[i])
-		}
-
-		// Test invalid EC value
-		req := map[string]interface{}{node.TestKey: "", "calibrate_ec": 5.0}
-		resp, err := n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "unexpected electrical conductivity calibration value")
-
-		// Test invalid type
-		req = map[string]interface{}{"calibrate_ec": "1"}
-		resp, err = n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "expected float64")
-	})
-
-	t.Run("Test turbidity calibration commands", func(t *testing.T) {
-		// Test valid turbidity values
-		validTValues := []float64{0, 200, 400, 600, 800, 1000}
-		expectedPayloads := []string{"FE00", "FE02", "FE04", "FE06", "FE08", "FE0A"}
-
-		for i, turb := range validTValues {
-			req := map[string]interface{}{node.TestKey: "", "calibrate_t": turb}
-			resp, err := n.DoCommand(ctx, req)
-			test.That(t, err, test.ShouldBeNil)
-			test.That(t, resp, test.ShouldNotBeNil)
-
-			nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
-			test.That(t, nodeOk, test.ShouldBeTrue)
-			payload, ok := nodeResp[testNodeName].(string)
-			test.That(t, ok, test.ShouldBeTrue)
-			test.That(t, payload, test.ShouldEqual, expectedPayloads[i])
-		}
-
-		// Test invalid turbidity value
-		req := map[string]interface{}{node.TestKey: "", "calibrate_t": 300.0}
-		resp, err := n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "unexpected turbidity calibration value")
-
-		// Test invalid type
-		req = map[string]interface{}{"calibrate_t": "200"}
-		resp, err = n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "expected float64")
-	})
-
-	t.Run("Test ORP calibration commands", func(t *testing.T) {
-		// Test valid ORP values
-		validORPValues := []float64{86, 256}
-		expectedPayloads := []string{"FC0056", "FC0100"}
-
-		for i, orp := range validORPValues {
-			req := map[string]interface{}{node.TestKey: "", "calibrate_orp": orp}
-			resp, err := n.DoCommand(ctx, req)
-			test.That(t, err, test.ShouldBeNil)
-			test.That(t, resp, test.ShouldNotBeNil)
-
-			nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
-			test.That(t, nodeOk, test.ShouldBeTrue)
-			payload, ok := nodeResp[testNodeName].(string)
-			test.That(t, ok, test.ShouldBeTrue)
-			test.That(t, payload, test.ShouldEqual, expectedPayloads[i])
-		}
-
-		// Test invalid ORP value
-		req := map[string]interface{}{node.TestKey: "", "calibrate_orp": 100.0}
-		resp, err := n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "unexpected orp calibration value")
-
-		// Test invalid type
-		req = map[string]interface{}{"calibrate_orp": "86"}
-		resp, err = n.DoCommand(ctx, req)
-		test.That(t, resp, test.ShouldBeEmpty)
-		test.That(t, err, test.ShouldNotBeNil)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "expected float64")
-	})
+	// Test pH calibration
+	testCalibration(t, "ph", []float64{4, 6, 9}, []string{"FB04", "FB06", "FB09"}, 5.5)
+	// Test EC calibration
+	testCalibration(t, "ec", []float64{1, 10}, []string{"FD01", "FD10"}, 5.0)
+	// Test turbidity calibration
+	testCalibration(t, "t", []float64{0, 200, 400, 600, 800, 1000}, []string{"FE00", "FE02", "FE04", "FE06", "FE08", "FE0A"}, 300.0)
+	// Test ORP calibration
+	testCalibration(t, "orp", []float64{86, 256}, []string{"FC0056", "FC0100"}, 100.0)
 
 	t.Run("Test successful reset downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
