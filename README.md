@@ -280,6 +280,8 @@ This command will send a generic downlink payload to the gateway. the string is 
 
 ## Configure your dragino sensor
 
+If using a WSQ-LB, be sure to calibrate the sensor using the instructions below.
+
 Example OTAA node configuration:
 
 ```json
@@ -362,8 +364,9 @@ This command will send a generic downlink payload to the gateway. the string is 
 }
 ```
 
-## Calibrate your `dragino-WQS-LB`
+### Calibrate your `dragino-WQS-LB`
 The WQS-LB water quality sensor should be calibrated upon first use. The calibration can be completed using do commands on the UI.
+For more information about calibrating the devices, consult the [user manual.](https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20LoRaWAN%20End%20Nodes/WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/)
 
 ### Calibrate the PH Probe
 The PH probe uses a 3 point calibration, follow the below steps to calibrate:

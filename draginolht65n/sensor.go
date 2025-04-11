@@ -130,7 +130,9 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
-		if _, err := dragino.SendIntervalDownlink(ctx, &n.node, *nodeCfg.Interval, false); err != nil {
+		req := dragino.CreateIntervalDownlinkRequest(ctx, *nodeCfg.Interval, false)
+		_, err := n.node.SendIntervalDownlink(ctx, req)
+		if err != nil {
 			return err
 		}
 	}
@@ -158,12 +160,14 @@ func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map
 
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
-			return dragino.SendIntervalDownlink(ctx, &n.node, intervalFloat, testOnly)
+			req := dragino.CreateIntervalDownlinkRequest(ctx, intervalFloat, testOnly)
+			return n.node.SendIntervalDownlink(ctx, req)
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
-		return dragino.SendResetDownlink(ctx, &n.node, testOnly)
+		dragino.DraginoResetRequest.TestOnly = testOnly
+		return n.node.SendResetDownlink(ctx, dragino.DraginoResetRequest)
 	}
 
 	// do generic node if no sensor specific key was found

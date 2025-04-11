@@ -15,22 +15,19 @@ const (
 	IntervalBytes  = 3
 )
 
-// SendResetDownlink sends a reset command to a Dragino sensor.
-func SendResetDownlink(ctx context.Context, n *node.Node, testOnly bool) (map[string]interface{}, error) {
-	return n.SendResetDownlink(ctx, node.ResetRequest{
-		Header:     ResetHeader,
-		PayloadHex: ResetPayload,
-		TestOnly:   testOnly,
-	})
+// DraginoResetRequest defines the reset downlink for draginos
+var DraginoResetRequest = node.ResetRequest{
+	Header:     ResetHeader,
+	PayloadHex: ResetPayload,
 }
 
-// SendIntervalDownlink sends an interval update command to a Dragino sensor.
-func SendIntervalDownlink(ctx context.Context, n *node.Node, intervalMin float64, testOnly bool) (map[string]interface{}, error) {
-	return n.SendIntervalDownlink(ctx, node.IntervalRequest{
+// CreateIntervalDownlinkRequest sends an interval update command to a Dragino sensor.
+func CreateIntervalDownlinkRequest(ctx context.Context, intervalMin float64, testOnly bool) node.IntervalRequest {
+	return node.IntervalRequest{
 		IntervalMin:  intervalMin,
 		PayloadUnits: node.Seconds,
 		Header:       IntervalHeader,
 		NumBytes:     IntervalBytes,
 		TestOnly:     testOnly,
-	})
+	}
 }
