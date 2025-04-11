@@ -118,7 +118,7 @@ The following attributes are available for `viam:sensor:sx1302-waveshare-hat` se
 | spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
 | region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
 
-## Set up the  `viam:sensor:node`
+## Set up the `viam:sensor:node`
 
 As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
 
@@ -278,7 +278,7 @@ This command will send a generic downlink payload to the gateway. the string is 
 }
 ```
 
-## Configure your `viam:lorawan:dragino-LHT65N`
+## Configure your dragino sensor
 
 Example OTAA node configuration:
 
@@ -359,6 +359,112 @@ This command will send a generic downlink payload to the gateway. the string is 
 ```json
 {
   "send_downlink": "<BYTESINHEX>"
+}
+```
+
+## Calibrate your `dragino-WQS-LB`
+The WQS-LB water quality sensor should be calibrated upon first use. The calibration can be completed using do commands on the UI.
+
+### Calibrate the PH Probe
+The PH probe uses a 3 point calibration, follow the below steps to calibrate:
+1. Wash the electrode with distilled water and place it in a 9.18 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
+```json
+{
+  "calibrate_ph_9": ""
+}
+```
+2. Wash the electrode with distilled water and place it in a 6.86 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
+```json
+{
+  "calibrate_ph_6": ""
+}
+```
+3. Wash the electrode with distilled water and place it in a 4.01 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
+```json
+{
+  "calibrate_ph_4": ""
+}
+```
+
+### Calibrate the electrical conductivity probe
+The EC probe uses one-point calibration.
+
+If K=1 (1-2000 uS/cm) use the following steps to calibrate:
+1. Wash the electrode with distilled water and place it in a 1413 uS/cm solution
+2. When data is stable, send the following downlink:
+```json
+{
+  "calibrate_ec_1": ""
+}
+```
+
+If K=10 (10-20000 mS/cm), use the following steps to calibrate:
+1. Wash the electrode with distilled water and place it in a 12.88 mS/cm solution
+2. When data is stable, send the following downlink:
+```json
+{
+  "calibrate_ec_10": ""
+}
+```
+
+### Calibrate the turbidity probe
+The turbidity probe uses a one-point calibration, use the following steps to calibrate:
+
+1. Prepare a 0 NTU, 200 NTU, 400 NTU, 600 NTU, 800 NTU, or 1000 NTU solution
+2. Place the probe in the solution
+3. Send the corresponding downlink to the node:
+0NTU solution:
+```json
+{
+  "calibrate_t_0": ""
+}
+```
+200NTU solution:
+```json
+{
+  "calibrate_t_2": ""
+}
+```
+400NTU solution:
+```json
+{
+  "calibrate_t_4": ""
+}
+```
+600NTU solution:
+```json
+{
+  "calibrate_t": "6"
+}
+```
+800NTU solution:
+```json
+{
+  "calibrate_t_8": ""
+}
+```
+1000NTU solution:
+```json
+{
+  "calibrate_t_10": ""
+}
+```
+
+### Calibrate the orp probe
+The orp probe use 2-point calibration. To calibrate, follow these steps:
+1. Wash the electrode with distilled water and place it in a 86mV standard buffer.
+2. Once the data is stable, send the following downlink to the node:
+```json
+{
+  "calibrate_orp_86": ""
+}
+```
+
+3. Wash with distilled water again, and place probe in a 256mV standard buffer.
+4. Once the data is stable, send the following downlink to the node:
+```json
+{
+  "calibrate_orp_256": ""
 }
 ```
 
