@@ -127,8 +127,8 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 	// call this once outside of background thread to get any info gateway has before calling the interval request.
 	n.node.GetAndUpdateDeviceInfo(ctx)
 
-	// Set the interval if one was provided
-	// We do not send a default in case the user has already set an interval they prefer
+	// set the interval if one was provided
+	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
 		if _, err := dragino.SendIntervalDownlink(ctx, &n.node, *nodeCfg.Interval, false); err != nil {
 			return err

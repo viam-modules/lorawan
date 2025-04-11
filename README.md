@@ -420,7 +420,6 @@ for a 200 NTU solution:
 }
 ```
 
-
 ### Calibrate the orp probe
 The orp probe use 2-point calibration. To calibrate, follow these steps:
 1. Wash the electrode with distilled water and place it in a 86mV standard buffer.
@@ -438,7 +437,6 @@ The orp probe use 2-point calibration. To calibrate, follow these steps:
   "calibrate_orp": 256
 }
 ```
-
 
 ## Troubleshooting Notes
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.

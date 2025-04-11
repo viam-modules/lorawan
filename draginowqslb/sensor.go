@@ -19,12 +19,12 @@ const (
 )
 
 var (
-	// Model represents the WQS-LB sensor model
+	// Model represents the WQS-LB sensor model.
 	Model              = node.LorawanFamily.WithModel("dragino-WQS-LB")
 	defaultIntervalMin = 20. // minutes
 )
 
-// Config defines the WQS-LB sensor config
+// Config defines the WQS-LB sensor config.
 type Config struct {
 	JoinType string   `json:"join_type,omitempty"`
 	Interval *float64 `json:"uplink_interval_mins,omitempty"`
@@ -41,9 +41,7 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: func(ctx context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (sensor.Sensor, error) {
-				return newWQSLB(ctx, deps, conf, logger)
-			},
+			Constructor: newWQSLB,
 		})
 }
 
@@ -67,7 +65,7 @@ func (conf *Config) getNodeConfig() node.Config {
 	}
 }
 
-// Validate ensures all parts of the config are valid
+// Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	nodeConf := conf.getNodeConfig()
 	deps, err := nodeConf.Validate(path)
@@ -77,7 +75,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return deps, nil
 }
 
-// WQSLB defines the WQS-LB sensor implementation
+// WQSLB defines the WQS-LB sensor implementation.
 type WQSLB struct {
 	resource.Named
 	logger logging.Logger
@@ -104,7 +102,7 @@ func newWQSLB(
 	return n, nil
 }
 
-// Reconfigure reconfigures the sensor
+// Reconfigure reconfigures the sensor.
 func (n *WQSLB) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	cfg, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
@@ -135,17 +133,17 @@ func (n *WQSLB) Reconfigure(ctx context.Context, deps resource.Dependencies, con
 	return nil
 }
 
-// Close removes the device from the gateway
+// Close removes the device from the gateway.
 func (n *WQSLB) Close(ctx context.Context) error {
 	return n.node.Close(ctx)
 }
 
-// Readings returns the node's readings
+// Readings returns the node's readings.
 func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	return n.node.Readings(ctx, extra)
 }
 
-// DoCommand implements the DoCommand interface
+// DoCommand implements the DoCommand interface.
 func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	testOnly := node.CheckTestKey(cmd)
 
@@ -174,7 +172,6 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 			payload += "04"
 		default:
 			return map[string]interface{}{}, fmt.Errorf("unexpected ph calibration value %f, valid values are 4, 6, or 9", phFloat)
-
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
@@ -218,7 +215,8 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		case 1000:
 			payload += "0A"
 		default:
-			return map[string]interface{}{}, fmt.Errorf("unexpected turbidity calibration value %f, expected values are 0,200,400,600,800,or 1000", tFloat)
+			return map[string]interface{}{}, fmt.Errorf("unexpected turbidity calibration value %f,"+
+				"expected values are 0,200,400,600,800,or 1000", tFloat)
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}

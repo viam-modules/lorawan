@@ -7,7 +7,7 @@ import (
 	"github.com/viam-modules/gateway/node"
 )
 
-// Common constants for Dragino sensors
+// Common constants for Dragino sensors.
 const (
 	ResetHeader    = "04"
 	ResetPayload   = "FFFF"
@@ -15,7 +15,7 @@ const (
 	IntervalBytes  = 3
 )
 
-// SendResetDownlink sends a reset command to a Dragino sensor
+// SendResetDownlink sends a reset command to a Dragino sensor.
 func SendResetDownlink(ctx context.Context, n *node.Node, testOnly bool) (map[string]interface{}, error) {
 	return n.SendResetDownlink(ctx, node.ResetRequest{
 		Header:     ResetHeader,
@@ -24,7 +24,7 @@ func SendResetDownlink(ctx context.Context, n *node.Node, testOnly bool) (map[st
 	})
 }
 
-// SendIntervalDownlink sends an interval update command to a Dragino sensor
+// SendIntervalDownlink sends an interval update command to a Dragino sensor.
 func SendIntervalDownlink(ctx context.Context, n *node.Node, intervalMin float64, testOnly bool) (map[string]interface{}, error) {
 	return n.SendIntervalDownlink(ctx, node.IntervalRequest{
 		IntervalMin:  intervalMin,
