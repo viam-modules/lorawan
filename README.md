@@ -413,10 +413,9 @@ The turbidity probe uses a one-point calibration, use the following steps to cal
 1. Prepare a 0 NTU, 200 NTU, 400 NTU, 600 NTU, 800 NTU, or 1000 NTU solution
 2. Place the probe in the solution
 3. Send the downlink with NTU value to your node:
-for a 200 NTU solution:
 ```json
 {
-  "calibrate_t": 200
+  "calibrate_t": <NTU value>
 }
 ```
 
