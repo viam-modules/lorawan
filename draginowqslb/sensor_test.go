@@ -1,7 +1,10 @@
-package draginolht65n
+package draginowqslb
 
 import (
 	"context"
+	"fmt"
+	"path"
+	"strings"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -19,7 +22,7 @@ const (
 
 	// Gateway dependency.
 	testGatewayName = "gateway"
-	testNodeName    = "test-lht65n"
+	testNodeName    = "test-wqslb"
 )
 
 var (
@@ -29,11 +32,11 @@ var (
 	nodes            = []string{testNodeName}
 )
 
-func TestNewLHT65N(t *testing.T) {
+func TestNewWQSLB(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	validConf := resource.Config{
 		Name: nodes[0],
@@ -45,7 +48,7 @@ func TestNewLHT65N(t *testing.T) {
 		},
 	}
 
-	n, err := newLHT65N(ctx, deps, validConf, logger)
+	n, err := newWQSLB(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
@@ -59,7 +62,7 @@ func TestReadings(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	t.Run("Test Good Readings", func(t *testing.T) {
 		// Test OTAA config
@@ -73,7 +76,7 @@ func TestReadings(t *testing.T) {
 			},
 		}
 
-		n, err := newLHT65N(ctx, deps, validConf, logger)
+		n, err := newWQSLB(ctx, deps, validConf, logger)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, n, test.ShouldNotBeNil)
 
@@ -93,7 +96,7 @@ func TestReadings(t *testing.T) {
 			},
 		}
 
-		n, err := newLHT65N(ctx, deps, validConf, logger)
+		n, err := newWQSLB(ctx, deps, validConf, logger)
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, n, test.ShouldNotBeNil)
 
@@ -117,7 +120,7 @@ func TestDoCommand(t *testing.T) {
 	ctx := context.Background()
 	logger := logging.NewTestLogger(t)
 
-	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, decoderFilename)
+	deps, _ := testutils.NewNodeTestEnv(t, gateways, nodes, path.Base(decoderURL))
 
 	validConf := resource.Config{
 		Name: testNodeName,
@@ -129,7 +132,7 @@ func TestDoCommand(t *testing.T) {
 		},
 	}
 
-	n, err := newLHT65N(ctx, deps, validConf, logger)
+	n, err := newWQSLB(ctx, deps, validConf, logger)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, n, test.ShouldNotBeNil)
 
@@ -174,6 +177,7 @@ func TestDoCommand(t *testing.T) {
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
+		logger.Info(resp)
 
 		// we should not receive a success from the gateway
 		gatewayResp, gatewayOk := resp[node.GatewaySendDownlinkKey].(string)
@@ -197,6 +201,50 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err, test.ShouldBeNil)
 	})
+
+	// Helper function to test calibration commands
+	testCalibration := func(t *testing.T, calibType string, validValues []float64, expectedPayloads []string, invalidValue float64) {
+		t.Helper()
+		cmdKey := "calibrate_" + calibType
+
+		t.Run(fmt.Sprintf("Test %s calibration commands", strings.ToUpper(calibType)), func(t *testing.T) {
+			// Test valid values
+			for i, val := range validValues {
+				req := map[string]interface{}{node.TestKey: "", cmdKey: val}
+				resp, err := n.DoCommand(ctx, req)
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, resp, test.ShouldNotBeNil)
+
+				nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
+				test.That(t, nodeOk, test.ShouldBeTrue)
+				payload, ok := nodeResp[testNodeName].(string)
+				test.That(t, ok, test.ShouldBeTrue)
+				test.That(t, payload, test.ShouldEqual, expectedPayloads[i])
+			}
+
+			// Test invalid value
+			req := map[string]interface{}{node.TestKey: "", cmdKey: invalidValue}
+			resp, err := n.DoCommand(ctx, req)
+			test.That(t, resp, test.ShouldBeEmpty)
+			test.That(t, err, test.ShouldNotBeNil)
+
+			// Test invalid type
+			req = map[string]interface{}{cmdKey: fmt.Sprintf("%v", validValues[0])}
+			resp, err = n.DoCommand(ctx, req)
+			test.That(t, resp, test.ShouldBeEmpty)
+			test.That(t, err, test.ShouldNotBeNil)
+			test.That(t, err.Error(), test.ShouldContainSubstring, "expected float64")
+		})
+	}
+
+	// Test pH calibration
+	testCalibration(t, "ph", []float64{4, 6, 9}, []string{"FB04", "FB06", "FB09"}, 5.5)
+	// Test EC calibration
+	testCalibration(t, "ec", []float64{1, 10}, []string{"FD01", "FD10"}, 5.0)
+	// Test turbidity calibration
+	testCalibration(t, "t", []float64{0, 200, 400, 600, 800, 1000}, []string{"FE00", "FE02", "FE04", "FE06", "FE08", "FE0A"}, 300.0)
+	// Test ORP calibration
+	testCalibration(t, "orp", []float64{86, 256}, []string{"FC0056", "FC0100"}, 100.0)
 
 	t.Run("Test successful reset downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.

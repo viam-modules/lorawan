@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/viam-modules/gateway/dragino"
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -129,8 +130,9 @@ func (n *LHT65N) Reconfigure(ctx context.Context, deps resource.Dependencies, co
 	// set the interval if one was provided
 	// we do not send a default in case the user has already set an interval they prefer
 	if cfg.Interval != nil && *cfg.Interval != 0 {
-		req := node.IntervalRequest{IntervalMin: *nodeCfg.Interval, PayloadUnits: node.Seconds, Header: "01", NumBytes: 3, TestOnly: false}
-		if _, err := n.node.SendIntervalDownlink(ctx, req); err != nil {
+		req := dragino.CreateIntervalDownlinkRequest(ctx, *nodeCfg.Interval, false)
+		_, err := n.node.SendIntervalDownlink(ctx, req)
+		if err != nil {
 			return err
 		}
 	}
@@ -158,15 +160,14 @@ func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map
 
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
-			req := node.IntervalRequest{IntervalMin: intervalFloat, PayloadUnits: node.Seconds, Header: "01", NumBytes: 3, TestOnly: testOnly}
+			req := dragino.CreateIntervalDownlinkRequest(ctx, intervalFloat, testOnly)
 			return n.node.SendIntervalDownlink(ctx, req)
 		}
 		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
-		// 04 is the header and FFFF is the command for the downlink.
-		req := node.ResetRequest{Header: "04", PayloadHex: "FFFF", TestOnly: testOnly}
-		return n.node.SendResetDownlink(ctx, req)
+		dragino.DraginoResetRequest.TestOnly = testOnly
+		return n.node.SendResetDownlink(ctx, dragino.DraginoResetRequest)
 	}
 
 	// do generic node if no sensor specific key was found
