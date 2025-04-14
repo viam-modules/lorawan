@@ -216,7 +216,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		}
 		payload := "FE"
 		// each case here corresponds to an NTU value,
-		// corresponding to each step in the calibration instructions of the READMe
+		// corresponding to each step in the calibration instructions of the README.
 		switch tFloat {
 		case 0:
 			payload += "00"
