@@ -306,11 +306,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	
-
-
-
-
 
 	if err := lorahw.SetupGateway(0, path, region); err != nil {
 		return fmt.Errorf("failed to set up the gateway: %w", err)
