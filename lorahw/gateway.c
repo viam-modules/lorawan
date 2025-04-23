@@ -30,7 +30,7 @@ const int32_t ifFrequencies[9] = {
 // This defines what RF chain to use for each of the 8 if chains
 const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
-int set_up_gateway(int bus, int region) {
+int set_up_gateway(int type, char* path, int region) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -38,23 +38,9 @@ int set_up_gateway(int bus, int region) {
     boardconf.lorawan_public = true;
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
-    boardconf.com_type = LGW_COM_SPI;
+    boardconf.com_type = type;
 
-    const char * com_path;
-
-    switch(bus) {
-        case 0:
-            com_path = "/dev/spidev0.0";
-            break;
-        case 1:
-            com_path = "/dev/spidev0.1";
-            break;
-        default:
-            //error invalid spi bus
-            return 1;
-    }
-
-    strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
+    strncpy(boardconf.com_path, path, sizeof boardconf.com_path);
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         return 2;

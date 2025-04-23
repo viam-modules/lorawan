@@ -30,7 +30,6 @@ func resetGateway(ctx context.Context, rst, pwr board.GPIOPin) error {
 			return err
 		}
 	}
-
 	err := rst.Set(ctx, true, nil)
 	if err != nil {
 		return err

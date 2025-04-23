@@ -33,6 +33,7 @@ const (
 	oldModelName = "sx1302-gateway"
 	genericHat   = "sx1302-hat-generic"
 	waveshareHat = "sx1302-waveshare-hat"
+	rak          = "rak"
 )
 
 // Error variables for validation and operations.
@@ -66,6 +67,8 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
+
+var ModelRak = node.LorawanFamily.WithModel(string(rak))
 
 // Define the map of SF to minimum SNR values in dB.
 // Any packet received below the minimum demodulation value will not be parsed.
@@ -126,6 +129,12 @@ func init() {
 		resource.Registration[sensor.Sensor, *ConfigSX1302WaveshareHAT]{
 			Constructor: newSX1302WaveshareHAT,
 		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelRak,
+		resource.Registration[sensor.Sensor, *ConfigRak]{
+			Constructor: newRAK,
+		})
 }
 
 // Validate ensures all parts of the config are valid.
@@ -177,6 +186,8 @@ type gateway struct {
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 	region     regions.Region
+
+	path string // serial or spi path
 }
 
 // NewGateway creates a new gateway.
@@ -295,7 +306,13 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
+	
+
+
+
+
+
+	if err := lorahw.SetupGateway(0, path, region); err != nil {
 		return fmt.Errorf("failed to set up the gateway: %w", err)
 	}
 
