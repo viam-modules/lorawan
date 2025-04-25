@@ -108,6 +108,15 @@ type RxPacket struct {
 }
 
 // SetupGateway initializes the gateway hardware
+func SetupGateway2(comType int, path string, region regions.Region) error {
+	errCode := C.set_up_gateway2(C.int(comType), C.CString(path), C.int(region))
+	if errCode != 0 {
+		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
+	}
+	return nil
+}
+
+// SetupGateway initializes the gateway hardware
 func SetupGateway(spiBus int, region regions.Region) error {
 	errCode := C.set_up_gateway(C.int(spiBus), C.int(region))
 	if errCode != 0 {

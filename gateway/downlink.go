@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -13,7 +14,9 @@ import (
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	v1 "go.viam.com/api/common/v1"
 	"go.viam.com/utils"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -49,11 +52,31 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("error sending downlink: %w", ctx.Err())
 	}
 
-	err := lorahw.SendPacket(ctx, txPkt)
+	// needs to be in map form for protobuf
+	var txPktMap map[string]interface{}
+	b, err := json.Marshal(txPkt)
+	if err != nil {
+		return fmt.Errorf("failed to marshal txPkt: %v", err)
+	}
+	if err := json.Unmarshal(b, &txPktMap); err != nil {
+		return fmt.Errorf("failed to unmarshal txPkt to map: %v", err)
+	}
+
+	cmd := map[string]interface{}{"send_packet": txPktMap}
+
+	cmdStruct, err := structpb.NewStruct(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create command struct: %v", err)
+	}
+
+	req := &v1.DoCommandRequest{
+		Command: cmdStruct,
+	}
+
+	_, err = g.concentratorClient.DoCommand(ctx, req)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

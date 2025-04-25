@@ -2,14 +2,21 @@
 package gateway
 
 import (
+	"archive/tar"
 	"bufio"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -20,12 +27,17 @@ import (
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	v1 "go.viam.com/api/common/v1"
+	pb "go.viam.com/api/component/sensor/v1"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // defining model names here to be reused in getNativeConfig.
@@ -56,6 +68,8 @@ const (
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
+	defaultExecutableName   = "cgo"
+	tarGzPath               = "/home/viam/lorawan.tar.gz"
 )
 
 // Model represents a lorawan gateway model.
@@ -79,6 +93,14 @@ var sfToSNRMin = map[int]float64{
 	12: -12.5,
 }
 
+type comType int
+
+// enum for com types
+const (
+	spi comType = iota
+	usb
+)
+
 // LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
 // started for each gateway. If the gateway build errors and needs to build again, we only want to start
 // the logging routine once.
@@ -88,11 +110,12 @@ var noReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config describes the configuration of the gateway.
 type Config struct {
-	Bus       int    `json:"spi_bus,omitempty"`
+	Bus       *int   `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
 	ResetPin  *int   `json:"reset_pin"`
 	BoardName string `json:"board"`
 	Region    string `json:"region_code,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // deviceInfo is a struct containing OTAA device information.
@@ -134,9 +157,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
-	if conf.Bus != 0 && conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
-	}
 
 	if len(conf.BoardName) == 0 {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
@@ -177,6 +197,10 @@ type gateway struct {
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 	region     regions.Region
+
+	concentratorClient pb.SensorServiceClient
+	conn               *grpc.ClientConn
+	servCancel         context.CancelFunc
 }
 
 // NewGateway creates a new gateway.
@@ -205,6 +229,7 @@ func NewGateway(
 	if err := g.Reconfigure(ctx, deps, conf); err != nil {
 		return nil, err
 	}
+	g.logger.Info("REONCFIGURED")
 
 	return g, nil
 }
@@ -237,6 +262,15 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
 		g.reset(ctx)
+	}
+
+	// disconnect the client and stop server at each reconfigure
+	if g.conn != nil {
+		g.conn.Close()
+	}
+
+	if g.servCancel != nil {
+		g.servCancel()
 	}
 
 	cfg, err := getNativeConfig(conf)
@@ -295,9 +329,83 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
-		return fmt.Errorf("failed to set up the gateway: %w", err)
+	extractDir := "./tmp_run_dir"
+
+	if err := os.MkdirAll(extractDir, 0755); err != nil {
+		panic(err)
 	}
+
+	if err := extractTarGz(tarGzPath, extractDir); err != nil {
+		panic(fmt.Sprintf("failed to extract archive: %v", err))
+	}
+
+	// run concentrator executable
+	execPath := filepath.Join(extractDir, defaultExecutableName)
+
+	var path string
+	var comType comType
+
+	if cfg.Bus != nil {
+		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
+		comType = spi
+	}
+
+	if cfg.Path != "" {
+		path = cfg.Path
+		if strings.Contains(path, "spi") {
+			comType = spi
+		} else {
+			comType = usb
+		}
+	}
+
+	args := []string{
+		fmt.Sprintf("--comType=%d", comType),
+		fmt.Sprintf("--path=%s", path),
+		fmt.Sprintf("--region=%d", region),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, execPath, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
+	}
+	cmd.Stderr = os.Stderr
+	g.servCancel = cancel
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start binary: %w", err)
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	var port string
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println("Server output:", line)
+
+		if strings.Contains(line, "Server successfully started:") {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				port = strings.TrimSpace(parts[1])
+				fmt.Println("Captured port:", port)
+				break
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading stdout:", err)
+	}
+
+	time.Sleep(5 * time.Second)
+	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("error connecting to server")
+	}
+
+	g.conn = conn
+	g.concentratorClient = pb.NewSensorServiceClient(conn)
 
 	g.started = true
 	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
@@ -367,10 +475,39 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 
-		packets, err := lorahw.ReceivePackets()
+		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+			"get_packets": true,
+		})
 		if err != nil {
-			g.logger.Errorf("error receiving lora packet: %w", err)
-			continue
+			log.Fatalf("Failed to create command struct: %v", err)
+		}
+
+		req := &v1.DoCommandRequest{
+			Command: cmdStruct,
+		}
+
+		resp, err := g.concentratorClient.DoCommand(ctx, req)
+		if err != nil {
+			log.Fatalf("DoCommand error: %v", err)
+		}
+
+		data := resp.Result.AsMap()
+
+		rawPackets, ok := data["packets"]
+		if !ok {
+			g.logger.Errorf("no packets found in map")
+		}
+
+		//Marshal back to JSON to decode into typed struct
+		rawJSON, err := json.Marshal(rawPackets)
+		if err != nil {
+			g.logger.Errorf("failed to get raw json")
+		}
+
+		var packets []lorahw.RxPacket
+		err = json.Unmarshal(rawJSON, &packets)
+		if err != nil {
+			g.logger.Errorf("failed to unmarshal into packet")
 		}
 
 		if len(packets) == 0 {
@@ -732,6 +869,13 @@ func (g *gateway) Close(ctx context.Context) error {
 		}
 	}
 
+	if g.conn != nil {
+		g.conn.Close()
+	}
+	if g.servCancel != nil {
+		g.servCancel()
+	}
+
 	return nil
 }
 
@@ -767,4 +911,53 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 	}
 
 	return g.lastReadings, nil
+}
+
+func extractTarGz(gzipPath string, dest string) error {
+	f, err := os.Open(gzipPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	tarReader := tar.NewReader(gz)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		targetPath := filepath.Join(dest, header.Name)
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, 0755); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			outFile, err := os.Create(targetPath)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				outFile.Close()
+				return err
+			}
+			outFile.Close()
+			// Make sure it's executable
+			if err := os.Chmod(targetPath, 0755); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
