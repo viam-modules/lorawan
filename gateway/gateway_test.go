@@ -76,8 +76,8 @@ func TestValidate(t *testing.T) {
 		Path:      "/dev/ttyUSB0",
 	}
 	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errSPIAndUSB))
+	test.That(t, deps, test.ShouldBeNil)
 
 	// Test missing reset pin
 	conf = &Config{
