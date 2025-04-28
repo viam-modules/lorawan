@@ -48,16 +48,6 @@ func TestValidate(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 
-	// Test valid config with SPI path
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &resetPin,
-		Path:      "/dev/spidev0.0",
-	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deps), test.ShouldEqual, 1)
-
 	// Test valid config with default bus
 	conf = &Config{
 		BoardName: "pi",
@@ -77,6 +67,17 @@ func TestValidate(t *testing.T) {
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
+
+	// Test error if bus and path are configured
+	conf = &Config{
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Bus:       &bus,
+		Path:      "/dev/ttyUSB0",
+	}
+	deps, err = conf.Validate("")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errSPIAndUSB))
 
 	// Test missing reset pin
 	conf = &Config{

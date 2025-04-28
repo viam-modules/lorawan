@@ -39,6 +39,7 @@ const (
 var (
 	// Config validation errors.
 	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
+	errSPIAndUSB     = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
 
 	// Gateway operation errors.
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
@@ -138,6 +139,10 @@ func (conf *Config) Validate(path string) ([]string, error) {
 
 	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
 		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+	}
+
+	if conf.Bus != nil && conf.Path != "" {
+		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
 
 	if len(conf.BoardName) == 0 {
@@ -312,15 +317,21 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		comType = lorahw.SPI
 	}
 
-	// user provided an SPI or serial device path
+	// user provided a serial device path
 	if cfg.Path != "" {
 		path = cfg.Path
-		if strings.Contains(path, "spi") {
-			comType = lorahw.SPI
-		} else {
-			comType = lorahw.USB
-		}
+		comType = lorahw.USB
+
 	}
+	var comTypeString string
+	switch comType {
+	case lorahw.SPI:
+		comTypeString = "SPI"
+	case lorahw.USB:
+		comTypeString = "USB"
+	}
+
+	g.logger.Infof("starting %s gateway connected to path %s", comTypeString, path)
 
 	if err := lorahw.SetupGateway(comType, path, region); err != nil {
 		return fmt.Errorf("failed to set up the gateway: %w", err)
