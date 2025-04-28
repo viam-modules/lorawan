@@ -88,7 +88,7 @@ var noReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config describes the configuration of the gateway.
 type Config struct {
-	Bus       int    `json:"spi_bus,omitempty"`
+	Bus       *int   `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
 	ResetPin  *int   `json:"reset_pin"`
 	BoardName string `json:"board"`
@@ -135,7 +135,8 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
-	if conf.Bus != 0 && conf.Bus != 1 {
+
+	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
 		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
 
@@ -296,7 +297,32 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
+	var path string
+	var comType lorahw.ComType
+
+	// no bus or path provided, use default spi bus 0
+	if cfg.Bus == nil && cfg.Path == "" {
+		comType = lorahw.SPI
+		path = "/dev/spidev0.0"
+	}
+
+	// user provided a spi bus
+	if cfg.Bus != nil {
+		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
+		comType = lorahw.SPI
+	}
+
+	// user provided an SPI or serial device path
+	if cfg.Path != "" {
+		path = cfg.Path
+		if strings.Contains(path, "spi") {
+			comType = lorahw.SPI
+		} else {
+			comType = lorahw.USB
+		}
+	}
+
+	if err := lorahw.SetupGateway(comType, path, region); err != nil {
 		return fmt.Errorf("failed to set up the gateway: %w", err)
 	}
 
