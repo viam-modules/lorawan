@@ -7,6 +7,7 @@ import (
 	"github.com/viam-modules/gateway/milesightct101"
 	"github.com/viam-modules/gateway/milesightem310"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/rak"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"

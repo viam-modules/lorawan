@@ -49,6 +49,15 @@ type RAK7391 struct {
 // Model represents a lorawan gateway model.
 var Model = node.LorawanFamily.WithModel(string("rak"))
 
+func init() {
+	resource.RegisterComponent(
+		sensor.API,
+		Model,
+		resource.Registration[sensor.Sensor, *ConfigRak]{
+			Constructor: newRAK,
+		})
+}
+
 // getGatewayConfigs returns configurations for enabled concentrators
 func (conf *ConfigRak) getGatewayConfigs() []*gateway.Config {
 	var configs []*gateway.Config
@@ -142,7 +151,6 @@ func newRAK(ctx context.Context, deps resource.Dependencies,
 		},
 	}, logger)
 	if err != nil {
-		gw1.Close(ctx)
 		return nil, fmt.Errorf("failed to create first gateway: %w", err)
 	}
 
@@ -158,7 +166,6 @@ func newRAK(ctx context.Context, deps resource.Dependencies,
 		},
 	}, logger)
 	if err != nil {
-		gw2.Close(ctx)
 		return nil, fmt.Errorf("failed to create second gateway: %w", err)
 	}
 
