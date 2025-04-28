@@ -27,7 +27,7 @@ var (
 )
 
 // Create or open a sqlite db file used to save device data across restarts.
-func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
+func (g *Gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	filePathDB := filepath.Join(pathPrefix, "devicedata.db")
 	db, err := sql.Open("sqlite3", filePathDB)
 	if err != nil {
@@ -45,7 +45,7 @@ func (g *gateway) setupSqlite(ctx context.Context, pathPrefix string) error {
 	return nil
 }
 
-func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInfo) error {
+func (g *Gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInfo) error {
 	if g.db == nil {
 		return errNoDB
 	}
@@ -67,7 +67,7 @@ func (g *gateway) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 	return err
 }
 
-func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo, error) {
+func (g *Gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo, error) {
 	if g.db == nil {
 		return deviceInfo{}, errNoDB
 	}
@@ -88,7 +88,7 @@ func (g *gateway) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo
 	return newDevice, nil
 }
 
-func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error) {
+func (g *Gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error) {
 	if g.db == nil {
 		return nil, errNoDB
 	}
@@ -134,7 +134,7 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 }
 
 // Function to migrate the device info from the persitent data file into a sqlite db.
-func (g *gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
+func (g *Gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
 	// check if the machine has an old devicedata file for us to migrate
 	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
 	filePath := filepath.Clean(filePathTXT)

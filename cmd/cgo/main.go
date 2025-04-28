@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/viam-modules/gateway/lorahw"
@@ -62,6 +64,9 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 
 	port := lis.Addr().(*net.TCPAddr).Port
 	fmt.Println("Server successfully started:", port)
+
+	// capture c log output
+	startCLogging(ctx, logger)
 
 	go func() {
 		// Graceful shutdown
@@ -155,4 +160,57 @@ func (s sensorService) GetGeometries(context.Context, *v1.GetGeometriesRequest) 
 }
 func (s sensorService) GetReadings(context.Context, *v1.GetReadingsRequest) (*v1.GetReadingsResponse, error) {
 	return &v1.GetReadingsResponse{Readings: map[string]*structpb.Value{"here": structpb.NewStringValue("hi")}}, nil
+}
+
+// startCLogging starts the goroutine to capture C logs into the logger.
+// If loggingRoutineStarted indicates routine has already started, it does nothing.
+func startCLogging(ctx context.Context, logger logging.Logger) {
+	logger.Debug("Starting c logger background routine")
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		logger.Errorf("unable to create pipe for C logs")
+		return
+	}
+	// g.logReader = stdoutR
+	// g.logWriter = stdoutW
+
+	// Redirect C's stdout to the write end of the pipe
+	lorahw.RedirectLogsToPipe(stdoutW.Fd())
+	scanner := bufio.NewScanner(stdoutR)
+
+	//g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
+
+	captureCOutputToLogs(ctx, scanner, logger)
+}
+
+// captureOutput is a background routine to capture C's stdout and log to the module's logger.
+// This is necessary because the sx1302 library only uses printf to report errors.
+func captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner, logger logging.Logger) {
+	// Need to disable buffering on stdout so C logs can be displayed in real time.
+	lorahw.DisableBuffering()
+
+	// loop to read lines from the scanner and log them
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if scanner.Scan() {
+				line := scanner.Text()
+				switch {
+				case strings.Contains(line, "STANDBY_RC mode"):
+					// The error setting standby_rc mode indicates a hardware initiaization failure
+					// add extra log to instruct user what to do.
+					logger.Error(line)
+					logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+				case strings.Contains(line, "ERROR"):
+					logger.Error(line)
+				case strings.Contains(line, "WARNING"):
+					logger.Warn(line)
+				default:
+					logger.Debug(line)
+				}
+			}
+		}
+	}
 }

@@ -69,7 +69,7 @@ const (
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
 	defaultExecutableName   = "cgo"
-	tarGzPath               = "/home/viam/lorawan.tar.gz"
+	tarGzPath               = "/home/rak/lorawan.tar.gz"
 )
 
 // Model represents a lorawan gateway model.
@@ -173,7 +173,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 }
 
 // Gateway defines a lorawan gateway.
-type gateway struct {
+type Gateway struct {
 	resource.Named
 	logger logging.Logger
 	mu     sync.Mutex
@@ -210,7 +210,7 @@ func NewGateway(
 	conf resource.Config,
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
-	g := &gateway{
+	g := &Gateway{
 		Named:   conf.ResourceName().AsNamed(),
 		logger:  logger,
 		started: false,
@@ -251,7 +251,7 @@ func getNativeConfig(conf resource.Config) (*Config, error) {
 }
 
 // Reconfigure reconfigures the gateway.
-func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -329,18 +329,35 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	extractDir := "./tmp_run_dir"
+	var extractedDir = "/tmp/shared_binary"
+	var extractedBinaryName = "cgo"
+	var extractedBinaryPath = filepath.Join(extractedDir, extractedBinaryName)
 
-	if err := os.MkdirAll(extractDir, 0755); err != nil {
-		panic(err)
+	// only extract module.tar.gz once
+	if _, err := os.Stat(extractedBinaryPath); err == nil {
+	} else {
+		if err := extractTarGz(tarGzPath, extractedDir); err != nil {
+			return fmt.Errorf("failed to extract archive: %v", err)
+		}
 	}
 
-	if err := extractTarGz(tarGzPath, extractDir); err != nil {
-		panic(fmt.Sprintf("failed to extract archive: %v", err))
+	// Create isolated temp dir for this run
+	fmt.Println("NAME USING")
+	fmt.Println(g.Name().ShortName())
+	extractDir, err := os.MkdirTemp("", fmt.Sprintf("lorawan_server_%s", g.Name().ShortName()))
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
-	// run concentrator executable
-	execPath := filepath.Join(extractDir, defaultExecutableName)
+	// Copy binary into temp dir
+	dstPath := filepath.Join(extractDir, extractedBinaryName)
+	input, err := os.ReadFile(extractedBinaryPath)
+	if err != nil {
+		return fmt.Errorf("read shared binary failed: %w", err)
+	}
+	if err := os.WriteFile(dstPath, input, 0755); err != nil {
+		return fmt.Errorf("write temp binary failed: %w", err)
+	}
 
 	var path string
 	var comType comType
@@ -366,7 +383,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, execPath, args...)
+	cmd := exec.CommandContext(ctx, dstPath, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -414,7 +431,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 // startCLogging starts the goroutine to capture C logs into the logger.
 // If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging() {
+func (g *Gateway) startCLogging() {
 	loggingState, ok := loggingRoutineStarted[g.Name().Name]
 	if !ok || !loggingState {
 		g.logger.Debug("Starting c logger background routine")
@@ -437,7 +454,7 @@ func (g *gateway) startCLogging() {
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
+func (g *Gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	lorahw.DisableBuffering()
 
@@ -467,7 +484,7 @@ func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scann
 	}
 }
 
-func (g *gateway) receivePackets(ctx context.Context) {
+func (g *Gateway) receivePackets(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -550,7 +567,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
+func (g *Gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
 	// first byte is MHDR - specifies message type
 	switch payload[0] {
 	case joinRequestMHdr:
@@ -590,7 +607,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 	}
 }
 
-func (g *gateway) updateReadings(name string, newReadings map[string]interface{}) {
+func (g *Gateway) updateReadings(name string, newReadings map[string]interface{}) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 	readings, ok := g.lastReadings[name].(map[string]interface{})
@@ -611,7 +628,7 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 }
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
-func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (g *Gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// Validate that the dependency is correct, returns the gateway's region.
@@ -728,7 +745,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 }
 
 // updateDeviceInfo adds the device info from the db into the gateway's device map.
-func (g *gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
+func (g *Gateway) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	// Update the fields in the map with the info from the file.
 	appsKey, err := hex.DecodeString(d.AppSKey)
 	if err != nil {
@@ -843,7 +860,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 }
 
 // Close closes the gateway.
-func (g *gateway) Close(ctx context.Context) error {
+func (g *Gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.reset(ctx)
@@ -879,7 +896,7 @@ func (g *gateway) Close(ctx context.Context) error {
 	return nil
 }
 
-func (g *gateway) reset(ctx context.Context) {
+func (g *Gateway) reset(ctx context.Context) {
 	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if g.receivingWorker != nil {
 		g.receivingWorker.Stop()
@@ -897,7 +914,7 @@ func (g *gateway) reset(ctx context.Context) {
 }
 
 // Readings returns all the node's readings.
-func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (g *Gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 
@@ -914,14 +931,18 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 }
 
 func extractTarGz(gzipPath string, dest string) error {
+	fmt.Println("IN EXTRACT TAR GZ")
 	f, err := os.Open(gzipPath)
 	if err != nil {
+		fmt.Println("eror here opening")
+		fmt.Println(gzipPath)
 		return err
 	}
 	defer f.Close()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
+		fmt.Println("eror here 0")
 		return err
 	}
 	defer gz.Close()
@@ -934,6 +955,7 @@ func extractTarGz(gzipPath string, dest string) error {
 			break
 		}
 		if err != nil {
+			fmt.Println("eror here 1")
 			return err
 		}
 
@@ -941,11 +963,18 @@ func extractTarGz(gzipPath string, dest string) error {
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(targetPath, 0755); err != nil {
+				fmt.Println("eror here 2")
 				return err
 			}
 		case tar.TypeReg:
+			// Ensure parent directory exists
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				fmt.Println("eror here 2.5 (making file's parent dirs)")
+				return err
+			}
 			outFile, err := os.Create(targetPath)
 			if err != nil {
+				fmt.Println("eror here 3")
 				return err
 			}
 			if _, err := io.Copy(outFile, tarReader); err != nil {
