@@ -38,7 +38,19 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 
 ## Configure the `viam:sensor:sx1302-gateway`
 
-Example gateway configuration:
+Example gateway configuration for SPI gateway:
+```json
+{
+    "board": "rpi",
+    "spi_bus": 0,
+    "reset_pin": int,
+    "power_en_pin": int,
+    "region_code": "US915"
+}
+```
+
+
+Example gateway configuration for USB gateway:
 ```json
 {
     "board": "rpi",
