@@ -36,7 +36,7 @@ var (
 	errGatewayStart           = errors.New("error starting the gateway")
 )
 
-// ComType defines connection the concentrator.
+// ComType defines connection type to the concentrator.
 type ComType int
 
 // enum for com types
