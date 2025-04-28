@@ -93,6 +93,7 @@ type Config struct {
 	ResetPin  *int   `json:"reset_pin"`
 	BoardName string `json:"board"`
 	Region    string `json:"region_code,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // deviceInfo is a struct containing OTAA device information.
