@@ -66,7 +66,9 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	fmt.Println("Server successfully started:", port)
 
 	// capture c log output
-	startCLogging(ctx, logger)
+	go func() {
+		startCLogging(ctx, logger)
+	}()
 
 	go func() {
 		// Graceful shutdown
@@ -165,6 +167,7 @@ func (s sensorService) GetReadings(context.Context, *v1.GetReadingsRequest) (*v1
 // startCLogging starts the goroutine to capture C logs into the logger.
 // If loggingRoutineStarted indicates routine has already started, it does nothing.
 func startCLogging(ctx context.Context, logger logging.Logger) {
+	fmt.Println("starting the c logging")
 	logger.Debug("Starting c logger background routine")
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {

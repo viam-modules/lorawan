@@ -342,8 +342,6 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// Create isolated temp dir for this run
-	fmt.Println("NAME USING")
-	fmt.Println(g.Name().ShortName())
 	extractDir, err := os.MkdirTemp("", fmt.Sprintf("lorawan_server_%s", g.Name().ShortName()))
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
