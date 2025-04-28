@@ -38,6 +38,8 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 
 	config := parseAndValidateArguments()
 
+	startCLogging(ctx, logger)
+
 	err := lorahw.SetupGateway2(config.comType, config.path, config.region)
 	if err != nil {
 		return err
@@ -65,10 +67,10 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	port := lis.Addr().(*net.TCPAddr).Port
 	fmt.Println("Server successfully started:", port)
 
-	// capture c log output
-	go func() {
-		startCLogging(ctx, logger)
-	}()
+	// // capture c log output
+	// go func() {
+	// 	startCLogging(ctx, logger)
+	// }()
 
 	go func() {
 		// Graceful shutdown
@@ -169,7 +171,7 @@ func (s sensorService) GetReadings(context.Context, *v1.GetReadingsRequest) (*v1
 func startCLogging(ctx context.Context, logger logging.Logger) {
 	fmt.Println("starting the c logging")
 	logger.Debug("Starting c logger background routine")
-	stdoutR, stdoutW, err := os.Pipe()
+	_, stdoutW, err := os.Pipe()
 	if err != nil {
 		logger.Errorf("unable to create pipe for C logs")
 		return
@@ -179,11 +181,11 @@ func startCLogging(ctx context.Context, logger logging.Logger) {
 
 	// Redirect C's stdout to the write end of the pipe
 	lorahw.RedirectLogsToPipe(stdoutW.Fd())
-	scanner := bufio.NewScanner(stdoutR)
+	//scanner := bufio.NewScanner(stdoutR)
 
 	//g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
 
-	captureCOutputToLogs(ctx, scanner, logger)
+	//captureCOutputToLogs(ctx, scanner, logger)
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.

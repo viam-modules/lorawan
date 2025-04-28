@@ -393,27 +393,38 @@ func (g *Gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("failed to start binary: %w", err)
 	}
 
-	scanner := bufio.NewScanner(stdout)
-	var port string
-	for scanner.Scan() {
-		line := scanner.Text()
-		fmt.Println("Server output:", line)
+	portChan := make(chan string)
 
-		if strings.Contains(line, "Server successfully started:") {
-			parts := strings.Split(line, ":")
-			if len(parts) == 2 {
-				port = strings.TrimSpace(parts[1])
-				fmt.Println("Captured port:", port)
-				break
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		var port string
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Println("Server output:", line)
+
+			if strings.Contains(line, "Server successfully started:") {
+				parts := strings.Split(line, ":")
+				if len(parts) == 2 {
+					port = strings.TrimSpace(parts[1])
+					fmt.Println("Captured port:", port)
+					portChan <- port
+				}
+
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			log.Println("Error reading stdout:", err)
+		}
+	}()
+
+	var port string
+	select {
+	case port = <-portChan:
+		g.logger.Infof("Received port from server: %s", port)
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("timeout waiting for server to start")
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Println("Error reading stdout:", err)
-	}
-
-	time.Sleep(5 * time.Second)
 	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("error connecting to server")

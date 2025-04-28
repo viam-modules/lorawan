@@ -3,7 +3,6 @@ package main
 
 import (
 	"github.com/viam-modules/gateway/draginolht65n"
-	"github.com/viam-modules/gateway/draginowqslb"
 	"github.com/viam-modules/gateway/gateway"
 	"github.com/viam-modules/gateway/milesightct101"
 	"github.com/viam-modules/gateway/milesightem310"
@@ -22,6 +21,6 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: draginolht65n.Model},
 		resource.APIModel{API: sensor.API, Model: milesightem310.Model},
 		resource.APIModel{API: sensor.API, Model: milesightct101.Model},
-		resource.APIModel{API: sensor.API, Model: draginowqslb.Model},
+		resource.APIModel{API: sensor.API, Model: rak.Model},
 	)
 }

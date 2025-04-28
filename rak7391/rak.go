@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/viam-modules/gateway/gateway"
+	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -44,6 +45,9 @@ type RAK7391 struct {
 	gw2    sensor.Sensor
 	logger logging.Logger
 }
+
+// Model represents a lorawan gateway model.
+var Model = node.LorawanFamily.WithModel(string("rak"))
 
 // getGatewayConfigs returns configurations for enabled concentrators
 func (conf *ConfigRak) getGatewayConfigs() []*gateway.Config {
