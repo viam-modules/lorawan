@@ -39,6 +39,7 @@ const (
 var (
 	// Config validation errors.
 	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
+	errSPIAndUSB     = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
 
 	// Gateway operation errors.
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
@@ -88,11 +89,12 @@ var noReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config describes the configuration of the gateway.
 type Config struct {
-	Bus       int    `json:"spi_bus,omitempty"`
+	Bus       *int   `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
 	ResetPin  *int   `json:"reset_pin"`
 	BoardName string `json:"board"`
 	Region    string `json:"region_code,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // deviceInfo is a struct containing OTAA device information.
@@ -134,8 +136,13 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
-	if conf.Bus != 0 && conf.Bus != 1 {
+
+	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
 		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+	}
+
+	if conf.Bus != nil && conf.Path != "" {
+		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
 
 	if len(conf.BoardName) == 0 {
@@ -295,7 +302,38 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
+	var path string
+	var comType lorahw.ComType
+
+	// no bus or path provided, use default spi bus 0
+	if cfg.Bus == nil && cfg.Path == "" {
+		comType = lorahw.SPI
+		path = "/dev/spidev0.0"
+	}
+
+	// user provided a spi bus
+	if cfg.Bus != nil {
+		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
+		comType = lorahw.SPI
+	}
+
+	// user provided a serial device path
+	if cfg.Path != "" {
+		path = cfg.Path
+		comType = lorahw.USB
+
+	}
+	var comTypeString string
+	switch comType {
+	case lorahw.SPI:
+		comTypeString = "SPI"
+	case lorahw.USB:
+		comTypeString = "USB"
+	}
+
+	g.logger.Infof("starting %s gateway connected to path %s", comTypeString, path)
+
+	if err := lorahw.SetupGateway(comType, path, region); err != nil {
 		return fmt.Errorf("failed to set up the gateway: %w", err)
 	}
 

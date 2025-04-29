@@ -36,6 +36,15 @@ var (
 	errGatewayStart           = errors.New("error starting the gateway")
 )
 
+// ComType defines connection type to the concentrator.
+type ComType int
+
+// enum for com types
+const (
+	SPI ComType = iota
+	USB
+)
+
 // SendPacket sends a lora packet using the sx1302 concentrator
 func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	if pkt == nil {
@@ -108,8 +117,8 @@ type RxPacket struct {
 }
 
 // SetupGateway initializes the gateway hardware
-func SetupGateway(spiBus int, region regions.Region) error {
-	errCode := C.set_up_gateway(C.int(spiBus), C.int(region))
+func SetupGateway(comType ComType, path string, region regions.Region) error {
+	errCode := C.set_up_gateway(C.int(comType), C.CString(path), C.int(region))
 	if errCode != 0 {
 		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
 	}

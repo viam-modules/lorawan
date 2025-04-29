@@ -38,7 +38,7 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 
 ## Configure the `viam:sensor:sx1302-gateway`
 
-Example gateway configuration:
+Example gateway configuration for SPI gateway:
 ```json
 {
     "board": "rpi",
@@ -46,6 +46,18 @@ Example gateway configuration:
     "reset_pin": int,
     "power_en_pin": int,
     "region_code": "US915"
+}
+```
+
+
+Example gateway configuration for USB gateway:
+```json
+{
+    "board": "rpi",
+    "path": "/dev/path",
+    "reset_pin": int,
+    "power_en_pin": int,
+    "region_code": "US915",
 }
 ```
 
@@ -61,6 +73,7 @@ The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
 | spi_bus | int | no | 0 | SPI bus number (0 or 1) |
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
 | region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+| path | string | required for USB gateways | - | serial device path the concentrator is connected to |
 
 ## Setup the `viam:sensor:sx1302-hat-generic`
 

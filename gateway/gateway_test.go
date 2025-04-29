@@ -37,25 +37,47 @@ func setupFileAndGateway(t *testing.T) *gateway {
 }
 
 func TestValidate(t *testing.T) {
-	// Test valid config with default bus
+	// Test valid config with USB path
 	resetPin := 25
 	conf := &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
+		Path:      "/dev/ttyUSB0",
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 
-	// Test valid config with bus=1
+	// Test valid config with default bus
 	conf = &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
-		Bus:       1,
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
+
+	// Test valid config with bus=1
+	bus := 1
+	conf = &Config{
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Bus:       &bus,
+	}
+	deps, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(deps), test.ShouldEqual, 1)
+
+	// Test error if bus and path are configured
+	conf = &Config{
+		BoardName: "pi",
+		ResetPin:  &resetPin,
+		Bus:       &bus,
+		Path:      "/dev/ttyUSB0",
+	}
+	deps, err = conf.Validate("")
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errSPIAndUSB))
+	test.That(t, deps, test.ShouldBeNil)
 
 	// Test missing reset pin
 	conf = &Config{
@@ -65,11 +87,12 @@ func TestValidate(t *testing.T) {
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "reset_pin"))
 	test.That(t, deps, test.ShouldBeNil)
 
+	bus = 3
 	// Test invalid bus value
 	conf = &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
-		Bus:       2,
+		Bus:       &bus,
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
@@ -563,12 +586,13 @@ func TestNativeConfig(t *testing.T) {
 	t.Run("Test Default Config", func(t *testing.T) {
 		resetPin := 85
 		powerPin := 74
+		bus := 1
 		validConf := resource.Config{
 			Name: "test-default",
 			ConvertedAttributes: &Config{
 				BoardName: "pi",
 				ResetPin:  &resetPin,
-				Bus:       1,
+				Bus:       &bus,
 				PowerPin:  &powerPin,
 			},
 			Model: ModelGenericHat,

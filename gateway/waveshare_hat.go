@@ -24,7 +24,7 @@ type ConfigSX1302WaveshareHAT struct {
 func (conf *ConfigSX1302WaveshareHAT) getGatewayConfig() *Config {
 	powerPin := waveshareHatPowerPin
 	resetPin := waveshareHatResetPin
-	return &Config{Bus: conf.Bus, BoardName: conf.BoardName, PowerPin: &powerPin, ResetPin: &resetPin, Region: conf.Region}
+	return &Config{Bus: &conf.Bus, BoardName: conf.BoardName, PowerPin: &powerPin, ResetPin: &resetPin, Region: conf.Region}
 }
 
 // Validate ensures all parts of the config are valid.
