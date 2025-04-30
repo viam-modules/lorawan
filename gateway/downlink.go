@@ -29,7 +29,7 @@ const (
 	dutyCycleCID  = 0x04
 )
 
-func (g *Gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
+func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
 	if len(payload) > 256 {
 		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 256 bytes", len(payload))
 	}
@@ -112,7 +112,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
-func (g *Gateway) createDownlink(ctx context.Context,
+func (g *gateway) createDownlink(ctx context.Context,
 	device *node.Node,
 	framePayload, uplinkFopts []byte,
 	sendAck bool,
