@@ -1,21 +1,17 @@
 package rak
 
 import (
-	"archive/tar"
 	"bufio"
-	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -24,7 +20,6 @@ import (
 	v1 "go.viam.com/api/common/v1"
 	pb "go.viam.com/api/component/sensor/v1"
 
-	"github.com/viam-modules/gateway/gateway"
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
@@ -40,8 +35,8 @@ import (
 )
 
 const (
-	rak7391ResetPin1 = 17 // Default reset pin for first concentrator
-	rak7391ResetPin2 = 6  // Default reset pin for second concentrator
+	rak7391ResetPin1 = "17" // Default reset pin for first concentrator
+	rak7391ResetPin2 = "6"  // Default reset pin for second concentrator
 )
 
 // ConnectionType defines the type of connection for the RAK gateway
@@ -141,16 +136,15 @@ type RAK7391 struct {
 	regionInfo regions.RegionInfo
 	region     regions.Region
 
-	conn       *grpc.ClientConn
-	servCancel context.CancelFunc
-
-	concentrators []*concentrator
+	servCancel    context.CancelFunc
+	concentrators []concentrator
 }
 
 type concentrator struct {
 	client  pb.SensorServiceClient
 	rstPin  board.GPIOPin
 	started bool
+	conn    *grpc.ClientConn
 }
 
 // Model represents a lorawan gateway model.
@@ -165,34 +159,34 @@ func init() {
 		})
 }
 
-// getGatewayConfigs returns configurations for enabled concentrators
-func (conf *Config) getGatewayConfigs() []*gateway.Config {
-	var configs []*gateway.Config
+// // getGatewayConfigs returns configurations for enabled concentrators
+// func (conf *Config) getGatewayConfigs() []*gateway.Config {
+// 	var configs []*gateway.Config
 
-	if conf.Concentrator1 != nil {
-		resetPin1 := rak7391ResetPin1
-		configs = append(configs, &gateway.Config{
-			Path:      conf.Concentrator1.Path,
-			BoardName: conf.BoardName,
-			PowerPin:  nil,
-			ResetPin:  &resetPin1,
-			Region:    conf.Region,
-		})
-	}
+// 	if conf.Concentrator1 != nil {
+// 		resetPin1 := rak7391ResetPin1
+// 		configs = append(configs, &gateway.Config{
+// 			Path:      conf.Concentrator1.Path,
+// 			BoardName: conf.BoardName,
+// 			PowerPin:  nil,
+// 			ResetPin:  &resetPin1,
+// 			Region:    conf.Region,
+// 		})
+// 	}
 
-	if conf.Concentrator2 != nil {
-		resetPin2 := rak7391ResetPin2
-		configs = append(configs, &gateway.Config{
-			Path:      conf.Concentrator2.Path,
-			BoardName: conf.BoardName,
-			PowerPin:  nil,
-			ResetPin:  &resetPin2,
-			Region:    conf.Region,
-		})
-	}
+// 	if conf.Concentrator2 != nil {
+// 		resetPin2 := rak7391ResetPin2
+// 		configs = append(configs, &gateway.Config{
+// 			Path:      conf.Concentrator2.Path,
+// 			BoardName: conf.BoardName,
+// 			PowerPin:  nil,
+// 			ResetPin:  &resetPin2,
+// 			Region:    conf.Region,
+// 		})
+// 	}
 
-	return configs
-}
+// 	return configs
+// }
 
 // validateConcentrator validates a single concentrator configuration
 func validateConcentrator(c ConcentratorConfig, path string, num int) error {
@@ -266,27 +260,24 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return err
 	}
 
-	// If the gateway hardware was already started, stop gateway and the background worker.
+	// If the concentrators were already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
 	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
 	// started, so only call stopGateway if this module already started the gateway.
-	if r.started {
-		r.reset(ctx)
+	err = r.resetConcentrators(ctx)
+	if err != nil {
+		return err
 	}
 
-	// disconnect the client and stop server at each reconfigure
-	if r.conn != nil {
-		r.conn.Close()
+	for _, c := range r.concentrators {
+		if c.conn != nil {
+			c.conn.Close()
+		}
 	}
 
 	if r.servCancel != nil {
 		r.servCancel()
-	}
-
-	board, err := board.FromDependencies(deps, cfg.BoardName)
-	if err != nil {
-		return err
 	}
 
 	// // capture C log output
@@ -302,65 +293,37 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if r.concentrators == nil {
-		r.concentrators = make([]*concentrator, 0)
+		r.concentrators = make([]concentrator, 0)
+	}
+
+	region := regions.GetRegion(cfg.Region)
+
+	switch region {
+	case regions.US, regions.Unspecified:
+		r.logger.Infof("configuring gateway for US915 band")
+		r.regionInfo = regions.RegionInfoUS
+		r.region = regions.US
+	case regions.EU:
+		r.logger.Infof("configuring gateway for EU868 band")
+		r.regionInfo = regions.RegionInfoEU
+		r.region = regions.EU
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.servCancel = cancel
+
+	b, err := board.FromDependencies(deps, cfg.BoardName)
+	if err != nil {
+		return err
 	}
 
 	if cfg.Concentrator1 != nil {
-		rstPin, err := board.GPIOPinByName("io17")
+
+		pinName := fmt.Sprintf("io%s", rak7391ResetPin1)
+
+		pin, err := b.GPIOPinByName(pinName)
 		if err != nil {
 			return err
-		}
-
-		fmt.Println("here rst pin")
-		fmt.Println(rstPin)
-
-		c1 := &concentrator{rstPin: rstPin}
-		r.concentrators = append(r.concentrators, c1)
-
-		err = resetGateway(ctx, rstPin, nil)
-		if err != nil {
-			return fmt.Errorf("error initializing the gateway: %w", err)
-		}
-
-		var extractedDir = "/tmp/shared_binary"
-		var extractedBinaryName = "cgo"
-		var extractedBinaryPath = filepath.Join(extractedDir, extractedBinaryName)
-
-		// only extract module.tar.gz once
-		if _, err := os.Stat(extractedBinaryPath); err == nil {
-		} else {
-			if err := extractTarGz(tarGzPath, extractedDir); err != nil {
-				return fmt.Errorf("failed to extract archive: %v", err)
-			}
-		}
-
-		// Create isolated temp dir for this run
-		extractDir, err := os.MkdirTemp("", fmt.Sprintf("lorawan_server_%s", r.Name().ShortName()))
-		if err != nil {
-			return fmt.Errorf("failed to create temp dir: %w", err)
-		}
-
-		// Copy binary into temp dir
-		dstPath := filepath.Join(extractDir, extractedBinaryName)
-		input, err := os.ReadFile(extractedBinaryPath)
-		if err != nil {
-			return fmt.Errorf("read shared binary failed: %w", err)
-		}
-		if err := os.WriteFile(dstPath, input, 0755); err != nil {
-			return fmt.Errorf("write temp binary failed: %w", err)
-		}
-
-		region := regions.GetRegion(cfg.Region)
-
-		switch region {
-		case regions.US, regions.Unspecified:
-			r.logger.Infof("configuring gateway for US915 band")
-			r.regionInfo = regions.RegionInfoUS
-			r.region = regions.US
-		case regions.EU:
-			r.logger.Infof("configuring gateway for EU868 band")
-			r.regionInfo = regions.RegionInfoEU
-			r.region = regions.EU
 		}
 
 		var path string
@@ -376,204 +339,116 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			comType = 1
 		}
 
-		args := []string{
-			fmt.Sprintf("--comType=%d", comType),
-			fmt.Sprintf("--path=%s", path),
-			fmt.Sprintf("--region=%d", region),
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cmd := exec.CommandContext(ctx, dstPath, args...)
-		stdout, err := cmd.StdoutPipe()
+		c, err := r.createConcentrator(ctx, pin, comType, path, region)
 		if err != nil {
-			log.Fatal(err)
-		}
-		cmd.Stderr = os.Stderr
-		r.servCancel = cancel
-
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("failed to start binary: %w", err)
+			return err
 		}
 
-		var port string
-		go func() {
-			scanner := bufio.NewScanner(stdout)
-			var port string
-			for scanner.Scan() {
-				line := scanner.Text()
-				fmt.Println("Server output:", line)
-
-				if strings.Contains(line, "Server successfully started:") {
-					parts := strings.Split(line, ":")
-					if len(parts) == 2 {
-						port = strings.TrimSpace(parts[1])
-						fmt.Println("Captured port:", port)
-						break
-					}
-
-				}
-			}
-			if err := scanner.Err(); err != nil {
-				log.Println("Error reading stdout:", err)
-			}
-		}()
-
-		conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			return fmt.Errorf("error connecting to server")
-		}
-
-		r.conn = conn
-		r.concentrators[0].client = pb.NewSensorServiceClient(conn)
-
-		r.concentrators[0].started = true
-		r.receivingWorker = utils.NewBackgroundStoppableWorkers(r.receivePackets)
+		r.concentrators = append(r.concentrators, c)
 	}
+
+	if cfg.Concentrator2 != nil {
+		pinName := fmt.Sprintf("io%s", rak7391ResetPin2)
+
+		pin, err := b.GPIOPinByName(pinName)
+		if err != nil {
+			return err
+		}
+
+		var path string
+		var comType int
+
+		if cfg.Concentrator2.Bus != nil {
+			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator1.Bus)
+			comType = 0
+		}
+
+		if cfg.Concentrator2.Path != "" {
+			path = cfg.Concentrator1.Path
+			comType = 1
+		}
+
+		c2, err := r.createConcentrator(ctx, pin, comType, path, region)
+		if err != nil {
+			return err
+		}
+
+		r.concentrators = append(r.concentrators, c2)
+	}
+	r.receivingWorker = utils.NewBackgroundStoppableWorkers(r.receivePackets)
 	return nil
 
-	// 	// adding io before the pin allows you to use the GPIO number.
-	// 	rstPin, err := board.GPIOPinByName("io17")
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	r.rstPin = rstPin
+}
 
-	// 	err = resetGateway(ctx, r.rstPin, nil)
-	// 	if err != nil {
-	// 		return fmt.Errorf("error initializing the gateway: %w", err)
-	// 	}
+func (r *RAK7391) createConcentrator(ctx context.Context, rstPin board.GPIOPin, comType int, path string, region regions.Region) (concentrator, error) {
 
-	// 	var extractedDir = "/tmp/shared_binary"
-	// 	var extractedBinaryName = "cgo"
-	// 	var extractedBinaryPath = filepath.Join(extractedDir, extractedBinaryName)
+	//r.concentrators = append(r.concentrators, c1)
 
-	// 	// only extract module.tar.gz once
-	// 	if _, err := os.Stat(extractedBinaryPath); err == nil {
-	// 	} else {
-	// 		if err := extractTarGz(tarGzPath, extractedDir); err != nil {
-	// 			return fmt.Errorf("failed to extract archive: %v", err)
-	// 		}
-	// 	}
+	err := resetGateway(ctx, rstPin, nil)
+	if err != nil {
+		return concentrator{}, fmt.Errorf("error initializing the gateway: %w", err)
+	}
 
-	// 	// Create isolated temp dir for this run
-	// 	extractDir, err := os.MkdirTemp("", fmt.Sprintf("lorawan_server_%s", r.Name().ShortName()))
-	// 	if err != nil {
-	// 		return fmt.Errorf("failed to create temp dir: %w", err)
-	// 	}
+	args := []string{
+		fmt.Sprintf("--comType=%d", comType),
+		fmt.Sprintf("--path=%s", path),
+		fmt.Sprintf("--region=%d", region),
+	}
 
-	// 	// Copy binary into temp dir
-	// 	dstPath := filepath.Join(extractDir, extractedBinaryName)
-	// 	input, err := os.ReadFile(extractedBinaryPath)
-	// 	if err != nil {
-	// 		return fmt.Errorf("read shared binary failed: %w", err)
-	// 	}
-	// 	if err := os.WriteFile(dstPath, input, 0755); err != nil {
-	// 		return fmt.Errorf("write temp binary failed: %w", err)
-	// 	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return concentrator{}, fmt.Errorf("error getting current directory: %w", err)
+	}
 
-	// 	var path string
-	// 	var comType comType
+	cgoexe := fmt.Sprintf("%s/cgo", dir)
+	_, err = os.Stat(cgoexe)
+	if err != nil {
+		return concentrator{}, fmt.Errorf("couldnt find cgo exe")
+	}
 
-	// 	if cfg.Bus != nil {
-	// 		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
-	// 		comType = spi
-	// 	}
+	cmd := exec.CommandContext(ctx, cgoexe, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// 	if cfg.Path != "" {
-	// 		path = cfg.Path
-	// 		if strings.Contains(path, "spi") {
-	// 			comType = spi
-	// 		} else {
-	// 			comType = usb
-	// 		}
-	// 	}
+	if err := cmd.Start(); err != nil {
+		return concentrator{}, fmt.Errorf("failed to start binary: %w", err)
+	}
 
-	// 	args := []string{
-	// 		fmt.Sprintf("--comType=%d", comType),
-	// 		fmt.Sprintf("--path=%s", path),
-	// 		fmt.Sprintf("--region=%d", region),
-	// 	}
+	var port string
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println("Server output:", line)
 
-	// 	ctx, cancel := context.WithCancel(context.Background())
-	// 	cmd := exec.CommandContext(ctx, dstPath, args...)
-	// 	stdout, err := cmd.StdoutPipe()
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	cmd.Stderr = os.Stderr
-	// 	r.servCancel = cancel
+		if strings.Contains(line, "Server successfully started:") {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				port = strings.TrimSpace(parts[1])
+				fmt.Println("Captured port:", port)
+				break
+			}
 
-	// 	if err := cmd.Start(); err != nil {
-	// 		return fmt.Errorf("failed to start binary: %w", err)
-	// 	}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading stdout:", err)
+	}
 
-	// 	portChan := make(chan string)
+	fmt.Printf("connecting to port:\n %s", port)
 
-	// 	go func() {
-	// 		scanner := bufio.NewScanner(stdout)
-	// 		var port string
-	// 		for scanner.Scan() {
-	// 			line := scanner.Text()
-	// 			fmt.Println("Server output:", line)
+	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return concentrator{}, fmt.Errorf("error connecting to server")
+	}
 
-	// 			if strings.Contains(line, "Server successfully started:") {
-	// 				parts := strings.Split(line, ":")
-	// 				if len(parts) == 2 {
-	// 					port = strings.TrimSpace(parts[1])
-	// 					fmt.Println("Captured port:", port)
-	// 					portChan <- port
-	// 				}
+	c := concentrator{rstPin: rstPin}
 
-	// 			}
-	// 		}
-	// 		if err := scanner.Err(); err != nil {
-	// 			log.Println("Error reading stdout:", err)
-	// 		}
-	// 	}()
-
-	// 	var port string
-	// 	select {
-	// 	case port = <-portChan:
-	// 		g.logger.Infof("Received port from server: %s", port)
-	// 	case <-time.After(10 * time.Second):
-	// 		return fmt.Errorf("timeout waiting for server to start")
-	// 	}
-
-	// 	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	// 	if err != nil {
-	// 		return fmt.Errorf("error connecting to server")
-	// 	}
-
-	// 	g.conn = conn
-	// 	g.concentratorClient = pb.NewSensorServiceClient(conn)
-
-	// 	g.started = true
-	// 	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
-	// 	return nil
-	// }
-
-	// func (r *RAK7391) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
-	// 	readings1, err1 := r.gw1.Readings(ctx, extra)
-	// 	readings2, err2 := r.gw2.Readings(ctx, extra)
-
-	// 	// Combine readings from both gateways
-	// 	combined := make(map[string]interface{})
-	// 	if err1 == nil {
-	// 		for k, v := range readings1 {
-	// 			combined["gw1"+k] = v
-	// 		}
-	// 	}
-	// 	if err2 == nil {
-	// 		for k, v := range readings2 {
-	// 			combined["gw2"+k] = v
-	// 		}
-	// 	}
-
-	// 	if err1 != nil && err2 != nil {
-	// 		return combined, fmt.Errorf("both gateways failed: %v, %v", err1, err2)
-	// 	}
-
-	// return combined, nil
+	c.conn = conn
+	c.client = pb.NewSensorServiceClient(conn)
+	c.started = true
+	return c, nil
 }
 
 func (r *RAK7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
@@ -626,6 +501,25 @@ func (r *RAK7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			delete(r.lastReadings, n)
 			r.readingsMu.Unlock()
 		}
+	}
+	// Remove a node from the device map and readings map.
+	if _, ok := cmd["test"]; ok {
+		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+			"get_packets": true,
+		})
+		if err != nil {
+			log.Fatalf("Failed to create command struct: %v", err)
+		}
+
+		req := &v1.DoCommandRequest{
+			Command: cmdStruct,
+		}
+
+		resp, err := r.concentrators[0].client.DoCommand(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println(resp)
 	}
 	return map[string]interface{}{}, nil
 }
@@ -748,7 +642,7 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 func (r *RAK7391) Close(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.reset(ctx)
+	r.resetConcentrators(ctx)
 
 	if r.loggingWorker != nil {
 		if r.logReader != nil {
@@ -771,8 +665,10 @@ func (r *RAK7391) Close(ctx context.Context) error {
 		}
 	}
 
-	if r.conn != nil {
-		r.conn.Close()
+	for _, c := range r.concentrators {
+		if c.conn != nil {
+			c.conn.Close()
+		}
 	}
 	if r.servCancel != nil {
 		r.servCancel()
@@ -781,24 +677,43 @@ func (r *RAK7391) Close(ctx context.Context) error {
 	return nil
 }
 
-func (r *RAK7391) reset(ctx context.Context) {
+func (r *RAK7391) resetConcentrators(ctx context.Context) error {
 	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if r.receivingWorker != nil {
 		r.receivingWorker.Stop()
+		r.receivingWorker = nil
+	}
+
+	// create stop command
+	cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+		"stop": true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create command struct: %w", err)
+	}
+
+	req := &v1.DoCommandRequest{
+		Command: cmdStruct,
 	}
 
 	for _, c := range r.concentrators {
-		if err := lorahw.StopGateway(); err != nil {
-			r.logger.Error("error stopping gateway: %v", err)
-		}
-		if c.rstPin != nil {
-			err := resetGateway(ctx, c.rstPin, nil)
+		if c.started {
+			// stop the concentrator
+			_, err = c.client.DoCommand(ctx, req)
 			if err != nil {
-				r.logger.Error("error resetting the gateway")
+				return fmt.Errorf("failed to stop concentrator: %w", err)
 			}
+			// reset using GPIO pin
+			if c.rstPin != nil {
+				err := resetGateway(ctx, c.rstPin, nil)
+				if err != nil {
+					return fmt.Errorf("failed to reset concentrator: %w", err)
+				}
+			}
+			c.started = false
 		}
-		c.started = false
 	}
+	return nil
 }
 
 func (r *RAK7391) receivePackets(ctx context.Context) {
@@ -820,169 +735,129 @@ func (r *RAK7391) receivePackets(ctx context.Context) {
 			Command: cmdStruct,
 		}
 
-		resp, err := r.concentrators[0].client.DoCommand(ctx, req)
-		if err != nil {
-			log.Fatalf("DoCommand error: %v", err)
-		}
-
-		data := resp.Result.AsMap()
-
-		rawPackets, ok := data["packets"]
-		if !ok {
-			r.logger.Errorf("no packets found in map")
-		}
-
-		//Marshal back to JSON to decode into typed struct
-		rawJSON, err := json.Marshal(rawPackets)
-		if err != nil {
-			r.logger.Errorf("failed to get raw json")
-		}
-
-		var packets []lorahw.RxPacket
-		err = json.Unmarshal(rawJSON, &packets)
-		if err != nil {
-			r.logger.Errorf("failed to unmarshal into packet")
-		}
-
-		if len(packets) == 0 {
-			// no packet received, wait 10 ms to receive again
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(10 * time.Millisecond):
-			}
-			continue
-		}
-
-		t := time.Now()
-		for i, packet := range packets {
-			if packet.Size == 0 {
-				continue
-			}
-
-			// don't process duplicates
-			isDuplicate := false
-			for j := i - 1; j >= 0; j-- {
-				// two packets identical if payload is the same
-				if slices.Equal(packets[j].Payload, packets[i].Payload) {
-					r.logger.Debugf("skipped duplicate packet")
-					isDuplicate = true
-					break
-				}
-			}
-			if isDuplicate {
-				continue
-			}
-			minSNR := sfToSNRMin[packet.DataRate]
-			if float64(packet.SNR) < minSNR {
-				r.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
-				continue
-			}
-
-			r.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate)
-		}
-	}
-}
-
-func (r *RAK7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
-	// //r *first byte is MHDR - specifies message type
-	// switch payload[0] {
-	// case joinRequestMHdr:
-	// 	g.logger.Debugf("received join request")
-	// 	if err := g.handleJoin(ctx, payload, packetTime); err != nil {
-	// 		// don't log as error if it was a request from unknown device.
-	// 		if errors.Is(errNoDevice, err) {
-	// 			return
-	// 		}
-	// 		g.logger.Errorf("couldn't handle join request: %v", err)
-	// 	}
-	// case unconfirmedUplinkMHdr:
-	// 	name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf)
-	// 	if err != nil {
-	// 		// don't log as error if it was a request from unknown device.
-	// 		if errors.Is(errNoDevice, err) {
-	// 			return
-	// 		}
-	// 		g.logger.Errorf("error parsing uplink message: %v", err)
-	// 		return
-	// 	}
-	// 	g.updateReadings(name, readings)
-	// case confirmedUplinkMHdr:
-	// 	name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf)
-	// 	if err != nil {
-	// 		// don't log as error if it was a request from unknown device.
-	// 		if errors.Is(errNoDevice, err) {
-	// 			return
-	// 		}
-	// 		g.logger.Errorf("error parsing uplink message: %v", err)
-	// 		return
-	// 	}
-	// 	g.updateReadings(name, readings)
-
-	// default:
-	// 	g.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
-	// }
-}
-
-func extractTarGz(gzipPath string, dest string) error {
-	fmt.Println("IN EXTRACT TAR GZ")
-	f, err := os.Open(gzipPath)
-	if err != nil {
-		fmt.Println("eror here opening")
-		fmt.Println(gzipPath)
-		return err
-	}
-	defer f.Close()
-
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		fmt.Println("eror here 0")
-		return err
-	}
-	defer gz.Close()
-
-	tarReader := tar.NewReader(gz)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Println("eror here 1")
-			return err
-		}
-
-		targetPath := filepath.Join(dest, header.Name)
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
-				fmt.Println("eror here 2")
-				return err
-			}
-		case tar.TypeReg:
-			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-				fmt.Println("eror here 2.5 (making file's parent dirs)")
-				return err
-			}
-			outFile, err := os.Create(targetPath)
+		for _, c := range r.concentrators {
+			resp, err := c.client.DoCommand(ctx, req)
 			if err != nil {
-				fmt.Println("eror here 3")
-				return err
+				log.Fatalf("DoCommand error: %v", err)
 			}
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
-				return err
+
+			data := resp.Result.AsMap()
+
+			rawPackets, ok := data["packets"]
+			if !ok {
+				r.logger.Errorf("no packets found in map")
 			}
-			outFile.Close()
-			// Make sure it's executable
-			if err := os.Chmod(targetPath, 0755); err != nil {
-				return err
+
+			//Marshal back to JSON to decode into typed struct
+			rawJSON, err := json.Marshal(rawPackets)
+			if err != nil {
+				r.logger.Errorf("failed to get raw json")
+			}
+
+			var packets []lorahw.RxPacket
+			err = json.Unmarshal(rawJSON, &packets)
+			if err != nil {
+				r.logger.Errorf("failed to unmarshal into packet")
+			}
+
+			if len(packets) == 0 {
+				// no packet received, wait 10 ms to receive again
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Millisecond):
+				}
+				continue
+			}
+
+			t := time.Now()
+			for i, packet := range packets {
+				if packet.Size == 0 {
+					continue
+				}
+
+				// don't process duplicates
+				isDuplicate := false
+				for j := i - 1; j >= 0; j-- {
+					// two packets identical if payload is the same
+					if slices.Equal(packets[j].Payload, packets[i].Payload) {
+						r.logger.Debugf("skipped duplicate packet")
+						isDuplicate = true
+						break
+					}
+				}
+				if isDuplicate {
+					continue
+				}
+				minSNR := sfToSNRMin[packet.DataRate]
+				if float64(packet.SNR) < minSNR {
+					r.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
+					continue
+				}
+
+				r.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate, c)
 			}
 		}
 	}
-	return nil
+}
+
+func (r *RAK7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int, c concentrator) {
+	//r *first byte is MHDR - specifies message type
+	switch payload[0] {
+	case joinRequestMHdr:
+		r.logger.Debugf("received join request")
+		if err := r.handleJoin(ctx, payload, packetTime, c); err != nil {
+			// don't log as error if it was a request from unknown device.
+			if errors.Is(errNoDevice, err) {
+				return
+			}
+			r.logger.Errorf("couldn't handle join request: %v", err)
+		}
+	case unconfirmedUplinkMHdr:
+		name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf, c)
+		if err != nil {
+			// don't log as error if it was a request from unknown device.
+			if errors.Is(errNoDevice, err) {
+				return
+			}
+			r.logger.Errorf("error parsing uplink message: %v", err)
+			return
+		}
+		r.updateReadings(name, readings)
+	case confirmedUplinkMHdr:
+		name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf, c)
+		if err != nil {
+			// don't log as error if it was a request from unknown device.
+			if errors.Is(errNoDevice, err) {
+				return
+			}
+			r.logger.Errorf("error parsing uplink message: %v", err)
+			return
+		}
+		r.updateReadings(name, readings)
+	default:
+		r.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
+	}
+}
+
+func (r *RAK7391) updateReadings(name string, newReadings map[string]interface{}) {
+	r.readingsMu.Lock()
+	defer r.readingsMu.Unlock()
+	readings, ok := r.lastReadings[name].(map[string]interface{})
+	if !ok {
+		// readings for this device does not exist yet
+		r.lastReadings[name] = newReadings
+		return
+	}
+
+	if readings == nil {
+		r.lastReadings[name] = make(map[string]interface{})
+	}
+	for key, val := range newReadings {
+		readings[key] = val
+	}
+
+	r.lastReadings[name] = readings
 }
 
 // Readings returns all the node's readings.

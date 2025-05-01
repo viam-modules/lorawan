@@ -35,10 +35,9 @@ func main() {
 }
 
 func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) error {
+	fmt.Println("here main cgo process")
 
 	config := parseAndValidateArguments()
-
-	startCLogging(ctx, logger)
 
 	err := lorahw.SetupGateway2(config.comType, config.path, config.region)
 	if err != nil {
@@ -113,10 +112,6 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 			return nil, err
 		}
 
-		if len(packets) != 0 {
-			fmt.Println("do command got a packet")
-		}
-
 		resp := map[string]interface{}{"packets": packets}
 		pbRes, err := protoutils.StructToStructPb(resp)
 		if err != nil {
@@ -136,6 +131,13 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 			return nil, err
 		}
 	}
+	if _, ok := cmd["stop"]; ok {
+		err := lorahw.StopGateway()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return nil, nil
 }
 
