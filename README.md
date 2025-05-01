@@ -1,5 +1,5 @@
 
-# [`lorawan module`](<https://github.com/oliviamiller/lorawan-gateway>)
+# LoRaWAN module
 
 ## LoRaWAN Background
 LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol in which the **sensors** communicate over radio to **gateways** that receive the messages.
@@ -29,10 +29,10 @@ The Raspberry Pi will be running viam-server, and the **Viam config** for this v
 ## LoRaWAN sensor models provided
 This module provides the following models for **specific** LoRaWAN sensors:
 
-- `dragino-LHT65N`: [Dragino LHT65N](https://www.amazon.com/LHT65N-LoRaWAN-Temperature-Humidity-Sensor/dp/B0BL7X7X6C) temperature and humidity sensor.
-- `dragino-WQSLB`: [Dragino WQS-LB](https://www.dragino.com/products/water-air-quality-sensor/item/345-wqs-lb.html) water quality sensor
-- `milesight-ct101`: [Milesight ct101](https://www.milesight.com/iot/product/lorawan-sensor/ct10x) current transformer
-- `milesight-em310-tilt`: [Milesight em310 tilt sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)
+- `viam:lorawan:dragino-LHT65N`: [Dragino LHT65N](https://www.amazon.com/LHT65N-LoRaWAN-Temperature-Humidity-Sensor/dp/B0BL7X7X6C) temperature and humidity sensor.
+- `viam:lorawan:dragino-WQSLB`: [Dragino WQS-LB](https://www.dragino.com/products/water-air-quality-sensor/item/345-wqs-lb.html) water quality sensor
+- `viam:lorawan:milesight-ct101`: [Milesight ct101](https://www.milesight.com/iot/product/lorawan-sensor/ct10x) current transformer
+- `viam:lorawan:milesight-em310-tilt`: [Milesight em310 tilt sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)
 
 This module also provides a **generic** model that can be used with any LoRaWAN sensor that meets the criteria, but requires inputting slightly more via the config attributes:
 
@@ -43,17 +43,17 @@ See below for the Viam configuration for each of these models.
 ## LoRaWAN gateway models provided
 This module provides the following models for **specific** LoRaWAN gateways:
 
-- `sx1302-waveshare-hat`: [Waveshare LoRaWAN sx1302 gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
+- `viam:lorawan:sx1302-waveshare-hat`: [Waveshare LoRaWAN sx1302 gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
 
 This module also provides a **sx1302 generic** model that can be used with other sx1302 HATs:
 
-- `sx1302-hat-generic`: Other sx1302 LoRaWAN gateway HATs
+- `viam:lorawan:sx1302-hat-generic`: Other sx1302 LoRaWAN gateway HATs
 
 See below for the Viam configuration for each of these models.
 
 ## Configuration for LoRaWAN sensor models
 
-### Configuration for `dragino-LHT65N` and `dragino-WQSLB`
+### Configuration for `viam:lorawan:dragino-LHT65N` and `viam:lorawan:dragino-WQSLB`
 
 If using a WSQ-LB, be sure to calibrate the sensor using the instructions below.
 
@@ -105,7 +105,7 @@ Example ABP node configuration:
 
 #### DoCommand
 
-The dragino model uses DoCommand to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
+The dragino model uses DoCommand to send downlinks to sensors from the gateway. The sensor may indicate when it has received an uplink or downlink, e.g. a blue light when it sends an uplink and purple light when it receives a downlink.
 **The sensor must already be connected to Viam (i.e., "Live" on app.viam.com) for downlink requests to work.**
 
 ##### Update the uplink interval
@@ -215,7 +215,7 @@ The orp probe use 2-point calibration. To calibrate, follow these steps:
 }
 ```
 
-### Configuration for `milesight-ct101` and `milesight-em310-tilt`
+### Configuration for `viam:lorawan:milesight-ct101` and `viam:lorawan:milesight-em310-tilt`
 
 #### Quick examples
 Example OTAA node configuration:
@@ -263,7 +263,7 @@ Example ABP node configuration:
 
 #### DoCommand
 
-The Milesight models use DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
+The Milesight models use DoCommands to send downlinks to sensors from the gateway.
 **The sensor must already be connected to Viam (i.e., "Live" on app.viam.com) for downlink requests to work.**
 
 ##### Update the uplink interval
@@ -296,7 +296,7 @@ This command will send a generic downlink payload to the gateway. The string is 
 }
 ```
 
-### Configuration for `viam:sensor:node`
+### Configuration for `viam:lorawan:node`
 
 #### Quick examples
 
@@ -372,33 +372,7 @@ This command will send a generic downlink payload to the gateway. The string is 
 
 ## Configuration for LoRaWAN gateway models
 
-### Configuration for `viam:sensor:sx1302-gateway`
-
-#### Quick example
-
-```json
-{
-    "board": "rpi",
-    "spi_bus": 0,
-    "reset_pin": int,
-    "power_en_pin": int,
-    "region_code": "US915"
-}
-```
-
-#### Attributes
-
-The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
-| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
-| spi_bus | int | no | 0 | SPI bus number (0 or 1) |
-| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
-| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
-
-### Configuration for `viam:sensor:sx1302-hat-generic`
+### Configuration for `viam:lorawan:sx1302-hat-generic`
 
 Note: The gpio pins MUST be set to the gpio pin numbers on your board connected to the reset and power-enable pins of the sx1302 hat to avoid a 15-minute reset loop.
 
@@ -416,7 +390,7 @@ Note: The gpio pins MUST be set to the gpio pin numbers on your board connected 
 
 #### Attributes
 
-The following attributes are available for `viam:sensor:sx1302-hat-generic` sensors:
+The following attributes are available for `viam:lorawan:sx1302-hat-generic` sensors:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
@@ -426,7 +400,7 @@ The following attributes are available for `viam:sensor:sx1302-hat-generic` sens
 | power_en_pin | int | no | - | GPIO pin number for the power enable pin |
 | region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
 
-### Configuration for `viam:sensor:sx1302-waveshare-hat`
+### Configuration for `viam:lorawan:sx1302-waveshare-hat`
 
 #### Quick example
 
