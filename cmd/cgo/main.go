@@ -18,7 +18,6 @@ import (
 	v1 "go.viam.com/api/common/v1"
 	pb "go.viam.com/api/component/sensor/v1"
 	"go.viam.com/rdk/logging"
-	"go.viam.com/rdk/module"
 	"go.viam.com/utils"
 	"go.viam.com/utils/protoutils"
 	"google.golang.org/grpc"
@@ -31,18 +30,11 @@ type sensorService struct {
 }
 
 func main() {
-	utils.ContextualMain(mainWithArgs, module.NewLoggerFromArgs("cgo"))
+	utils.ContextualMain(mainWithArgs, logging.NewDebugLogger("cgo"))
 }
 
 func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) error {
-	fmt.Println("here main cgo process")
-
 	config := parseAndValidateArguments()
-
-	err := lorahw.SetupGateway2(config.comType, config.path, config.region)
-	if err != nil {
-		return err
-	}
 
 	fmt.Println("Attempting to bind to TCP port")
 
@@ -66,19 +58,29 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	port := lis.Addr().(*net.TCPAddr).Port
 	fmt.Println("Server successfully started:", port)
 
-	// // capture c log output
-	// go func() {
-	// 	startCLogging(ctx, logger)
-	// }()
+	// //capture c log output
+	// if config.path == "/dev/ttyACM0" {
+	// 	go func() {
+	// 		startCLogging(ctx, logger)
+	// 	}()
+	// }
+
+	fmt.Println("here setting up gateway")
+	err = lorahw.SetupGateway2(config.comType, config.path, config.region)
+	if err != nil {
+		return err
+	}
 
 	go func() {
 		// Graceful shutdown
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
 		<-c
-		log.Println("Received shutdown signal")
+		fmt.Println("Received shutdown signal")
 		s.GracefulStop()
 	}()
+
+	fmt.Println("done here setting up gateway")
 
 	<-ctx.Done()
 	return nil
@@ -138,6 +140,18 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 		}
 	}
 
+	packets, err := lorahw.ReceivePackets()
+	if err != nil {
+		return nil, err
+	}
+
+	resp := map[string]interface{}{"packets": packets}
+	pbRes, err := protoutils.StructToStructPb(resp)
+	if err != nil {
+		return nil, err
+	}
+	return &v1.DoCommandResponse{Result: pbRes}, nil
+
 	return nil, nil
 }
 
@@ -173,7 +187,7 @@ func (s sensorService) GetReadings(context.Context, *v1.GetReadingsRequest) (*v1
 func startCLogging(ctx context.Context, logger logging.Logger) {
 	fmt.Println("starting the c logging")
 	logger.Debug("Starting c logger background routine")
-	_, stdoutW, err := os.Pipe()
+	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
 		logger.Errorf("unable to create pipe for C logs")
 		return
@@ -183,11 +197,10 @@ func startCLogging(ctx context.Context, logger logging.Logger) {
 
 	// Redirect C's stdout to the write end of the pipe
 	lorahw.RedirectLogsToPipe(stdoutW.Fd())
-	//scanner := bufio.NewScanner(stdoutR)
+	scanner := bufio.NewScanner(stdoutR)
 
-	//g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
+	captureCOutputToLogs(ctx, scanner, logger)
 
-	//captureCOutputToLogs(ctx, scanner, logger)
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.

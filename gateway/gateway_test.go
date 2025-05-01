@@ -47,11 +47,13 @@ func TestValidate(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 
+	bus := 1
+
 	// Test valid config with bus=1
 	conf = &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
-		Bus:       1,
+		Bus:       &bus,
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -66,10 +68,11 @@ func TestValidate(t *testing.T) {
 	test.That(t, deps, test.ShouldBeNil)
 
 	// Test invalid bus value
+	bus = 2
 	conf = &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
-		Bus:       2,
+		Bus:       &bus,
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
@@ -561,6 +564,7 @@ func TestClose(t *testing.T) {
 
 func TestNativeConfig(t *testing.T) {
 	t.Run("Test Default Config", func(t *testing.T) {
+		bus := 1
 		resetPin := 85
 		powerPin := 74
 		validConf := resource.Config{
@@ -568,7 +572,7 @@ func TestNativeConfig(t *testing.T) {
 			ConvertedAttributes: &Config{
 				BoardName: "pi",
 				ResetPin:  &resetPin,
-				Bus:       1,
+				Bus:       &bus,
 				PowerPin:  &powerPin,
 			},
 			Model: ModelGenericHat,

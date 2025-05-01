@@ -427,21 +427,26 @@ func (r *RAK7391) createConcentrator(ctx context.Context, rstPin board.GPIOPin, 
 			if len(parts) == 2 {
 				port = strings.TrimSpace(parts[1])
 				fmt.Println("Captured port:", port)
-				break
+				// break
 			}
 
+		}
+		if strings.Contains(line, "done here setting up gateway") {
+			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		log.Println("Error reading stdout:", err)
 	}
 
-	fmt.Printf("connecting to port:\n %s", port)
+	fmt.Printf("connecting to port: %s\n", port)
 
 	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return concentrator{}, fmt.Errorf("error connecting to server")
 	}
+
+	fmt.Println("connected to client")
 
 	c := concentrator{rstPin: rstPin}
 
