@@ -298,7 +298,9 @@ struct lgw_pkt_rx_s* create_rx_packet_array() {
 
 void disable_buffering() {
     setbuf(stdout, NULL);
+    fflush(stdout);
 }
+
 
 #ifdef TESTING
 void redirect_to_pipe(int fd) {

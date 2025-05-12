@@ -8,10 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"os"
-	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +19,7 @@ import (
 
 	v1 "go.viam.com/api/common/v1"
 	pb "go.viam.com/api/component/sensor/v1"
+	"go.viam.com/utils/pexec"
 
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
@@ -50,7 +51,7 @@ const (
 // ConcentratorConfig describes the configuration for a single concentrator
 type ConcentratorConfig struct {
 	Bus  *int   `json:"spi_bus,omitempty"`
-	Path string `json:"path,omitempty"`
+	Path string `json:"serial_path,omitempty"`
 }
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
@@ -145,6 +146,7 @@ type concentrator struct {
 	rstPin  board.GPIOPin
 	started bool
 	conn    *grpc.ClientConn
+	process pexec.ManagedProcess
 }
 
 // Model represents a lorawan gateway model.
@@ -159,46 +161,6 @@ func init() {
 		})
 }
 
-// // getGatewayConfigs returns configurations for enabled concentrators
-// func (conf *Config) getGatewayConfigs() []*gateway.Config {
-// 	var configs []*gateway.Config
-
-// 	if conf.Concentrator1 != nil {
-// 		resetPin1 := rak7391ResetPin1
-// 		configs = append(configs, &gateway.Config{
-// 			Path:      conf.Concentrator1.Path,
-// 			BoardName: conf.BoardName,
-// 			PowerPin:  nil,
-// 			ResetPin:  &resetPin1,
-// 			Region:    conf.Region,
-// 		})
-// 	}
-
-// 	if conf.Concentrator2 != nil {
-// 		resetPin2 := rak7391ResetPin2
-// 		configs = append(configs, &gateway.Config{
-// 			Path:      conf.Concentrator2.Path,
-// 			BoardName: conf.BoardName,
-// 			PowerPin:  nil,
-// 			ResetPin:  &resetPin2,
-// 			Region:    conf.Region,
-// 		})
-// 	}
-
-// 	return configs
-// }
-
-// validateConcentrator validates a single concentrator configuration
-func validateConcentrator(c ConcentratorConfig, path string, num int) error {
-	// if c.ConnectionType != "usb" && c.ConnectionType != "spi" {
-	// 	return resource.NewConfigValidationError(path, fmt.Errorf("pcie%d connection type must be usb or spi", num))
-	// }
-	// if c.Path == "" {
-	// 	return resource.NewConfigValidationFieldRequiredError(path, fmt.Sprintf("pcie%d.path", num))
-	// }
-	return nil
-}
-
 // Validate ensures all parts of the config are valid
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.Concentrator1 == nil && conf.Concentrator2 == nil {
@@ -208,21 +170,6 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.BoardName == "" {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
-
-	// Validate Concentrator1 if configured
-	if conf.Concentrator1 != nil {
-		if err := validateConcentrator(*conf.Concentrator1, path, 1); err != nil {
-			return nil, err
-		}
-	}
-
-	// Validate Concentrator2 if configured
-	if conf.Concentrator2 != nil {
-		if err := validateConcentrator(*conf.Concentrator2, path, 2); err != nil {
-			return nil, err
-		}
-	}
-
 	return []string{conf.BoardName}, nil
 }
 
@@ -274,6 +221,9 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		if c.conn != nil {
 			c.conn.Close()
 		}
+		if c.process != nil {
+			c.process.Stop()
+		}
 	}
 
 	if r.servCancel != nil {
@@ -281,7 +231,7 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	// // capture C log output
-	// r.startCLogging()
+	// r.loggingWorker = utils.NewBackgroundStoppableWorkers(r.startCLogging)
 
 	// maintain devices and lastReadings through reconfigure.
 	if r.devices == nil {
@@ -318,9 +268,7 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if cfg.Concentrator1 != nil {
-
 		pinName := fmt.Sprintf("io%s", rak7391ResetPin1)
-
 		pin, err := b.GPIOPinByName(pinName)
 		if err != nil {
 			return err
@@ -328,6 +276,10 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 		var path string
 		var comType int
+
+		// defaults if nothing configured
+		path = "/dev/spidev0.0"
+		comType = 0
 
 		if cfg.Concentrator1.Bus != nil {
 			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator1.Bus)
@@ -339,7 +291,7 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			comType = 1
 		}
 
-		c, err := r.createConcentrator(ctx, pin, comType, path, region)
+		c, err := r.createConcentrator(ctx, "rak1", pin, comType, path, region)
 		if err != nil {
 			return err
 		}
@@ -358,6 +310,10 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		var path string
 		var comType int
 
+		// defaults if nothing configured
+		path = "/dev/spidev0.0"
+		comType = 0
+
 		if cfg.Concentrator2.Bus != nil {
 			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator1.Bus)
 			comType = 0
@@ -368,7 +324,7 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			comType = 1
 		}
 
-		c2, err := r.createConcentrator(ctx, pin, comType, path, region)
+		c2, err := r.createConcentrator(ctx, "rak2", pin, comType, path, region)
 		if err != nil {
 			return err
 		}
@@ -380,10 +336,7 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 }
 
-func (r *RAK7391) createConcentrator(ctx context.Context, rstPin board.GPIOPin, comType int, path string, region regions.Region) (concentrator, error) {
-
-	//r.concentrators = append(r.concentrators, c1)
-
+func (r *RAK7391) createConcentrator(ctx context.Context, id string, rstPin board.GPIOPin, comType int, path string, region regions.Region) (concentrator, error) {
 	err := resetGateway(ctx, rstPin, nil)
 	if err != nil {
 		return concentrator{}, fmt.Errorf("error initializing the gateway: %w", err)
@@ -406,37 +359,42 @@ func (r *RAK7391) createConcentrator(ctx context.Context, rstPin board.GPIOPin, 
 		return concentrator{}, fmt.Errorf("couldnt find cgo exe")
 	}
 
-	cmd := exec.CommandContext(ctx, cgoexe, args...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Fatal(err)
+	config := pexec.ProcessConfig{
+		ID:   id,
+		Name: cgoexe,
+		Args: args,
+		Log:  true,
 	}
 
-	if err := cmd.Start(); err != nil {
+	logReader, logWriter := io.Pipe()
+	bufferedLogReader := *bufio.NewReader(logReader)
+	config.LogWriter = logWriter
+
+	process := pexec.NewManagedProcess(config, r.logger)
+
+	if err := process.Start(ctx); err != nil {
 		return concentrator{}, fmt.Errorf("failed to start binary: %w", err)
 	}
 
 	var port string
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fmt.Println("Server output:", line)
+	for {
+		line, err := bufferedLogReader.ReadString('\n')
+		if err != nil {
+			return concentrator{}, fmt.Errorf("error reading line: %w", err)
+		}
 
 		if strings.Contains(line, "Server successfully started:") {
 			parts := strings.Split(line, ":")
 			if len(parts) == 2 {
 				port = strings.TrimSpace(parts[1])
 				fmt.Println("Captured port:", port)
-				// break
+				break
 			}
 
 		}
 		if strings.Contains(line, "done here setting up gateway") {
 			break
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Println("Error reading stdout:", err)
 	}
 
 	fmt.Printf("connecting to port: %s\n", port)
@@ -453,6 +411,7 @@ func (r *RAK7391) createConcentrator(ctx context.Context, rstPin board.GPIOPin, 
 	c.conn = conn
 	c.client = pb.NewSensorServiceClient(conn)
 	c.started = true
+	c.process = process
 	return c, nil
 }
 
@@ -674,6 +633,7 @@ func (r *RAK7391) Close(ctx context.Context) error {
 		if c.conn != nil {
 			c.conn.Close()
 		}
+		c.process.Stop()
 	}
 	if r.servCancel != nil {
 		r.servCancel()
@@ -881,3 +841,57 @@ func (r *RAK7391) Readings(ctx context.Context, extra map[string]interface{}) (m
 
 	return r.lastReadings, nil
 }
+
+// // startCLogging starts the goroutine to capture C logs into the logger.
+// // If loggingRoutineStarted indicates routine has already started, it does nothing.
+// func (r *RAK7391) startCLogging(ctx context.Context) {
+// 	fmt.Println("starting the c logging")
+// 	r.logger.Debug("Starting c logger background routine")
+// 	stdoutR, stdoutW, err := os.Pipe()
+// 	if err != nil {
+// 		r.logger.Errorf("%w", err)
+// 		return
+// 	}
+
+// 	defer stdoutR.Close()
+// 	defer stdoutW.Close()
+
+// 	// Redirect C's stdout to the write end of the pipe
+// 	lorahw.RedirectLogsToPipe(stdoutW.Fd())
+// 	scanner := bufio.NewScanner(stdoutR)
+
+// 	captureCOutputToLogs(ctx, scanner, r.logger)
+// }
+
+// // captureOutput is qa background routine to capture C's stdout and log to the module's logger.
+// // This is necessary because the sx1302 library only uses printf to report errors.
+// func captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner, logger logging.Logger) {
+// 	// Need to disable buffering on stdout so C logs can be displayed in real time.
+// 	lorahw.DisableBuffering()
+
+// 	// loop to read lines from the scanner and log them
+// 	for {
+// 		select {
+// 		case <-ctx.Done():
+// 			return
+// 		default:
+// 			if scanner.Scan() {
+// 				line := scanner.Text()
+// 				switch {
+// 				case strings.Contains(line, "STANDBY_RC mode"):
+// 					// The error setting standby_rc mode indicates a hardware initiaization failure
+// 					// add extra log to instruct user what to do.
+// 					logger.Error(line)
+// 					logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+// 				case strings.Contains(line, "ERROR"):
+// 					logger.Error(line)
+// 				case strings.Contains(line, "WARNING"):
+// 					logger.Warn(line)
+// 				default:
+// 					fmt.Println(line)
+// 					// logger.Debug(line)
+// 				}
+// 			}
+// 		}
+// 	}
+// }
