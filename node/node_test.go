@@ -271,8 +271,6 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
-	testNode.reconfigureMu.Lock()
-	defer testNode.reconfigureMu.Unlock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, "test-node-abp")
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeABP)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
