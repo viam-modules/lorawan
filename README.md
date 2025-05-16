@@ -41,7 +41,7 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 Example gateway configuration for SPI gateway:
 ```json
 {
-    "board": "rpi",
+    "board": <string-boardname>,
     "spi_bus": 0,
     "reset_pin": int,
     "power_en_pin": int,
@@ -53,8 +53,8 @@ Example gateway configuration for SPI gateway:
 Example gateway configuration for USB gateway:
 ```json
 {
-    "board": "rpi",
-    "path": "/dev/path",
+    "board": <string-boardname>,
+    "path": <string /dev/path>,
     "reset_pin": int,
     "power_en_pin": int,
     "region_code": "US915",
@@ -85,7 +85,7 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 Example gateway configuration - note - the gpio pins MUST be set to the gpio pin numbers on your board connected to the reset and power-enable pins of the sx1302 hat to avoid a 15-minute reset loop.
 ```json
 {
-    "board": "rpi",
+    "board": <string-boardname>,
     "spi_bus": 0,
     "reset_pin": int,
     "power_en_pin": int,
@@ -115,7 +115,7 @@ Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.
 Example gateway configuration:
 ```json
 {
-    "board": "rpi",
+    "board": <string-boardname>,
     "spi_bus": 0,
     "region_code": "US915"
 }
@@ -145,11 +145,11 @@ Example OTAA node configuration:
 ```json
 {
   "join_type": "OTAA",
-  "decoder_path": "/path/to/decoder.js",
-  "dev_eui": "0123456789ABCDEF",
-  "app_key": "0123456789ABCDEF0123456789ABCDEF",
+  "decoder_path": <string /path/to/decoder.js>,
+  "dev_eui": <string>,
+  "app_key": <string>,
   "uplink_interval_mins": 10,
-  "gateways": ["gateway-1"]
+  "gateways": [<string gatewayname>]
 }
 ```
 
@@ -158,12 +158,12 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "decoder_path": "/path/to/decoder.js",
-  "dev_addr": "01234567",
-  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
-  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "decoder_path": <string /path/to/decoder.js>,
+  "dev_addr": <string>,
+  "app_s_key": <string>,
+  "network_s_key": <string>,
   "uplink_interval_mins": 10,
-  "gateways": ["gateway-1"],
+  "gateways": [<string gatewayname>],
   "fport": "55"
 }
 ```
@@ -216,8 +216,8 @@ Example OTAA node configuration:
 ```json
 {
   "join_type": "OTAA",
-  "dev_eui": "0123456789ABCDEF",
-  "gateways": ["gateway-1"]
+  "dev_eui": <string>,
+  "gateways": [<string gatewayname>]
 }
 ```
 
@@ -226,8 +226,8 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "dev_addr": "01234567",
-  "gateways": ["gateway-1"]
+  "dev_addr": <string>,
+  "gateways": [<string gatewayname>]
 }
 ```
 
@@ -300,9 +300,9 @@ Example OTAA node configuration:
 ```json
 {
   "join_type": "OTAA",
-  "dev_eui": "0123456789ABCDEF",
-  "app_key": "0123456789ABCDEF0123456789ABCDEF",
-  "gateways": ["gateway-1"]
+  "dev_eui": <string>,
+  "app_key": <string>,
+  "gateways": [<string gatewayname>]
 }
 ```
 
@@ -310,10 +310,10 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "dev_addr": "01234567",
-  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
-  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
-  "gateways": ["gateway-1"]
+  "dev_addr": <string>,
+  "app_s_key": <string>,
+  "network_s_key": <string>,
+  "gateways": [<string gatewayname>]
 }
 ```
 ### Common Attributes
@@ -419,7 +419,7 @@ If K=10 (10-20000 mS/cm), use the following steps to calibrate:
 2. When data is stable, send the following downlink:
 ```json
 {
-  "calibrate_ec_10": 10
+  "calibrate_ec": 10
 }
 ```
 
