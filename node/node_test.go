@@ -250,7 +250,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
-	n.Close(ctx)
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Test with valid ABP config
 	validABPConf := resource.Config{
@@ -284,7 +285,8 @@ func TestNewNode(t *testing.T) {
 	expectedAppSKey, err := hex.DecodeString(testutils.TestAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, testNode.AppSKey, test.ShouldResemble, expectedAppSKey)
-	n.Close(ctx)
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Decoder can be URL
 	validConf = resource.Config{
@@ -307,7 +309,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, expectedPath)
-	n.Close(ctx)
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Invalid decoder file should error
 	invalidDecoderConf := resource.Config{
