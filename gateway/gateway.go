@@ -346,13 +346,10 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			if err != nil {
 				return fmt.Errorf("failed to resolve symlink of path %s: %v", cfg.Path, err)
 			}
-
-			g.logger.Infof("Resolved path: %s\n", resolvedPath)
 			cfg.Path = resolvedPath
 		}
 		path = cfg.Path
 		comType = lorahw.USB
-
 	}
 	var comTypeString string
 	switch comType {

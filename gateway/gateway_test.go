@@ -18,6 +18,11 @@ import (
 	"go.viam.com/utils/protoutils"
 )
 
+// intPtr returns a pointer to the given integer value
+func intPtr(i int) *int {
+	return &i
+}
+
 // creates a test gateway with device info populated in the file.
 func setupFileAndGateway(t *testing.T) *gateway {
 	g := createTestGateway(t)
@@ -584,10 +589,98 @@ func TestClose(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 }
 
+func TestSymlinkResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create mock board
+	b := board.NewBoard(board.Config{Name: "mock-board"})
+	deps := resource.Dependencies{
+		Named: []resource.Named{b},
+	}
+
+	// Create a real device file that our symlinks will point to
+	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(deviceFile.Name())
+
+	// Create test directories to mimic Linux's /dev/serial structure
+	byPathDir := filepath.Join(tmpDir, "by-path")
+	byIdDir := filepath.Join(tmpDir, "by-id")
+	err = os.MkdirAll(byPathDir, 0755)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.MkdirAll(byIdDir, 0755)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Create test symlinks
+	byPathLink := filepath.Join(byPathDir, "pci-0000:00:14.0-usb-0:2:1.0")
+	byIdLink := filepath.Join(byIdDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
+
+	err = os.Symlink(deviceFile.Name(), byPathLink)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.Symlink(deviceFile.Name(), byIdLink)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Test cases
+	tests := []struct {
+		name        string
+		config      *Config
+		expectError bool
+	}{
+		{
+			name: "by-path symlink resolves correctly",
+			config: &Config{
+				BoardName: "mock-board",
+				ResetPin:  intPtr(25),
+				Path:      byPathLink,
+			},
+			expectError: false,
+		},
+		{
+			name: "by-id symlink resolves correctly",
+			config: &Config{
+				BoardName: "mock-board",
+				ResetPin:  intPtr(25),
+				Path:      byIdLink,
+			},
+			expectError: false,
+		},
+		{
+			name: "broken symlink fails",
+			config: &Config{
+				BoardName: "mock-board",
+				ResetPin:  intPtr(25),
+				Path:      filepath.Join(byPathDir, "non-existent-link"),
+			},
+			expectError: true,
+		},
+	}
+				Name:                "test-gateway",
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &gateway{
+				logger: logging.NewTestLogger(t),
+			}
+
+			err := g.Reconfigure(context.Background(), nil, resource.Config{
+				ConvertedAttributes: tc.config,
+			})
+
+			if tc.expectError {
+				test.That(t, err, test.ShouldNotBeNil)
+				test.That(t, err.Error(), test.ShouldContainSubstring, "failed to resolve symlink")
+			} else {
+				// We expect error about hardware initialization, but not about symlink resolution
+				test.That(t, err, test.ShouldNotBeNil)
+				test.That(t, err.Error(), test.ShouldContainSubstring, "error initializing the gateway")
+			}
+		})
+	}
+}
+
 func TestValidateSerialPath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	//Path exists
+	// Path exists
 	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
 	test.That(t, err, test.ShouldBeNil)
 	defer os.Remove(tmpFile.Name())
