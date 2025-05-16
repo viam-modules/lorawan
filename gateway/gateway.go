@@ -145,6 +145,12 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
 
+	if conf.Path != "" {
+		err := validateSerialPath(conf.Path)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(conf.BoardName) == 0 {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
@@ -157,6 +163,19 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	}
 
 	return deps, nil
+}
+
+func validateSerialPath(path string) error {
+	_, err := os.Stat(path)
+	// serial path does not exist
+	if errors.Is(err, os.ErrNotExist) {
+		return resource.NewConfigValidationError(path, fmt.Errorf("configured path %s does not exist", path))
+	}
+	// other issue with serial path
+	if err != nil {
+		return resource.NewConfigValidationError(path, fmt.Errorf("error getting serial path %s: %w", path, err))
+	}
+	return nil
 }
 
 // Gateway defines a lorawan gateway.

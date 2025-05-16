@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -37,12 +39,18 @@ func setupFileAndGateway(t *testing.T) *gateway {
 }
 
 func TestValidate(t *testing.T) {
+	// Create temp file for serial path testing
+	tmpDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(tmpFile.Name())
+
 	// Test valid config with USB path
 	resetPin := 25
 	conf := &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
-		Path:      "/dev/ttyUSB0",
+		Path:      tmpFile.Name(),
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
@@ -580,6 +588,30 @@ func TestClose(t *testing.T) {
 	// call close again
 	err = g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestValidateSerialPath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	//Path exists
+	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(tmpFile.Name())
+
+	err = validateSerialPath(tmpFile.Name())
+	test.That(t, err, test.ShouldBeNil)
+
+	// Path does not exist
+	nonExistentPath := filepath.Join(tmpDir, "non-existent-device")
+	err = validateSerialPath(nonExistentPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "does not exist")
+
+	// Invalid path format
+	invalidPath := string([]byte{0x00})
+	err = validateSerialPath(invalidPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error getting serial path")
 }
 
 func TestNativeConfig(t *testing.T) {
