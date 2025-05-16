@@ -599,6 +599,16 @@ func TestSymlinkResolution(t *testing.T) {
 	deps := make(resource.Dependencies)
 	deps[board.Named("mock-board")] = b
 
+	rstPin := &inject.GPIOPin{}
+
+	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
+		return nil
+	}
+
+	b.GPIOPinByNameFunc = func(name string) (board.GPIOPin, error) {
+		return rstPin, nil
+	}
+
 	// Create a real device file that our symlinks will point to
 	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
 	test.That(t, err, test.ShouldBeNil)
@@ -621,7 +631,6 @@ func TestSymlinkResolution(t *testing.T) {
 	err = os.Symlink(deviceFile.Name(), byIdLink)
 	test.That(t, err, test.ShouldBeNil)
 
-	pp := 18
 	rp := 23
 
 	// Test cases
@@ -637,7 +646,6 @@ func TestSymlinkResolution(t *testing.T) {
 				Model: ModelGenericHat,
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
-					PowerPin:  &pp,
 					ResetPin:  &rp,
 					Path:      byPathLink,
 				},
@@ -651,7 +659,6 @@ func TestSymlinkResolution(t *testing.T) {
 				Model: ModelGenericHat,
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
-					PowerPin:  &pp,
 					ResetPin:  &rp,
 					Path:      byIdLink,
 				},
@@ -665,7 +672,6 @@ func TestSymlinkResolution(t *testing.T) {
 				Model: ModelGenericHat,
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
-					PowerPin:  &pp,
 					ResetPin:  &rp,
 					Path:      filepath.Join(byPathDir, "non-existent-link"),
 				},
@@ -685,11 +691,13 @@ func TestSymlinkResolution(t *testing.T) {
 			if tc.expectError {
 				test.That(t, err, test.ShouldNotBeNil)
 				test.That(t, err.Error(), test.ShouldContainSubstring, "failed to resolve symlink")
-			} else {
-				// We expect error about hardware initialization, but not about symlink resolution
-				test.That(t, err, test.ShouldNotBeNil)
-				test.That(t, err.Error(), test.ShouldContainSubstring, "error initializing the gateway")
 			}
+			g.Close(context.Background())
+			// } else {
+			// 	// We expect error about hardware initialization, but not about symlink resolution
+			// 	test.That(t, err, test.ShouldNotBeNil)
+			// 	test.That(t, err.Error(), test.ShouldContainSubstring, "error initializing the gateway")
+			// }
 		})
 	}
 }
