@@ -38,9 +38,8 @@ const (
 // Error variables for validation and operations.
 var (
 	// Config validation errors.
-	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
-	errSPIAndUSB        = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
-	errPathDoesNotExist = errors.New("provided serial path does not exist")
+	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
+	errSPIAndUSB     = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
 
 	// Gateway operation errors.
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
