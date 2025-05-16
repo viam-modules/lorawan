@@ -250,6 +250,7 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
+	n.Close(ctx)
 
 	// Test with valid ABP config
 	validABPConf := resource.Config{
@@ -323,6 +324,7 @@ func TestNewNode(t *testing.T) {
 	_, err = newNode(ctx, deps, invalidDecoderConf, logger)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
+	n.Close(ctx)
 }
 
 func TestReadings(t *testing.T) {
