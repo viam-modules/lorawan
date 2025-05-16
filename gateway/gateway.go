@@ -98,11 +98,6 @@ const (
 	usb
 )
 
-// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
-// started for each gateway. If the gateway build errors and needs to build again, we only want to start
-// the logging routine once.
-var loggingRoutineStarted = make(map[string]bool)
-
 var noReadings = map[string]interface{}{"": "no readings available yet"}
 
 // Config describes the configuration of the gateway.
@@ -178,10 +173,7 @@ type gateway struct {
 	logger logging.Logger
 	mu     sync.Mutex
 
-	// Using two wait groups so we can stop the receivingWorker at reconfigure
-	// but keep the loggingWorker running.
-	loggingWorker   *utils.StoppableWorkers
-	receivingWorker *utils.StoppableWorkers
+	workers *utils.StoppableWorkers
 
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
@@ -192,8 +184,10 @@ type gateway struct {
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
 
-	logReader  *os.File
-	logWriter  *os.File
+	logReader  bufio.Reader
+	pipeReader *io.PipeReader
+	pipeWriter *io.PipeWriter
+
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 	region     regions.Region
@@ -251,6 +245,10 @@ func getNativeConfig(conf resource.Config) (*Config, error) {
 
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	err := g.Close(ctx)
+	if err != nil {
+		g.logger.Warnf("error closing gateway: %w", err)
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -261,11 +259,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
 		g.reset(ctx)
-	}
-
-	// disconnect the client and stop server at each reconfigure
-	if g.conn != nil {
-		g.conn.Close()
 	}
 
 	cfg, err := getNativeConfig(conf)
@@ -339,8 +332,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		"--path=" + path,
 		fmt.Sprintf("--region=%d", region),
 	}
-	g.logger.Infof("path :" + path)
-	g.logger.Infof("PATH ARG: :" + args[1])
 
 	dir, err := os.Getwd()
 	if err != nil {
@@ -355,6 +346,8 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	logReader, logWriter := io.Pipe()
 	bufferedLogReader := *bufio.NewReader(logReader)
+	g.pipeReader = logReader
+	g.pipeWriter = logWriter
 
 	config := pexec.ProcessConfig{
 		ID:        g.Name().Name,
@@ -379,15 +372,16 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 		g.filterLog(line)
 
+		// get the port from the managed process logs
 		if strings.Contains(line, "Server successfully started:") {
 			parts := strings.Split(line, ":")
 			if len(parts) == 2 {
 				port = strings.TrimSpace(parts[1])
 				g.logger.Debugf("Captured port: %s", port)
-				// break
 			}
 		}
 
+		// wait until the gateway is done starting up to finish reconfiguring
 		if strings.Contains(line, "done setting up gateway") {
 			g.logger.Debugf("successfully initialized gateway")
 			break
@@ -402,13 +396,30 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	g.logger.Infof("connected to client")
-
 	g.process = process
 	g.conn = conn
 	g.concentratorClient = pb.NewSensorServiceClient(conn)
+	g.logReader = bufferedLogReader
 	g.started = true
-	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
+	g.workers = utils.NewBackgroundStoppableWorkers(g.receivePackets)
+	g.workers.Add(g.readLogs)
+
 	return nil
+}
+
+func (g *gateway) readLogs(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		line, err := g.logReader.ReadString('\n')
+		if err != nil {
+			g.logger.Warnf("error reading log line: %w", err)
+		}
+		g.filterLog(line)
+	}
 }
 
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
@@ -573,6 +584,7 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	g.logger.Infof("IN DO COMMAND")
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// Validate that the dependency is correct, returns the gateway's region.
@@ -807,12 +819,26 @@ func convertToBytes(key interface{}) ([]byte, error) {
 func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.reset(ctx)
 
-	g.logger.Info("in close function")
+	// stop gateway hardware
+	if err := lorahw.StopGateway(); err != nil {
+		g.logger.Error("error stopping gateway: %v", err)
+	}
 
-	if g.receivingWorker != nil {
-		g.receivingWorker.Stop()
+	// Close pipe files before workers to avoid a hang on shutdown.
+	if g.pipeReader != nil {
+		if err := g.pipeReader.Close(); err != nil {
+			g.logger.Errorf("error closing log reader: %s", err)
+		}
+	}
+	if g.pipeWriter != nil {
+		if err := g.pipeWriter.Close(); err != nil {
+			g.logger.Errorf("error closing log writer: %s", err)
+		}
+	}
+
+	if g.workers != nil {
+		g.workers.Stop()
 	}
 
 	if g.db != nil {
@@ -837,10 +863,6 @@ func (g *gateway) Close(ctx context.Context) error {
 }
 
 func (g *gateway) reset(ctx context.Context) {
-	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
-	if g.receivingWorker != nil {
-		g.receivingWorker.Stop()
-	}
 	if err := lorahw.StopGateway(); err != nil {
 		g.logger.Error("error stopping gateway: %v", err)
 	}

@@ -434,50 +434,6 @@ func TestReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
 }
 
-func TestStartCLogging(t *testing.T) {
-	// Create a gateway instance for testing
-	cfg := resource.Config{
-		Name: "test-gateway",
-	}
-
-	loggingRoutineStarted = make(map[string]bool)
-
-	g := &gateway{
-		Named:  cfg.ResourceName().AsNamed(),
-		logger: logging.NewTestLogger(t),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Ensure logging is started if there is no entry in the loggingRoutineStarted map.
-	g.startCLogging()
-	test.That(t, g.loggingWorker, test.ShouldNotBeNil)
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-
-	// Test that closing the gateway removes the gateway from the loggingRoutineStarted map.
-	err := g.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
-
-	// reader and writer files should error if closed.
-	buf := make([]byte, 1)
-	_, err = g.logWriter.Write(buf)
-	test.That(t, err, test.ShouldNotBeNil)
-	_, err = g.logReader.Read(buf)
-	test.That(t, err, test.ShouldNotBeNil)
-
-	// Ensure no new goroutine is started if the loggingRoutineStarted entry is true.
-	// reset fields for new test case
-	g.loggingWorker = nil
-	loggingRoutineStarted["test-gateway"] = true
-	g.startCLogging()
-	test.That(t, g.loggingWorker, test.ShouldBeNil)
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-}
-
 func TestUpdateDeviceInfo(t *testing.T) {
 	g := createTestGateway(t)
 
@@ -513,8 +469,6 @@ func TestClose(t *testing.T) {
 		Name: "test-gateway",
 	}
 
-	loggingRoutineStarted = make(map[string]bool)
-
 	g := &gateway{
 		Named:   cfg.ResourceName().AsNamed(),
 		logger:  logging.NewTestLogger(t),
@@ -527,11 +481,6 @@ func TestClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start logging to test cleanup
-	g.startCLogging()
-	test.That(t, g.loggingWorker, test.ShouldNotBeNil)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-
 	// Call Close and verify cleanup
 	err = g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
@@ -539,18 +488,15 @@ func TestClose(t *testing.T) {
 	// Verify gateway is reset
 	test.That(t, g.started, test.ShouldBeFalse)
 
-	// Verify logging resources are cleaned up
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
-
 	// Verify file handles are closed
 	{
 		buf := make([]byte, 1)
-		_, err = g.logWriter.Write(buf)
+		_, err = g.pipeWriter.Write(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
 	{
 		buf := make([]byte, 1)
-		_, err = g.logReader.Read(buf)
+		_, err = g.pipeReader.Read(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
 

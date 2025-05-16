@@ -31,7 +31,6 @@ const int32_t ifFrequencies[9] = {
 const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
 int set_up_gateway(int type, char* path, int region) {
-    printf("ERROR: here setting up the gateway c code\n");
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -148,11 +147,8 @@ int set_up_gateway(int type, char* path, int region) {
     // start the gateway.
     int res = start_gateway();
     if (res != LGW_HAL_SUCCESS) {
-        printf("here errored starting\n");
         return 8;
     }
-
-    printf("here no error\n");
     return 0;
 }
 

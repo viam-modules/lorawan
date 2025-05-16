@@ -36,7 +36,7 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	config := parseAndValidateArguments()
 
 	fmt.Println("Attempting to bind to TCP port")
-	logger.Info("here info log")
+	logger.Infof("this here info")
 
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	lorahw.DisableBuffering()
@@ -62,15 +62,9 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	port := lis.Addr().(*net.TCPAddr).Port
 	fmt.Println("Server successfully started:", port)
 
-	// capture c log output
-	// go func() {
-	// 	startCLogging(ctx, logger)
-	// }()
-
 	fmt.Println("here setting up gateway")
 	err = lorahw.SetupGateway(config.comType, config.path, config.region)
 	if err != nil {
-		fmt.Println("here setting up gateway errored")
 		return err
 	}
 
