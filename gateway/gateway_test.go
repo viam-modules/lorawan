@@ -20,11 +20,6 @@ import (
 	"go.viam.com/utils/protoutils"
 )
 
-// intPtr returns a pointer to the given integer value
-func intPtr(i int) *int {
-	return &i
-}
-
 // creates a test gateway with device info populated in the file.
 func setupFileAndGateway(t *testing.T) *gateway {
 	g := createTestGateway(t)
@@ -622,19 +617,19 @@ func TestSymlinkResolution(t *testing.T) {
 
 	// Create test directories to mimic Linux's /dev/serial structure
 	byPathDir := filepath.Join(tmpDir, "by-path")
-	byIdDir := filepath.Join(tmpDir, "by-id")
-	err = os.MkdirAll(byPathDir, 0755)
+	byIDDir := filepath.Join(tmpDir, "by-id")
+	err = os.MkdirAll(byPathDir, 0o755)
 	test.That(t, err, test.ShouldBeNil)
-	err = os.MkdirAll(byIdDir, 0755)
+	err = os.MkdirAll(byIDDir, 0o755)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Create test symlinks
 	byPathLink := filepath.Join(byPathDir, "pci-0000:00:14.0-usb-0:2:1.0")
-	byIdLink := filepath.Join(byIdDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
+	byIDLink := filepath.Join(byIDDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
 
 	err = os.Symlink(deviceFile.Name(), byPathLink)
 	test.That(t, err, test.ShouldBeNil)
-	err = os.Symlink(deviceFile.Name(), byIdLink)
+	err = os.Symlink(deviceFile.Name(), byIDLink)
 	test.That(t, err, test.ShouldBeNil)
 
 	rp := 23
@@ -666,7 +661,7 @@ func TestSymlinkResolution(t *testing.T) {
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
 					ResetPin:  &rp,
-					Path:      byIdLink,
+					Path:      byIDLink,
 				},
 			},
 			expectError: false,
@@ -699,11 +694,6 @@ func TestSymlinkResolution(t *testing.T) {
 				test.That(t, err.Error(), test.ShouldContainSubstring, "failed to resolve symlink")
 			}
 			g.Close(context.Background())
-			// } else {
-			// 	// We expect error about hardware initialization, but not about symlink resolution
-			// 	test.That(t, err, test.ShouldNotBeNil)
-			// 	test.That(t, err.Error(), test.ShouldContainSubstring, "error initializing the gateway")
-			// }
 		})
 	}
 }

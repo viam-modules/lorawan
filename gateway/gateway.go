@@ -238,7 +238,6 @@ func NewGateway(
 
 // look at the resource.Config to determine which model is being used.
 func getNativeConfig(conf resource.Config) (*Config, error) {
-	fmt.Println(conf.Model)
 	switch conf.Model.Name {
 	case genericHat, oldModelName:
 		return resource.NativeConfig[*Config](conf)
@@ -344,7 +343,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		if strings.Contains(cfg.Path, "by-path") || strings.Contains(cfg.Path, "by-id") {
 			resolvedPath, err := filepath.EvalSymlinks(cfg.Path)
 			if err != nil {
-				return fmt.Errorf("failed to resolve symlink of path %s: %v", cfg.Path, err)
+				return fmt.Errorf("failed to resolve symlink of path %s: %w", cfg.Path, err)
 			}
 			cfg.Path = resolvedPath
 		}
