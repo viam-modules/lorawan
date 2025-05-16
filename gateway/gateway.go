@@ -147,7 +147,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	}
 
 	if conf.Path != "" {
-		err := validateSerialPath(path)
+		err := validateSerialPath(conf.Path)
 		if err != nil {
 			return nil, err
 		}
