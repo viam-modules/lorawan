@@ -271,6 +271,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
+	// lock to prevent a data race w the pollGateway routine
+	testNode.reconfigureMu.Lock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, "test-node-abp")
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeABP)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
@@ -283,6 +285,7 @@ func TestNewNode(t *testing.T) {
 	expectedAppSKey, err := hex.DecodeString(testutils.TestAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, testNode.AppSKey, test.ShouldResemble, expectedAppSKey)
+	testNode.reconfigureMu.Unlock()
 	err = n.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
 
@@ -303,10 +306,12 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
+	testNode.reconfigureMu.Lock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, expectedPath)
+	testNode.reconfigureMu.Unlock()
 	err = n.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
 
