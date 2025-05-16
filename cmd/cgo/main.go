@@ -1,7 +1,7 @@
+// package main provides the grpc server for a concentrator
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/viam-modules/gateway/lorahw"
@@ -37,8 +36,13 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	config := parseAndValidateArguments()
 
 	fmt.Println("Attempting to bind to TCP port")
+	logger.Info("here info log")
+
+	// Need to disable buffering on stdout so C logs can be displayed in real time.
+	lorahw.DisableBuffering()
 
 	// OS will assign a free port
+	//nolint:gosec
 	lis, err := net.Listen("tcp", ":0")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
@@ -58,18 +62,19 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	port := lis.Addr().(*net.TCPAddr).Port
 	fmt.Println("Server successfully started:", port)
 
-	// //capture c log output
-	// if config.path == "/dev/ttyACM0" {
-	// 	go func() {
-	// 		startCLogging(ctx, logger)
-	// 	}()
-	// }
+	// capture c log output
+	// go func() {
+	// 	startCLogging(ctx, logger)
+	// }()
 
 	fmt.Println("here setting up gateway")
-	err = lorahw.SetupGateway2(config.comType, config.path, config.region)
+	err = lorahw.SetupGateway(config.comType, config.path, config.region)
 	if err != nil {
+		fmt.Println("here setting up gateway errored")
 		return err
 	}
+
+	fmt.Println("done setting up gateway")
 
 	go func() {
 		// Graceful shutdown
@@ -79,8 +84,6 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 		fmt.Println("Received shutdown signal")
 		s.GracefulStop()
 	}()
-
-	fmt.Println("done here setting up gateway")
 
 	<-ctx.Done()
 	return nil
@@ -107,7 +110,7 @@ func parseAndValidateArguments() concentratorConfig {
 }
 
 func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) (*v1.DoCommandResponse, error) {
-	cmd := req.Command.AsMap()
+	cmd := req.GetCommand().AsMap()
 	if _, ok := cmd["get_packets"]; ok {
 		packets, err := lorahw.ReceivePackets()
 		if err != nil {
@@ -122,8 +125,6 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 		return &v1.DoCommandResponse{Result: pbRes}, nil
 	}
 	if packet, ok := cmd["send_packet"]; ok {
-		fmt.Println("got send packet request")
-		fmt.Println(packet)
 		pkt, err := convertToTxPacket(packet.(map[string]interface{}))
 		if err != nil {
 			return nil, err
@@ -151,8 +152,6 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 		return nil, err
 	}
 	return &v1.DoCommandResponse{Result: pbRes}, nil
-
-	return nil, nil
 }
 
 func convertToTxPacket(pktMap map[string]interface{}) (*lorahw.TxPacket, error) {
@@ -168,7 +167,6 @@ func convertToTxPacket(pktMap map[string]interface{}) (*lorahw.TxPacket, error) 
 		return nil, fmt.Errorf("failed to unmarshal to RxPacket: %w", err)
 	}
 	return &pkt, nil
-
 }
 
 func (s sensorService) Close(ctx context.Context, extra map[string]interface{}) map[string]interface{} {
@@ -176,61 +174,9 @@ func (s sensorService) Close(ctx context.Context, extra map[string]interface{}) 
 }
 
 func (s sensorService) GetGeometries(context.Context, *v1.GetGeometriesRequest) (*v1.GetGeometriesResponse, error) {
-	return nil, nil
+	return &v1.GetGeometriesResponse{}, nil
 }
+
 func (s sensorService) GetReadings(context.Context, *v1.GetReadingsRequest) (*v1.GetReadingsResponse, error) {
 	return &v1.GetReadingsResponse{Readings: map[string]*structpb.Value{"here": structpb.NewStringValue("hi")}}, nil
-}
-
-// startCLogging starts the goroutine to capture C logs into the logger.
-// If loggingRoutineStarted indicates routine has already started, it does nothing.
-func startCLogging(ctx context.Context, logger logging.Logger) {
-	fmt.Println("starting the c logging")
-	logger.Debug("Starting c logger background routine")
-	stdoutR, stdoutW, err := os.Pipe()
-	if err != nil {
-		logger.Errorf("unable to create pipe for C logs")
-		return
-	}
-	// g.logReader = stdoutR
-	// g.logWriter = stdoutW
-
-	// Redirect C's stdout to the write end of the pipe
-	lorahw.RedirectLogsToPipe(stdoutW.Fd())
-	scanner := bufio.NewScanner(stdoutR)
-
-	captureCOutputToLogs(ctx, scanner, logger)
-
-}
-
-// captureOutput is a background routine to capture C's stdout and log to the module's logger.
-// This is necessary because the sx1302 library only uses printf to report errors.
-func captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner, logger logging.Logger) {
-	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	lorahw.DisableBuffering()
-
-	// loop to read lines from the scanner and log them
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if scanner.Scan() {
-				line := scanner.Text()
-				switch {
-				case strings.Contains(line, "STANDBY_RC mode"):
-					// The error setting standby_rc mode indicates a hardware initiaization failure
-					// add extra log to instruct user what to do.
-					logger.Error(line)
-					logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
-				case strings.Contains(line, "ERROR"):
-					logger.Error(line)
-				case strings.Contains(line, "WARNING"):
-					logger.Warn(line)
-				default:
-					logger.Debug(line)
-				}
-			}
-		}
-	}
 }

@@ -56,17 +56,17 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	var txPktMap map[string]interface{}
 	b, err := json.Marshal(txPkt)
 	if err != nil {
-		return fmt.Errorf("failed to marshal txPkt: %v", err)
+		return fmt.Errorf("failed to marshal txPkt: %w", err)
 	}
 	if err := json.Unmarshal(b, &txPktMap); err != nil {
-		return fmt.Errorf("failed to unmarshal txPkt to map: %v", err)
+		return fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
 	}
 
 	cmd := map[string]interface{}{"send_packet": txPktMap}
 
 	cmdStruct, err := structpb.NewStruct(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to create command struct: %v", err)
+		return fmt.Errorf("failed to create command struct: %w", err)
 	}
 
 	req := &v1.DoCommandRequest{

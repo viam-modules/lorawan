@@ -32,7 +32,7 @@ var errInvalidLength = errors.New("unexpected payload length")
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (r *RAK7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c concentrator) (
+func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c concentrator) (
 	string, map[string]interface{}, error,
 ) {
 	// payload should be at least 13 bytes
@@ -71,7 +71,7 @@ func (r *RAK7391) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	fopts := phyPayload[8 : 8+foptsLength]
 
-	//get the supported requests from fopts.
+	// get the supported requests from fopts.
 	requests := r.getFOptsToSend(fopts, device)
 
 	// frame count - should increase by 1 with each packet sent
@@ -289,7 +289,7 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 }
 
 // returns a list of the fopt mac commands the module supports sending a downlink for.
-func (r *RAK7391) getFOptsToSend(fopts []byte, device *node.Node) []byte {
+func (r *rak7391) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 	requests := make([]byte, 0)
 	for _, b := range fopts {
 		switch b {

@@ -97,16 +97,17 @@ func TestReceivePackets(t *testing.T) {
 }
 
 func TestSetupGateway(t *testing.T) {
+	testPath := "/dev/spidev0.0"
 	// Test successful case
-	err := SetupGateway(1, regions.US)
+	err := SetupGateway(1, testPath, regions.US)
 	test.That(t, err, test.ShouldBeNil)
 
 	// unspecifed region will not error
-	err = SetupGateway(1, regions.Unspecified)
+	err = SetupGateway(1, testPath, regions.Unspecified)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test invalid SPI bus
-	err = SetupGateway(999, regions.US)
+	err = SetupGateway(999, testPath, regions.US)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, errors.Is(err, errInvalidSpiBus), test.ShouldBeTrue)
 }

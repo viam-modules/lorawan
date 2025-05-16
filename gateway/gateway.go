@@ -2,9 +2,7 @@
 package gateway
 
 import (
-	"archive/tar"
 	"bufio"
-	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/hex"
@@ -15,8 +13,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -35,6 +31,7 @@ import (
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
+	"go.viam.com/utils/pexec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -95,7 +92,7 @@ var sfToSNRMin = map[int]float64{
 
 type comType int
 
-// enum for com types
+// enum for com types.
 const (
 	spi comType = iota
 	usb
@@ -157,6 +154,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
+	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
+		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+	}
 
 	if len(conf.BoardName) == 0 {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
@@ -200,7 +200,7 @@ type gateway struct {
 
 	concentratorClient pb.SensorServiceClient
 	conn               *grpc.ClientConn
-	servCancel         context.CancelFunc
+	process            pexec.ManagedProcess
 }
 
 // NewGateway creates a new gateway.
@@ -268,10 +268,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.conn.Close()
 	}
 
-	if g.servCancel != nil {
-		g.servCancel()
-	}
-
 	cfg, err := getNativeConfig(conf)
 	if err != nil {
 		return err
@@ -281,9 +277,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if err != nil {
 		return err
 	}
-
-	// capture C log output
-	g.startCLogging()
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -328,34 +321,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	var extractedDir = "/tmp/shared_binary"
-	var extractedBinaryName = "cgo"
-	var extractedBinaryPath = filepath.Join(extractedDir, extractedBinaryName)
-
-	// only extract module.tar.gz once
-	if _, err := os.Stat(extractedBinaryPath); err == nil {
-	} else {
-		if err := extractTarGz(tarGzPath, extractedDir); err != nil {
-			return fmt.Errorf("failed to extract archive: %v", err)
-		}
-	}
-
-	// Create isolated temp dir for this run
-	extractDir, err := os.MkdirTemp("", fmt.Sprintf("lorawan_server_%s", g.Name().ShortName()))
-	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
-	}
-
-	// Copy binary into temp dir
-	dstPath := filepath.Join(extractDir, extractedBinaryName)
-	input, err := os.ReadFile(extractedBinaryPath)
-	if err != nil {
-		return fmt.Errorf("read shared binary failed: %w", err)
-	}
-	if err := os.WriteFile(dstPath, input, 0755); err != nil {
-		return fmt.Errorf("write temp binary failed: %w", err)
-	}
-
 	var path string
 	var comType comType
 
@@ -366,132 +331,103 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	if cfg.Path != "" {
 		path = cfg.Path
-		if strings.Contains(path, "spi") {
-			comType = spi
-		} else {
-			comType = usb
-		}
+		comType = usb
 	}
 
 	args := []string{
 		fmt.Sprintf("--comType=%d", comType),
-		fmt.Sprintf("--path=%s", path),
+		"--path=" + path,
 		fmt.Sprintf("--region=%d", region),
 	}
+	g.logger.Infof("path :" + path)
+	g.logger.Infof("PATH ARG: :" + args[1])
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, dstPath, args...)
-	stdout, err := cmd.StdoutPipe()
+	dir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("error getting current directory: %w", err)
 	}
-	cmd.Stderr = os.Stderr
-	g.servCancel = cancel
 
-	if err := cmd.Start(); err != nil {
+	cgoexe := dir + "/cgo"
+	_, err = os.Stat(cgoexe)
+	if err != nil {
+		return fmt.Errorf("error getting the cgo exe: %w", err)
+	}
+
+	logReader, logWriter := io.Pipe()
+	bufferedLogReader := *bufio.NewReader(logReader)
+
+	config := pexec.ProcessConfig{
+		ID:        g.Name().Name,
+		Name:      cgoexe,
+		Args:      args,
+		Log:       false,
+		LogWriter: logWriter,
+	}
+
+	process := pexec.NewManagedProcess(config, g.logger)
+
+	if err := process.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start binary: %w", err)
 	}
 
-	portChan := make(chan string)
+	var port string
+	for {
+		line, err := bufferedLogReader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("error reading line: %w", err)
+		}
 
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		var port string
-		for scanner.Scan() {
-			line := scanner.Text()
-			fmt.Println("Server output:", line)
+		g.filterLog(line)
 
-			if strings.Contains(line, "Server successfully started:") {
-				parts := strings.Split(line, ":")
-				if len(parts) == 2 {
-					port = strings.TrimSpace(parts[1])
-					fmt.Println("Captured port:", port)
-					portChan <- port
-				}
-
+		if strings.Contains(line, "Server successfully started:") {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				port = strings.TrimSpace(parts[1])
+				g.logger.Debugf("Captured port: %s", port)
+				// break
 			}
 		}
-		if err := scanner.Err(); err != nil {
-			log.Println("Error reading stdout:", err)
+
+		if strings.Contains(line, "done setting up gateway") {
+			g.logger.Debugf("successfully initialized gateway")
+			break
 		}
-	}()
-
-	var port string
-	select {
-	case port = <-portChan:
-		g.logger.Infof("Received port from server: %s", port)
-	case <-time.After(10 * time.Second):
-		return fmt.Errorf("timeout waiting for server to start")
 	}
 
-	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	g.logger.Debugf("connecting to port: %s\n", port)
+	target := "localhost:" + port
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return fmt.Errorf("error connecting to server")
+		return fmt.Errorf("error connecting to server: %w", err)
 	}
 
+	g.logger.Infof("connected to client")
+
+	g.process = process
 	g.conn = conn
 	g.concentratorClient = pb.NewSensorServiceClient(conn)
-
 	g.started = true
 	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
 	return nil
 }
 
-// startCLogging starts the goroutine to capture C logs into the logger.
-// If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging() {
-	loggingState, ok := loggingRoutineStarted[g.Name().Name]
-	if !ok || !loggingState {
-		g.logger.Debug("Starting c logger background routine")
-		stdoutR, stdoutW, err := os.Pipe()
-		if err != nil {
-			g.logger.Errorf("unable to create pipe for C logs")
-			return
-		}
-		g.logReader = stdoutR
-		g.logWriter = stdoutW
-
-		// Redirect C's stdout to the write end of the pipe
-		lorahw.RedirectLogsToPipe(g.logWriter.Fd())
-		scanner := bufio.NewScanner(g.logReader)
-
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
-		loggingRoutineStarted[g.Name().Name] = true
-	}
-}
-
 // captureOutput is a background routine to capture C's stdout and log to the module's logger.
 // This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
-	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	lorahw.DisableBuffering()
-
-	// loop to read lines from the scanner and log them
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if scanner.Scan() {
-				line := scanner.Text()
-				switch {
-				case strings.Contains(line, "STANDBY_RC mode"):
-					// The error setting standby_rc mode indicates a hardware initiaization failure
-					// add extra log to instruct user what to do.
-					g.logger.Error(line)
-					g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
-				case strings.Contains(line, "ERROR"):
-					g.logger.Error(line)
-				case strings.Contains(line, "WARNING"):
-					g.logger.Warn(line)
-				default:
-					g.logger.Debug(line)
-				}
-			}
-		}
+func (g *gateway) filterLog(line string) {
+	switch {
+	case strings.Contains(line, "STANDBY_RC mode"):
+		// The error setting standby_rc mode indicates a hardware initiaization failure
+		// add extra log to instruct user what to do.
+		g.logger.Error(line)
+		g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+	case strings.Contains(line, "ERROR"):
+		g.logger.Error(line)
+	case strings.Contains(line, "WARNING"):
+		g.logger.Warn(line)
+	default:
+		g.logger.Debug(line)
 	}
 }
-
 func (g *gateway) receivePackets(ctx context.Context) {
 	for {
 		select {
@@ -513,17 +449,17 @@ func (g *gateway) receivePackets(ctx context.Context) {
 
 		resp, err := g.concentratorClient.DoCommand(ctx, req)
 		if err != nil {
-			log.Fatalf("DoCommand error: %v", err)
+			g.logger.Errorf("DoCommand error: %v", err)
 		}
 
-		data := resp.Result.AsMap()
+		data := resp.GetResult().AsMap()
 
 		rawPackets, ok := data["packets"]
 		if !ok {
 			g.logger.Errorf("no packets found in map")
 		}
 
-		//Marshal back to JSON to decode into typed struct
+		// Marshal back to JSON to decode into typed struct
 		rawJSON, err := json.Marshal(rawPackets)
 		if err != nil {
 			g.logger.Errorf("failed to get raw json")
@@ -868,37 +804,33 @@ func convertToBytes(key interface{}) ([]byte, error) {
 }
 
 // Close closes the gateway.
-func (g gateway) Close(ctx context.Context) error {
+func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.reset(ctx)
 
-	if g.loggingWorker != nil {
-		if g.logReader != nil {
-			if err := g.logReader.Close(); err != nil {
-				g.logger.Errorf("error closing log reader: %s", err)
-			}
-		}
-		if g.logWriter != nil {
-			if err := g.logWriter.Close(); err != nil {
-				g.logger.Errorf("error closing log writer: %s", err)
-			}
-		}
-		g.loggingWorker.Stop()
-		delete(loggingRoutineStarted, g.Name().Name)
+	g.logger.Info("in close function")
+
+	if g.receivingWorker != nil {
+		g.receivingWorker.Stop()
 	}
 
 	if g.db != nil {
 		if err := g.db.Close(); err != nil {
-			g.logger.Errorf("error closing data db: %s", err)
+			g.logger.Errorf("error closing data db: %w", err)
 		}
 	}
 
 	if g.conn != nil {
-		g.conn.Close()
+		if err := g.conn.Close(); err != nil {
+			g.logger.Errorf("error closing client conn: %w", err)
+		}
 	}
-	if g.servCancel != nil {
-		g.servCancel()
+
+	if g.process != nil {
+		if err := g.process.Stop(); err != nil {
+			g.logger.Errorf("error stopping process: %s", err.Error())
+		}
 	}
 
 	return nil
@@ -936,65 +868,4 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 	}
 
 	return g.lastReadings, nil
-}
-
-func extractTarGz(gzipPath string, dest string) error {
-	fmt.Println("IN EXTRACT TAR GZ")
-	f, err := os.Open(gzipPath)
-	if err != nil {
-		fmt.Println("eror here opening")
-		fmt.Println(gzipPath)
-		return err
-	}
-	defer f.Close()
-
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		fmt.Println("eror here 0")
-		return err
-	}
-	defer gz.Close()
-
-	tarReader := tar.NewReader(gz)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Println("eror here 1")
-			return err
-		}
-
-		targetPath := filepath.Join(dest, header.Name)
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
-				fmt.Println("eror here 2")
-				return err
-			}
-		case tar.TypeReg:
-			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-				fmt.Println("eror here 2.5 (making file's parent dirs)")
-				return err
-			}
-			outFile, err := os.Create(targetPath)
-			if err != nil {
-				fmt.Println("eror here 3")
-				return err
-			}
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
-				return err
-			}
-			outFile.Close()
-			// Make sure it's executable
-			if err := os.Chmod(targetPath, 0755); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

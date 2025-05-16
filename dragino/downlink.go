@@ -15,7 +15,7 @@ const (
 	IntervalBytes  = 3
 )
 
-// DraginoResetRequest defines the reset downlink for draginos
+// DraginoResetRequest defines the reset downlink for draginos.
 var DraginoResetRequest = node.ResetRequest{
 	Header:     ResetHeader,
 	PayloadHex: ResetPayload,

@@ -28,7 +28,7 @@ type joinRequest struct {
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (r *RAK7391) handleJoin(ctx context.Context, payload []byte, packetTime time.Time, c concentrator) error {
+func (r *rak7391) handleJoin(ctx context.Context, payload []byte, packetTime time.Time, c concentrator) error {
 	jr, device, err := r.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -48,7 +48,7 @@ func (r *RAK7391) handleJoin(ctx context.Context, payload []byte, packetTime tim
 // | MHDR | JOIN EUI | DEV EUI  |   DEV NONCE  | MIC   |
 // | 1 B  |   8 B    |    8 B   |     2 B      |  4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 34 for more info on join request.
-func (r *RAK7391) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
+func (r *rak7391) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Node, error) {
 	// join request should always contain 23 bytes, if not something went wrong.
 	if len(payload) != 23 {
 		return joinRequest{}, nil, errInvalidLength
@@ -98,7 +98,7 @@ func (r *RAK7391) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
-func (r *RAK7391) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
+func (r *rak7391) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn, err := generateJoinNonce()
 	if err != nil {

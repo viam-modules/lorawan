@@ -1,3 +1,4 @@
+// Package rak provides a model for the rak7391
 package rak
 
 import (
@@ -9,46 +10,45 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	v1 "go.viam.com/api/common/v1"
-	pb "go.viam.com/api/component/sensor/v1"
-	"go.viam.com/utils/pexec"
-
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	v1 "go.viam.com/api/common/v1"
+	pb "go.viam.com/api/component/sensor/v1"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
+	"go.viam.com/utils/pexec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
-	rak7391ResetPin1 = "17" // Default reset pin for first concentrator
-	rak7391ResetPin2 = "6"  // Default reset pin for second concentrator
+	rak7391ResetPin1 = "io17" // Default reset pin for first concentrator
+	rak7391ResetPin2 = "io6"  // Default reset pin for second concentrator
 )
 
-// ConnectionType defines the type of connection for the RAK gateway
-type ConnectionType string
+type comType int
 
+// enum for com types.
 const (
-	SPIConnection ConnectionType = "spi"
-	USBConnection ConnectionType = "usb"
+	spi comType = iota
+	usb
 )
 
-// ConcentratorConfig describes the configuration for a single concentrator
+// ConcentratorConfig describes the configuration for a single concentrator.
 type ConcentratorConfig struct {
 	Bus  *int   `json:"spi_bus,omitempty"`
 	Path string `json:"serial_path,omitempty"`
@@ -70,7 +70,7 @@ var (
 	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
 )
 
-// ConfigRak describes the configuration of the RAK gateway
+// Config describes the configuration of the rak gateway.
 type Config struct {
 	Concentrator1 *ConcentratorConfig `json:"pcie1,omitempty"`
 	Concentrator2 *ConcentratorConfig `json:"pcie2,omitempty"`
@@ -113,7 +113,7 @@ type deviceInfo struct {
 	MinUplinkInterval float64 `json:"min_uplink_interval"`
 }
 
-type RAK7391 struct {
+type rak7391 struct {
 	resource.Named
 	logger logging.Logger
 	mu     sync.Mutex
@@ -129,7 +129,6 @@ type RAK7391 struct {
 	devices map[string]*node.Node // map of node name to node struct
 
 	started bool
-	rstPin  board.GPIOPin
 
 	logReader  *os.File
 	logWriter  *os.File
@@ -157,26 +156,45 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: newRAK,
+			Constructor: newrak,
 		})
 }
 
-// Validate ensures all parts of the config are valid
+// Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.Concentrator1 == nil && conf.Concentrator2 == nil {
-		return nil, resource.NewConfigValidationError(path, fmt.Errorf("must configure at least one pcie concentrator"))
+		return nil, resource.NewConfigValidationError(path, errors.New("must configure at least one pcie concentrator"))
 	}
 
 	if conf.BoardName == "" {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
+
+	if conf.Concentrator1 != nil {
+		if conf.Concentrator1.Bus != nil && *conf.Concentrator1.Bus != 0 && *conf.Concentrator1.Bus != 1 {
+			return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+		}
+	}
+
+	if conf.Concentrator2 != nil {
+		if conf.Concentrator2.Bus != nil && *conf.Concentrator2.Bus != 0 && *conf.Concentrator2.Bus != 1 {
+			return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+		}
+	}
+
+	if conf.Region != "" {
+		if regions.GetRegion(conf.Region) == regions.Unspecified {
+			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
+		}
+	}
+
 	return []string{conf.BoardName}, nil
 }
 
-func newRAK(ctx context.Context, deps resource.Dependencies,
+func newrak(ctx context.Context, deps resource.Dependencies,
 	conf resource.Config, logger logging.Logger,
 ) (sensor.Sensor, error) {
-	r := &RAK7391{
+	r := &rak7391{
 		Named:  conf.ResourceName().AsNamed(),
 		logger: logger,
 	}
@@ -198,7 +216,8 @@ func newRAK(ctx context.Context, deps resource.Dependencies,
 	return r, nil
 }
 
-func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+// Reconfigure reconfigures the rak.
+func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -268,27 +287,24 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if cfg.Concentrator1 != nil {
-		pinName := fmt.Sprintf("io%s", rak7391ResetPin1)
-		pin, err := b.GPIOPinByName(pinName)
+		pin, err := b.GPIOPinByName(rak7391ResetPin1)
 		if err != nil {
 			return err
 		}
 
 		var path string
-		var comType int
+		var comType comType
 
 		// defaults if nothing configured
 		path = "/dev/spidev0.0"
-		comType = 0
-
 		if cfg.Concentrator1.Bus != nil {
 			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator1.Bus)
-			comType = 0
+			comType = spi
 		}
 
 		if cfg.Concentrator1.Path != "" {
 			path = cfg.Concentrator1.Path
-			comType = 1
+			comType = usb
 		}
 
 		c, err := r.createConcentrator(ctx, "rak1", pin, comType, path, region)
@@ -297,31 +313,32 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		}
 
 		r.concentrators = append(r.concentrators, c)
+
+		r.logger.Debugf("created concentrator 1")
 	}
 
 	if cfg.Concentrator2 != nil {
-		pinName := fmt.Sprintf("io%s", rak7391ResetPin2)
-
-		pin, err := b.GPIOPinByName(pinName)
+		r.logger.Debugf("creating concentrator 2")
+		pin, err := b.GPIOPinByName(rak7391ResetPin2)
 		if err != nil {
 			return err
 		}
 
 		var path string
-		var comType int
+		var comType comType
 
 		// defaults if nothing configured
 		path = "/dev/spidev0.0"
-		comType = 0
+		comType = spi
 
 		if cfg.Concentrator2.Bus != nil {
-			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator1.Bus)
-			comType = 0
+			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator2.Bus)
+			comType = spi
 		}
 
 		if cfg.Concentrator2.Path != "" {
-			path = cfg.Concentrator1.Path
-			comType = 1
+			path = cfg.Concentrator2.Path
+			comType = usb
 		}
 
 		c2, err := r.createConcentrator(ctx, "rak2", pin, comType, path, region)
@@ -330,13 +347,15 @@ func (r *RAK7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		}
 
 		r.concentrators = append(r.concentrators, c2)
+		r.logger.Debugf("created concentrator 2")
 	}
 	r.receivingWorker = utils.NewBackgroundStoppableWorkers(r.receivePackets)
 	return nil
-
 }
 
-func (r *RAK7391) createConcentrator(ctx context.Context, id string, rstPin board.GPIOPin, comType int, path string, region regions.Region) (concentrator, error) {
+func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin board.GPIOPin, comType comType, path string,
+	region regions.Region,
+) (concentrator, error) {
 	err := resetGateway(ctx, rstPin, nil)
 	if err != nil {
 		return concentrator{}, fmt.Errorf("error initializing the gateway: %w", err)
@@ -344,7 +363,7 @@ func (r *RAK7391) createConcentrator(ctx context.Context, id string, rstPin boar
 
 	args := []string{
 		fmt.Sprintf("--comType=%d", comType),
-		fmt.Sprintf("--path=%s", path),
+		"--path=" + path,
 		fmt.Sprintf("--region=%d", region),
 	}
 
@@ -353,22 +372,22 @@ func (r *RAK7391) createConcentrator(ctx context.Context, id string, rstPin boar
 		return concentrator{}, fmt.Errorf("error getting current directory: %w", err)
 	}
 
-	cgoexe := fmt.Sprintf("%s/cgo", dir)
+	cgoexe := dir + "/cgo"
 	_, err = os.Stat(cgoexe)
 	if err != nil {
-		return concentrator{}, fmt.Errorf("couldnt find cgo exe")
-	}
-
-	config := pexec.ProcessConfig{
-		ID:   id,
-		Name: cgoexe,
-		Args: args,
-		Log:  true,
+		return concentrator{}, fmt.Errorf("error getting the cgo exe: %w", err)
 	}
 
 	logReader, logWriter := io.Pipe()
 	bufferedLogReader := *bufio.NewReader(logReader)
-	config.LogWriter = logWriter
+
+	config := pexec.ProcessConfig{
+		ID:        id,
+		Name:      cgoexe,
+		Args:      args,
+		Log:       false,
+		LogWriter: logWriter,
+	}
 
 	process := pexec.NewManagedProcess(config, r.logger)
 
@@ -383,28 +402,31 @@ func (r *RAK7391) createConcentrator(ctx context.Context, id string, rstPin boar
 			return concentrator{}, fmt.Errorf("error reading line: %w", err)
 		}
 
+		r.filterLog(line)
+
 		if strings.Contains(line, "Server successfully started:") {
 			parts := strings.Split(line, ":")
 			if len(parts) == 2 {
 				port = strings.TrimSpace(parts[1])
-				fmt.Println("Captured port:", port)
-				break
+				r.logger.Debugf("Captured port:", port)
+				// break
 			}
-
 		}
-		if strings.Contains(line, "done here setting up gateway") {
+
+		if strings.Contains(line, "done setting up gateway") {
+			r.logger.Debugf("successfully initialized gateway")
 			break
 		}
 	}
 
-	fmt.Printf("connecting to port: %s\n", port)
-
-	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	r.logger.Debugf("connecting to port: %s\n", port)
+	target := "localhost:" + port
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return concentrator{}, fmt.Errorf("error connecting to server")
+		return concentrator{}, fmt.Errorf("error connecting to server: %w", err)
 	}
 
-	fmt.Println("connected to client")
+	r.logger.Info("connected to client")
 
 	c := concentrator{rstPin: rstPin}
 
@@ -415,7 +437,8 @@ func (r *RAK7391) createConcentrator(ctx context.Context, id string, rstPin boar
 	return c, nil
 }
 
-func (r *RAK7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+// Docommand provides extra functionality.
+func (r *rak7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Validate that the dependency is correct, returns the gateway's region.
@@ -466,30 +489,113 @@ func (r *RAK7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			r.readingsMu.Unlock()
 		}
 	}
+
+	// return all devices that have been registered on the gateway
+	if _, ok := cmd["return_devices"]; ok {
+		resp := map[string]interface{}{}
+		// Read the device info from the file
+		devices, err := r.getAllDevicesFromDB(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		for _, device := range devices {
+			resp[device.DevEUI] = device
+		}
+		return resp, nil
+	}
+
+	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
+		resp := map[string]interface{}{}
+		deveui, ok := (devEUI).(string)
+		if !ok {
+			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(devEUI))
+		}
+		// Read the device info from the db
+		device, err := r.findDeviceInDB(ctx, deveui)
+		if err != nil {
+			if errors.Is(err, errNoDeviceInDB) {
+				// the device hasn't joined yet - return nil to device
+				resp[node.GetDeviceKey] = nil
+				return resp, nil
+			}
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		resp[node.GetDeviceKey] = device
+		return resp, nil
+	}
+
+	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
+		resp := map[string]interface{}{}
+		deveui, ok := (devEUI).(string)
+		if !ok {
+			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(devEUI))
+		}
+		// Read the device info from the db
+		device, err := r.findDeviceInDB(ctx, deveui)
+		if err != nil {
+			if errors.Is(err, errNoDeviceInDB) {
+				// the device hasn't joined yet - return nil to device
+				resp[node.GetDeviceKey] = nil
+				return resp, nil
+			}
+			return nil, fmt.Errorf("failed to read device info from db: %w", err)
+		}
+		resp[node.GetDeviceKey] = device
+		return resp, nil
+	}
+
+	if payload, ok := cmd[node.GatewaySendDownlinkKey]; ok {
+		downlinks, ok := payload.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
+		}
+
+		for name, payload := range downlinks {
+			dev, ok := r.devices[name]
+			if !ok {
+				return nil, fmt.Errorf("node with name %s not found", name)
+			}
+
+			strPayload, ok := payload.(string)
+			if !ok {
+				return nil, fmt.Errorf("expected a string value but got %v", reflect.TypeOf(strPayload))
+			}
+
+			payloadBytes, err := hex.DecodeString(strPayload)
+			if err != nil {
+				return nil, errors.New("failed to decode string to bytes")
+			}
+
+			dev.Downlinks = append(dev.Downlinks, payloadBytes)
+		}
+
+		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
+	}
+
 	// Remove a node from the device map and readings map.
 	if _, ok := cmd["test"]; ok {
 		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
 			"get_packets": true,
 		})
 		if err != nil {
-			log.Fatalf("Failed to create command struct: %v", err)
+			return nil, fmt.Errorf("failed to create command struct: %w", err)
 		}
 
 		req := &v1.DoCommandRequest{
 			Command: cmdStruct,
 		}
 
-		resp, err := r.concentrators[0].client.DoCommand(ctx, req)
+		_, err = r.concentrators[0].client.DoCommand(ctx, req)
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println(resp)
+		return map[string]interface{}{}, err
 	}
 	return map[string]interface{}{}, nil
 }
 
 // updateDeviceInfo adds the device info from the db into the gateway's device map.
-func (r *RAK7391) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
+func (r *rak7391) updateDeviceInfo(device *node.Node, d *deviceInfo) error {
 	// Update the fields in the map with the info from the file.
 	appsKey, err := hex.DecodeString(d.AppSKey)
 	if err != nil {
@@ -603,7 +709,8 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 	return node, nil
 }
 
-func (r *RAK7391) Close(ctx context.Context) error {
+// Close closes the rak.
+func (r *rak7391) Close(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.resetConcentrators(ctx)
@@ -620,20 +727,27 @@ func (r *RAK7391) Close(ctx context.Context) error {
 			}
 		}
 		r.loggingWorker.Stop()
-		//delete(loggingRoutineStarted, r.Name().Name)
+		// delete(loggingRoutineStarted, r.Name().Name)
 	}
 
 	if r.db != nil {
 		if err := r.db.Close(); err != nil {
-			r.logger.Errorf("error closing data db: %s", err)
+			r.logger.Errorf("error closing data db: %w", err)
 		}
 	}
 
 	for _, c := range r.concentrators {
 		if c.conn != nil {
-			c.conn.Close()
+			if err := c.conn.Close(); err != nil {
+				r.logger.Errorf("error closing connection: %w", err)
+			}
 		}
-		c.process.Stop()
+		if c.process != nil {
+			if err := r.db.Close(); err != nil {
+				r.logger.Errorf("error stopping process: %w", err)
+			}
+
+		}
 	}
 	if r.servCancel != nil {
 		r.servCancel()
@@ -642,7 +756,23 @@ func (r *RAK7391) Close(ctx context.Context) error {
 	return nil
 }
 
-func (r *RAK7391) resetConcentrators(ctx context.Context) error {
+func (r *rak7391) filterLog(line string) {
+	switch {
+	case strings.Contains(line, "STANDBY_RC mode"):
+		// The error setting standby_rc mode indicates a hardware initiaization failure
+		// add extra log to instruct user what to do.
+		r.logger.Error(line)
+		r.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+	case strings.Contains(line, "ERROR"):
+		r.logger.Error(line)
+	case strings.Contains(line, "WARNING"):
+		r.logger.Warn(line)
+	default:
+		r.logger.Debug(line)
+	}
+}
+
+func (r *rak7391) resetConcentrators(ctx context.Context) error {
 	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if r.receivingWorker != nil {
 		r.receivingWorker.Stop()
@@ -681,7 +811,7 @@ func (r *RAK7391) resetConcentrators(ctx context.Context) error {
 	return nil
 }
 
-func (r *RAK7391) receivePackets(ctx context.Context) {
+func (r *rak7391) receivePackets(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -693,81 +823,82 @@ func (r *RAK7391) receivePackets(ctx context.Context) {
 			"get_packets": true,
 		})
 		if err != nil {
-			log.Fatalf("Failed to create command struct: %v", err)
+			r.logger.Errorf("Failed to create command struct: %v", err)
 		}
 
 		req := &v1.DoCommandRequest{
 			Command: cmdStruct,
 		}
 
-		for _, c := range r.concentrators {
+		for i, c := range r.concentrators {
 			resp, err := c.client.DoCommand(ctx, req)
 			if err != nil {
-				log.Fatalf("DoCommand error: %v", err)
+				r.logger.Errorf("error calling do command on client for concentrator %d: %v", i+1, err)
 			}
+			if resp != nil {
+				data := resp.GetResult().AsMap()
 
-			data := resp.Result.AsMap()
-
-			rawPackets, ok := data["packets"]
-			if !ok {
-				r.logger.Errorf("no packets found in map")
-			}
-
-			//Marshal back to JSON to decode into typed struct
-			rawJSON, err := json.Marshal(rawPackets)
-			if err != nil {
-				r.logger.Errorf("failed to get raw json")
-			}
-
-			var packets []lorahw.RxPacket
-			err = json.Unmarshal(rawJSON, &packets)
-			if err != nil {
-				r.logger.Errorf("failed to unmarshal into packet")
-			}
-
-			if len(packets) == 0 {
-				// no packet received, wait 10 ms to receive again
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(10 * time.Millisecond):
-				}
-				continue
-			}
-
-			t := time.Now()
-			for i, packet := range packets {
-				if packet.Size == 0 {
-					continue
+				rawPackets, ok := data["packets"]
+				if !ok {
+					r.logger.Errorf("no packets found in map")
 				}
 
-				// don't process duplicates
-				isDuplicate := false
-				for j := i - 1; j >= 0; j-- {
-					// two packets identical if payload is the same
-					if slices.Equal(packets[j].Payload, packets[i].Payload) {
-						r.logger.Debugf("skipped duplicate packet")
-						isDuplicate = true
-						break
+				// Marshal back to JSON to decode into typed struct
+				rawJSON, err := json.Marshal(rawPackets)
+				if err != nil {
+					r.logger.Errorf("failed to get raw json")
+				}
+
+				var packets []lorahw.RxPacket
+				err = json.Unmarshal(rawJSON, &packets)
+				if err != nil {
+					r.logger.Errorf("failed to unmarshal into packet")
+				}
+
+				if len(packets) == 0 {
+					// no packet received, wait 10 ms to receive again
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(10 * time.Millisecond):
 					}
-				}
-				if isDuplicate {
-					continue
-				}
-				minSNR := sfToSNRMin[packet.DataRate]
-				if float64(packet.SNR) < minSNR {
-					r.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
 					continue
 				}
 
-				r.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate, c)
+				t := time.Now()
+				for i, packet := range packets {
+					if packet.Size == 0 {
+						continue
+					}
+
+					// don't process duplicates
+					isDuplicate := false
+					for j := i - 1; j >= 0; j-- {
+						// two packets identical if payload is the same
+						if slices.Equal(packets[j].Payload, packets[i].Payload) {
+							r.logger.Debugf("skipped duplicate packet")
+							isDuplicate = true
+							break
+						}
+					}
+					if isDuplicate {
+						continue
+					}
+					minSNR := sfToSNRMin[packet.DataRate]
+					if float64(packet.SNR) < minSNR {
+						r.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
+						continue
+					}
+
+					r.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate, c)
+				}
 			}
 		}
 	}
 }
 
-func (r *RAK7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int, c concentrator) {
-	//r *first byte is MHDR - specifies message type
+func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int, c concentrator) {
+	// r *first byte is MHDR - specifies message type
 	switch payload[0] {
 	case joinRequestMHdr:
 		r.logger.Debugf("received join request")
@@ -805,7 +936,7 @@ func (r *RAK7391) handlePacket(ctx context.Context, payload []byte, packetTime t
 	}
 }
 
-func (r *RAK7391) updateReadings(name string, newReadings map[string]interface{}) {
+func (r *rak7391) updateReadings(name string, newReadings map[string]interface{}) {
 	r.readingsMu.Lock()
 	defer r.readingsMu.Unlock()
 	readings, ok := r.lastReadings[name].(map[string]interface{})
@@ -826,7 +957,7 @@ func (r *RAK7391) updateReadings(name string, newReadings map[string]interface{}
 }
 
 // Readings returns all the node's readings.
-func (r *RAK7391) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (r *rak7391) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	r.readingsMu.Lock()
 	defer r.readingsMu.Unlock()
 
@@ -842,56 +973,54 @@ func (r *RAK7391) Readings(ctx context.Context, extra map[string]interface{}) (m
 	return r.lastReadings, nil
 }
 
-// // startCLogging starts the goroutine to capture C logs into the logger.
-// // If loggingRoutineStarted indicates routine has already started, it does nothing.
-// func (r *RAK7391) startCLogging(ctx context.Context) {
-// 	fmt.Println("starting the c logging")
-// 	r.logger.Debug("Starting c logger background routine")
-// 	stdoutR, stdoutW, err := os.Pipe()
-// 	if err != nil {
-// 		r.logger.Errorf("%w", err)
-// 		return
-// 	}
+// startCLogging starts the goroutine to capture C logs into the logger.
+// If loggingRoutineStarted indicates routine has already started, it does nothing.
+func (r *rak7391) startCLogging(ctx context.Context) {
+	r.logger.Debug("Starting c logger background routine")
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		r.logger.Errorf("%w", err)
+		return
+	}
 
-// 	defer stdoutR.Close()
-// 	defer stdoutW.Close()
+	defer stdoutR.Close()
+	defer stdoutW.Close()
 
-// 	// Redirect C's stdout to the write end of the pipe
-// 	lorahw.RedirectLogsToPipe(stdoutW.Fd())
-// 	scanner := bufio.NewScanner(stdoutR)
+	// Redirect C's stdout to the write end of the pipe
+	lorahw.RedirectLogsToPipe(stdoutW.Fd())
+	scanner := bufio.NewScanner(stdoutR)
 
-// 	captureCOutputToLogs(ctx, scanner, r.logger)
-// }
+	captureCOutputToLogs(ctx, scanner, r.logger)
+}
 
-// // captureOutput is qa background routine to capture C's stdout and log to the module's logger.
-// // This is necessary because the sx1302 library only uses printf to report errors.
-// func captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner, logger logging.Logger) {
-// 	// Need to disable buffering on stdout so C logs can be displayed in real time.
-// 	lorahw.DisableBuffering()
+// captureOutput is qa background routine to capture C's stdout and log to the module's logger.
+// This is necessary because the sx1302 library only uses printf to report errors.
+func captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner, logger logging.Logger) {
+	// Need to disable buffering on stdout so C logs can be displayed in real time.
+	lorahw.DisableBuffering()
 
-// 	// loop to read lines from the scanner and log them
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return
-// 		default:
-// 			if scanner.Scan() {
-// 				line := scanner.Text()
-// 				switch {
-// 				case strings.Contains(line, "STANDBY_RC mode"):
-// 					// The error setting standby_rc mode indicates a hardware initiaization failure
-// 					// add extra log to instruct user what to do.
-// 					logger.Error(line)
-// 					logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
-// 				case strings.Contains(line, "ERROR"):
-// 					logger.Error(line)
-// 				case strings.Contains(line, "WARNING"):
-// 					logger.Warn(line)
-// 				default:
-// 					fmt.Println(line)
-// 					// logger.Debug(line)
-// 				}
-// 			}
-// 		}
-// 	}
-// }
+	// loop to read lines from the scanner and log them
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if scanner.Scan() {
+				line := scanner.Text()
+				switch {
+				case strings.Contains(line, "STANDBY_RC mode"):
+					// The error setting standby_rc mode indicates a hardware initiaization failure
+					// add extra log to instruct user what to do.
+					logger.Error(line)
+					logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+				case strings.Contains(line, "ERROR"):
+					logger.Error(line)
+				case strings.Contains(line, "WARNING"):
+					logger.Warn(line)
+				default:
+					logger.Debug(line)
+				}
+			}
+		}
+	}
+}

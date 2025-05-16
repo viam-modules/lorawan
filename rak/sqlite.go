@@ -1,4 +1,3 @@
-// Package gateway implements the sx1302 gateway module.
 package rak
 
 import (
@@ -27,7 +26,7 @@ var (
 )
 
 // Create or open a sqlite db file used to save device data across restarts.
-func (r *RAK7391) setupSqlite(ctx context.Context, pathPrefix string) error {
+func (r *rak7391) setupSqlite(ctx context.Context, pathPrefix string) error {
 	filePathDB := filepath.Join(pathPrefix, "devicedata.db")
 	db, err := sql.Open("sqlite3", filePathDB)
 	if err != nil {
@@ -45,7 +44,7 @@ func (r *RAK7391) setupSqlite(ctx context.Context, pathPrefix string) error {
 	return nil
 }
 
-func (r *RAK7391) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInfo) error {
+func (r *rak7391) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInfo) error {
 	if r.db == nil {
 		return errNoDB
 	}
@@ -67,7 +66,7 @@ func (r *RAK7391) insertOrUpdateDeviceInDB(ctx context.Context, device deviceInf
 	return err
 }
 
-func (r *RAK7391) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo, error) {
+func (r *rak7391) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo, error) {
 	if r.db == nil {
 		return deviceInfo{}, errNoDB
 	}
@@ -88,7 +87,7 @@ func (r *RAK7391) findDeviceInDB(ctx context.Context, devEui string) (deviceInfo
 	return newDevice, nil
 }
 
-func (r *RAK7391) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error) {
+func (r *rak7391) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error) {
 	if r.db == nil {
 		return nil, errNoDB
 	}
@@ -134,7 +133,7 @@ func (r *RAK7391) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 }
 
 // Function to migrate the device info from the persitent data file into a sqlite db.
-func (r *RAK7391) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
+func (r *rak7391) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
 	// check if the machine has an old devicedata file for us to migrate
 	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
 	filePath := filepath.Clean(filePathTXT)

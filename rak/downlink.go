@@ -29,7 +29,7 @@ const (
 	dutyCycleCID  = 0x04
 )
 
-func (r *RAK7391) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c concentrator) error {
+func (r *rak7391) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c concentrator) error {
 	if len(payload) > 256 {
 		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 256 bytes", len(payload))
 	}
@@ -56,17 +56,17 @@ func (r *RAK7391) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	var txPktMap map[string]interface{}
 	b, err := json.Marshal(txPkt)
 	if err != nil {
-		return fmt.Errorf("failed to marshal txPkt: %v", err)
+		return fmt.Errorf("failed to marshal txPkt: %w", err)
 	}
 	if err := json.Unmarshal(b, &txPktMap); err != nil {
-		return fmt.Errorf("failed to unmarshal txPkt to map: %v", err)
+		return fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
 	}
 
 	cmd := map[string]interface{}{"send_packet": txPktMap}
 
 	cmdStruct, err := structpb.NewStruct(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to create command struct: %v", err)
+		return fmt.Errorf("failed to create command struct: %w", err)
 	}
 
 	req := &v1.DoCommandRequest{
@@ -112,7 +112,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // Downlink payload structure
 // | MHDR | DEV ADDR | FCTRL | FCNTDOWN |  FOPTS (optional)  |  FPORT | encrypted frame payload  |  MIC |
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
-func (r *RAK7391) createDownlink(ctx context.Context,
+func (r *rak7391) createDownlink(ctx context.Context,
 	device *node.Node,
 	framePayload, uplinkFopts []byte,
 	sendAck bool,
