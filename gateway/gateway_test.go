@@ -39,12 +39,18 @@ func setupFileAndGateway(t *testing.T) *gateway {
 }
 
 func TestValidate(t *testing.T) {
+	// Create temp file for serial path testing
+	tmpDir := t.TempDir()
+	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(tmpFile.Name())
+
 	// Test valid config with USB path
 	resetPin := 25
 	conf := &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
-		Path:      "/dev/ttyUSB0",
+		Path:      tmpFile.Name(),
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
