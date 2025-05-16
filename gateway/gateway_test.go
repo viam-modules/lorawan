@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -580,6 +582,31 @@ func TestClose(t *testing.T) {
 	// call close again
 	err = g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestValidateSerialPath(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir := t.TempDir()
+
+	// Test case 1: Path exists
+	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(tmpFile.Name())
+
+	err = validateSerialPath(tmpFile.Name())
+	test.That(t, err, test.ShouldBeNil)
+
+	// Test case 2: Path does not exist
+	nonExistentPath := filepath.Join(tmpDir, "non-existent-device")
+	err = validateSerialPath(nonExistentPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "does not exist")
+
+	// Test case 3: Invalid path format
+	invalidPath := string([]byte{0x00})
+	err = validateSerialPath(invalidPath)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "error getting serial path")
 }
 
 func TestNativeConfig(t *testing.T) {

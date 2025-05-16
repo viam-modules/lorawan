@@ -38,8 +38,9 @@ const (
 // Error variables for validation and operations.
 var (
 	// Config validation errors.
-	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
-	errSPIAndUSB     = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
+	errInvalidSpiBus    = errors.New("spi bus can be 0 or 1 - default 0")
+	errSPIAndUSB        = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
+	errPathDoesNotExist = errors.New("provided serial path does not exist")
 
 	// Gateway operation errors.
 	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
@@ -145,6 +146,12 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
 
+	if conf.Path != "" {
+		err := validateSerialPath(path)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(conf.BoardName) == 0 {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
@@ -157,6 +164,19 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	}
 
 	return deps, nil
+}
+
+func validateSerialPath(path string) error {
+	_, err := os.Stat(path)
+	// serial path does not exist
+	if errors.Is(err, os.ErrNotExist) {
+		return resource.NewConfigValidationError(path, fmt.Errorf("configured path %s does not exist", path))
+	}
+	// other issue with serial path
+	if err != nil {
+		return resource.NewConfigValidationError(path, fmt.Errorf("error getting serial path %s: %w", path, err))
+	}
+	return nil
 }
 
 // Gateway defines a lorawan gateway.
