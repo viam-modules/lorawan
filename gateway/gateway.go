@@ -239,6 +239,7 @@ func NewGateway(
 
 // look at the resource.Config to determine which model is being used.
 func getNativeConfig(conf resource.Config) (*Config, error) {
+	fmt.Println(conf.Model)
 	switch conf.Model.Name {
 	case genericHat, oldModelName:
 		return resource.NativeConfig[*Config](conf)

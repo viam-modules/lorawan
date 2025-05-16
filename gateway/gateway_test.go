@@ -10,10 +10,12 @@ import (
 
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 	"go.viam.com/utils/protoutils"
 )
@@ -593,10 +595,9 @@ func TestSymlinkResolution(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create mock board
-	b := board.NewBoard(board.Config{Name: "mock-board"})
-	deps := resource.Dependencies{
-		Named: []resource.Named{b},
-	}
+	b := &inject.Board{}
+	deps := make(resource.Dependencies)
+	deps[board.Named("mock-board")] = b
 
 	// Create a real device file that our symlinks will point to
 	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
@@ -620,50 +621,66 @@ func TestSymlinkResolution(t *testing.T) {
 	err = os.Symlink(deviceFile.Name(), byIdLink)
 	test.That(t, err, test.ShouldBeNil)
 
+	pp := 18
+	rp := 23
+
 	// Test cases
 	tests := []struct {
 		name        string
-		config      *Config
+		config      resource.Config
 		expectError bool
 	}{
 		{
 			name: "by-path symlink resolves correctly",
-			config: &Config{
-				BoardName: "mock-board",
-				ResetPin:  intPtr(25),
-				Path:      byPathLink,
+			config: resource.Config{
+				Name:  "foo",
+				Model: ModelGenericHat,
+				ConvertedAttributes: &Config{
+					BoardName: "mock-board",
+					PowerPin:  &pp,
+					ResetPin:  &rp,
+					Path:      byPathLink,
+				},
 			},
 			expectError: false,
 		},
 		{
 			name: "by-id symlink resolves correctly",
-			config: &Config{
-				BoardName: "mock-board",
-				ResetPin:  intPtr(25),
-				Path:      byIdLink,
+			config: resource.Config{
+				Name:  "foo",
+				Model: ModelGenericHat,
+				ConvertedAttributes: &Config{
+					BoardName: "mock-board",
+					PowerPin:  &pp,
+					ResetPin:  &rp,
+					Path:      byIdLink,
+				},
 			},
 			expectError: false,
 		},
 		{
 			name: "broken symlink fails",
-			config: &Config{
-				BoardName: "mock-board",
-				ResetPin:  intPtr(25),
-				Path:      filepath.Join(byPathDir, "non-existent-link"),
+			config: resource.Config{
+				Name:  "foo",
+				Model: ModelGenericHat,
+				ConvertedAttributes: &Config{
+					BoardName: "mock-board",
+					PowerPin:  &pp,
+					ResetPin:  &rp,
+					Path:      filepath.Join(byPathDir, "non-existent-link"),
+				},
 			},
 			expectError: true,
 		},
 	}
-				Name:                "test-gateway",
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := &gateway{
 				logger: logging.NewTestLogger(t),
+				Named:  tc.config.ResourceName().AsNamed(),
 			}
 
-			err := g.Reconfigure(context.Background(), nil, resource.Config{
-				ConvertedAttributes: tc.config,
-			})
+			err := g.Reconfigure(context.Background(), deps, tc.config)
 
 			if tc.expectError {
 				test.That(t, err, test.ShouldNotBeNil)
