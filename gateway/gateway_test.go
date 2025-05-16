@@ -585,10 +585,9 @@ func TestClose(t *testing.T) {
 }
 
 func TestValidateSerialPath(t *testing.T) {
-	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
-	// Test case 1: Path exists
+	//Path exists
 	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
 	test.That(t, err, test.ShouldBeNil)
 	defer os.Remove(tmpFile.Name())
@@ -596,13 +595,13 @@ func TestValidateSerialPath(t *testing.T) {
 	err = validateSerialPath(tmpFile.Name())
 	test.That(t, err, test.ShouldBeNil)
 
-	// Test case 2: Path does not exist
+	// Path does not exist
 	nonExistentPath := filepath.Join(tmpDir, "non-existent-device")
 	err = validateSerialPath(nonExistentPath)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "does not exist")
 
-	// Test case 3: Invalid path format
+	// Invalid path format
 	invalidPath := string([]byte{0x00})
 	err = validateSerialPath(invalidPath)
 	test.That(t, err, test.ShouldNotBeNil)
