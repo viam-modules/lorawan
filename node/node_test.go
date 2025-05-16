@@ -325,7 +325,8 @@ func TestNewNode(t *testing.T) {
 	_, err = newNode(ctx, deps, invalidDecoderConf, logger)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
-	n.Close(ctx)
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil))
 }
 
 func TestReadings(t *testing.T) {
