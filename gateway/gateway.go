@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -338,9 +339,16 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	// user provided a serial device path
 	if cfg.Path != "" {
+		// Resolve the symlink
+		if strings.Contains(cfg.Path, "by-path") || strings.Contains(cfg.Path, "by-id") {
+			resolvedPath, err := filepath.EvalSymlinks(cfg.Path)
+			if err != nil {
+				return fmt.Errorf("failed to resolve symlink of path %s: %w", cfg.Path, err)
+			}
+			cfg.Path = resolvedPath
+		}
 		path = cfg.Path
 		comType = lorahw.USB
-
 	}
 	var comTypeString string
 	switch comType {

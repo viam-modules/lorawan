@@ -10,10 +10,12 @@ import (
 
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 	"go.viam.com/utils/protoutils"
 )
@@ -590,10 +592,116 @@ func TestClose(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 }
 
+func TestSymlinkResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create mock board
+	b := &inject.Board{}
+	deps := make(resource.Dependencies)
+	deps[board.Named("mock-board")] = b
+
+	rstPin := &inject.GPIOPin{}
+
+	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
+		return nil
+	}
+
+	b.GPIOPinByNameFunc = func(name string) (board.GPIOPin, error) {
+		return rstPin, nil
+	}
+
+	// Create a real device file that our symlinks will point to
+	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(deviceFile.Name())
+
+	// Create test directories to mimic Linux's /dev/serial structure
+	byPathDir := filepath.Join(tmpDir, "by-path")
+	byIDDir := filepath.Join(tmpDir, "by-id")
+	err = os.MkdirAll(byPathDir, 0o755)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.MkdirAll(byIDDir, 0o755)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Create test symlinks
+	byPathLink := filepath.Join(byPathDir, "pci-0000:00:14.0-usb-0:2:1.0")
+	byIDLink := filepath.Join(byIDDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
+
+	err = os.Symlink(deviceFile.Name(), byPathLink)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.Symlink(deviceFile.Name(), byIDLink)
+	test.That(t, err, test.ShouldBeNil)
+
+	rp := 23
+
+	// Test cases
+	tests := []struct {
+		name        string
+		config      resource.Config
+		expectError bool
+	}{
+		{
+			name: "by-path symlink resolves correctly",
+			config: resource.Config{
+				Name:  "foo",
+				Model: ModelGenericHat,
+				ConvertedAttributes: &Config{
+					BoardName: "mock-board",
+					ResetPin:  &rp,
+					Path:      byPathLink,
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "by-id symlink resolves correctly",
+			config: resource.Config{
+				Name:  "foo",
+				Model: ModelGenericHat,
+				ConvertedAttributes: &Config{
+					BoardName: "mock-board",
+					ResetPin:  &rp,
+					Path:      byIDLink,
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "broken symlink fails",
+			config: resource.Config{
+				Name:  "foo",
+				Model: ModelGenericHat,
+				ConvertedAttributes: &Config{
+					BoardName: "mock-board",
+					ResetPin:  &rp,
+					Path:      filepath.Join(byPathDir, "non-existent-link"),
+				},
+			},
+			expectError: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &gateway{
+				logger: logging.NewTestLogger(t),
+				Named:  tc.config.ResourceName().AsNamed(),
+			}
+
+			err := g.Reconfigure(context.Background(), deps, tc.config)
+
+			if tc.expectError {
+				test.That(t, err, test.ShouldNotBeNil)
+				test.That(t, err.Error(), test.ShouldContainSubstring, "failed to resolve symlink")
+			}
+			g.Close(context.Background())
+		})
+	}
+}
+
 func TestValidateSerialPath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	//Path exists
+	// Path exists
 	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
 	test.That(t, err, test.ShouldBeNil)
 	defer os.Remove(tmpFile.Name())
