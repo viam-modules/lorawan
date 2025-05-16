@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -147,7 +148,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	}
 
 	if conf.Path != "" {
-		err := validateSerialPath(path)
+		err := validateSerialPath(conf.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -339,6 +340,16 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 
 	// user provided a serial device path
 	if cfg.Path != "" {
+		// Resolve the symlink
+		if strings.Contains(cfg.Path, "by-path") || strings.Contains(cfg.Path, "by-id") {
+			resolvedPath, err := filepath.EvalSymlinks(cfg.Path)
+			if err != nil {
+				return fmt.Errorf("failed to resolve symlink of path %s: %v", cfg.Path, err)
+			}
+
+			g.logger.Infof("Resolved path: %s\n", resolvedPath)
+			cfg.Path = resolvedPath
+		}
 		path = cfg.Path
 		comType = lorahw.USB
 
