@@ -306,12 +306,10 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
-	testNode.reconfigureMu.Lock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, expectedPath)
-	testNode.reconfigureMu.Unlock()
 	err = n.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
 
