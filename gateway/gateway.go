@@ -449,7 +449,7 @@ func (g *gateway) readLogs(ctx context.Context) {
 		}
 		line, err := g.logReader.ReadString('\n')
 		if err != nil {
-			g.logger.Warnf("error reading log line: %w", err)
+			g.logger.Warnf("error reading log line: %s", err.Error())
 		}
 		g.filterLog(line)
 	}
