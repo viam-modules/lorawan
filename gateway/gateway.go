@@ -429,17 +429,20 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 // watchLogs watches for startup logs and signals when the managed process has started.
 // After startup it continues filtering the logs from the managed process.
 func (g *gateway) watchLogs(ctx context.Context) (string, error) {
-	cancelCtx, _ := context.WithTimeout(ctx, 10*time.Second)
+	cancelCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
 	var port string
 
-	// Spawn goroutine to close reader when ctx done
+	// Spawn goroutine to close reader when ctx times out
 	// Need to do this because ReadString blocks until
 	// there is a new line or underlying reader is closed
 	go func() {
 		<-cancelCtx.Done()
-		if err := g.pipeReader.Close(); err != nil {
-			g.logger.Warnf("error closing reader: %w", err)
+		if errors.Is(cancelCtx.Err(), context.DeadlineExceeded) {
+			if err := g.pipeReader.Close(); err != nil {
+				g.logger.Warnf("error closing reader: %w", err)
+			}
 		}
 	}()
 
