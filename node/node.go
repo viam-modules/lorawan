@@ -193,6 +193,8 @@ type Node struct {
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval
+	LastDevNonce       []byte  // unique dev nonce sent in the join request
+	FCntUp             uint16  // counter of uplinks sent in uplink messages
 
 	Workers *utils.StoppableWorkers
 }
@@ -268,7 +270,7 @@ func (n *Node) validateGateway(ctx context.Context, deps resource.Dependencies) 
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("failed to validate the gateway")
 	}
 	re, ok := retVal.(float64)
 	if !ok {

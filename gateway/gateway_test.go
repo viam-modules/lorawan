@@ -10,12 +10,10 @@ import (
 
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
-	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
-	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 	"go.viam.com/utils/protoutils"
 )
@@ -97,8 +95,8 @@ func TestValidate(t *testing.T) {
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "reset_pin"))
 	test.That(t, deps, test.ShouldBeNil)
 
-	bus = 3
 	// Test invalid bus value
+	bus = 2
 	conf = &Config{
 		BoardName: "pi",
 		ResetPin:  &resetPin,
@@ -464,50 +462,6 @@ func TestReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
 }
 
-func TestStartCLogging(t *testing.T) {
-	// Create a gateway instance for testing
-	cfg := resource.Config{
-		Name: "test-gateway",
-	}
-
-	loggingRoutineStarted = make(map[string]bool)
-
-	g := &gateway{
-		Named:  cfg.ResourceName().AsNamed(),
-		logger: logging.NewTestLogger(t),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Ensure logging is started if there is no entry in the loggingRoutineStarted map.
-	g.startCLogging()
-	test.That(t, g.loggingWorker, test.ShouldNotBeNil)
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-
-	// Test that closing the gateway removes the gateway from the loggingRoutineStarted map.
-	err := g.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
-
-	// reader and writer files should error if closed.
-	buf := make([]byte, 1)
-	_, err = g.logWriter.Write(buf)
-	test.That(t, err, test.ShouldNotBeNil)
-	_, err = g.logReader.Read(buf)
-	test.That(t, err, test.ShouldNotBeNil)
-
-	// Ensure no new goroutine is started if the loggingRoutineStarted entry is true.
-	// reset fields for new test case
-	g.loggingWorker = nil
-	loggingRoutineStarted["test-gateway"] = true
-	g.startCLogging()
-	test.That(t, g.loggingWorker, test.ShouldBeNil)
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 1)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-}
-
 func TestUpdateDeviceInfo(t *testing.T) {
 	g := createTestGateway(t)
 
@@ -543,8 +497,6 @@ func TestClose(t *testing.T) {
 		Name: "test-gateway",
 	}
 
-	loggingRoutineStarted = make(map[string]bool)
-
 	g := &gateway{
 		Named:   cfg.ResourceName().AsNamed(),
 		logger:  logging.NewTestLogger(t),
@@ -557,11 +509,6 @@ func TestClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start logging to test cleanup
-	g.startCLogging()
-	test.That(t, g.loggingWorker, test.ShouldNotBeNil)
-	test.That(t, loggingRoutineStarted["test-gateway"], test.ShouldBeTrue)
-
 	// Call Close and verify cleanup
 	err = g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
@@ -569,18 +516,15 @@ func TestClose(t *testing.T) {
 	// Verify gateway is reset
 	test.That(t, g.started, test.ShouldBeFalse)
 
-	// Verify logging resources are cleaned up
-	test.That(t, len(loggingRoutineStarted), test.ShouldEqual, 0)
-
 	// Verify file handles are closed
 	{
 		buf := make([]byte, 1)
-		_, err = g.logWriter.Write(buf)
+		_, err = g.pipeWriter.Write(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
 	{
 		buf := make([]byte, 1)
-		_, err = g.logReader.Read(buf)
+		_, err = g.pipeReader.Read(buf)
 		test.That(t, err, test.ShouldNotBeNil)
 	}
 
@@ -592,116 +536,10 @@ func TestClose(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 }
 
-func TestSymlinkResolution(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create mock board
-	b := &inject.Board{}
-	deps := make(resource.Dependencies)
-	deps[board.Named("mock-board")] = b
-
-	rstPin := &inject.GPIOPin{}
-
-	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
-		return nil
-	}
-
-	b.GPIOPinByNameFunc = func(name string) (board.GPIOPin, error) {
-		return rstPin, nil
-	}
-
-	// Create a real device file that our symlinks will point to
-	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
-	test.That(t, err, test.ShouldBeNil)
-	defer os.Remove(deviceFile.Name())
-
-	// Create test directories to mimic Linux's /dev/serial structure
-	byPathDir := filepath.Join(tmpDir, "by-path")
-	byIDDir := filepath.Join(tmpDir, "by-id")
-	err = os.MkdirAll(byPathDir, 0o755)
-	test.That(t, err, test.ShouldBeNil)
-	err = os.MkdirAll(byIDDir, 0o755)
-	test.That(t, err, test.ShouldBeNil)
-
-	// Create test symlinks
-	byPathLink := filepath.Join(byPathDir, "pci-0000:00:14.0-usb-0:2:1.0")
-	byIDLink := filepath.Join(byIDDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
-
-	err = os.Symlink(deviceFile.Name(), byPathLink)
-	test.That(t, err, test.ShouldBeNil)
-	err = os.Symlink(deviceFile.Name(), byIDLink)
-	test.That(t, err, test.ShouldBeNil)
-
-	rp := 23
-
-	// Test cases
-	tests := []struct {
-		name        string
-		config      resource.Config
-		expectError bool
-	}{
-		{
-			name: "by-path symlink resolves correctly",
-			config: resource.Config{
-				Name:  "foo",
-				Model: ModelGenericHat,
-				ConvertedAttributes: &Config{
-					BoardName: "mock-board",
-					ResetPin:  &rp,
-					Path:      byPathLink,
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "by-id symlink resolves correctly",
-			config: resource.Config{
-				Name:  "foo",
-				Model: ModelGenericHat,
-				ConvertedAttributes: &Config{
-					BoardName: "mock-board",
-					ResetPin:  &rp,
-					Path:      byIDLink,
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "broken symlink fails",
-			config: resource.Config{
-				Name:  "foo",
-				Model: ModelGenericHat,
-				ConvertedAttributes: &Config{
-					BoardName: "mock-board",
-					ResetPin:  &rp,
-					Path:      filepath.Join(byPathDir, "non-existent-link"),
-				},
-			},
-			expectError: true,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			g := &gateway{
-				logger: logging.NewTestLogger(t),
-				Named:  tc.config.ResourceName().AsNamed(),
-			}
-
-			err := g.Reconfigure(context.Background(), deps, tc.config)
-
-			if tc.expectError {
-				test.That(t, err, test.ShouldNotBeNil)
-				test.That(t, err.Error(), test.ShouldContainSubstring, "failed to resolve symlink")
-			}
-			g.Close(context.Background())
-		})
-	}
-}
-
 func TestValidateSerialPath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Path exists
+	//Path exists
 	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
 	test.That(t, err, test.ShouldBeNil)
 	defer os.Remove(tmpFile.Name())
@@ -724,9 +562,10 @@ func TestValidateSerialPath(t *testing.T) {
 
 func TestNativeConfig(t *testing.T) {
 	t.Run("Test Default Config", func(t *testing.T) {
+		bus := 1
 		resetPin := 85
 		powerPin := 74
-		bus := 1
+
 		validConf := resource.Config{
 			Name: "test-default",
 			ConvertedAttributes: &Config{

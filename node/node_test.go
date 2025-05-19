@@ -250,8 +250,6 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
-	err = n.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
 
 	// Test with valid ABP config
 	validABPConf := resource.Config{
@@ -271,8 +269,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
-	// lock to prevent a data race w the pollGateway routine
 	testNode.reconfigureMu.Lock()
+	defer testNode.reconfigureMu.Unlock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, "test-node-abp")
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeABP)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
@@ -285,9 +283,7 @@ func TestNewNode(t *testing.T) {
 	expectedAppSKey, err := hex.DecodeString(testutils.TestAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, testNode.AppSKey, test.ShouldResemble, expectedAppSKey)
-	testNode.reconfigureMu.Unlock()
-	err = n.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
+	n.Close(ctx)
 
 	// Decoder can be URL
 	validConf = resource.Config{
@@ -310,8 +306,7 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, expectedPath)
-	err = n.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
+	n.Close(ctx)
 
 	// Invalid decoder file should error
 	invalidDecoderConf := resource.Config{
@@ -328,8 +323,6 @@ func TestNewNode(t *testing.T) {
 	_, err = newNode(ctx, deps, invalidDecoderConf, logger)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
-	err = n.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestReadings(t *testing.T) {

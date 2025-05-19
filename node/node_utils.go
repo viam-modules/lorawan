@@ -131,6 +131,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	if n.Workers == nil {
 		n.Workers = utils.NewBackgroundStoppableWorkers(n.PollGateway)
 	}
+
 	return nil
 }
 
