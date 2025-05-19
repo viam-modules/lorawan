@@ -26,7 +26,6 @@ import (
 
 // Error variables for gateway setup errors
 var (
-	errInvalidSpiBus          = errors.New("invalid SPI bus")
 	errBoardConfig            = errors.New("error setting the board config")
 	errRadio0Config           = errors.New("error setting the radio frequency config for radio 0")
 	errRadio1Config           = errors.New("error setting the radio frequency config for radio 1")
@@ -180,8 +179,6 @@ func DisableBuffering() {
 
 func parseErrorCode(errCode int) error {
 	switch errCode {
-	case 1:
-		return errInvalidSpiBus
 	case 2:
 		return errBoardConfig
 	case 3:

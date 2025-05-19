@@ -58,6 +58,7 @@ var (
 	errNoDevice           = errors.New("received packet from unknown device")
 	errInvalidMIC         = errors.New("invalid MIC")
 	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
+	errTimedOut           = errors.New("timed out waiting for gateway to start")
 )
 
 // constants for MHDRs of different message types.
@@ -209,7 +210,7 @@ type gateway struct {
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
 
-	logReader  bufio.Reader
+	logReader  *bufio.Reader
 	pipeReader *io.PipeReader
 	pipeWriter *io.PipeWriter
 
@@ -220,6 +221,7 @@ type gateway struct {
 	concentratorClient pb.SensorServiceClient
 	conn               *grpc.ClientConn
 	process            pexec.ManagedProcess
+	cgoPath            string // path to cgo executable, can be overridden in tests
 }
 
 // NewGateway creates a new gateway.
@@ -270,12 +272,14 @@ func getNativeConfig(conf resource.Config) (*Config, error) {
 
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
-	err := g.Close(ctx)
-	if err != nil {
-		g.logger.Warnf("error closing gateway: %w", err)
-	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	// workers and process are restarted during reconfigure
+	g.closeProcess()
+	if g.workers != nil {
+		g.workers.Stop()
+	}
 
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
@@ -366,21 +370,25 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		fmt.Sprintf("--region=%d", region),
 	}
 
-	dir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("error getting current directory: %w", err)
+	cgoexe := g.cgoPath
+	if cgoexe == "" {
+		dir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("error getting current directory: %w", err)
+		}
+		cgoexe = filepath.Join(dir, "cgo")
 	}
 
-	cgoexe := dir + "/cgo"
 	_, err = os.Stat(cgoexe)
 	if err != nil {
 		return fmt.Errorf("error getting the cgo exe: %w", err)
 	}
 
 	logReader, logWriter := io.Pipe()
-	bufferedLogReader := *bufio.NewReader(logReader)
+	bufferedLogReader := bufio.NewReader(logReader)
 	g.pipeReader = logReader
 	g.pipeWriter = logWriter
+	g.logReader = bufferedLogReader
 
 	config := pexec.ProcessConfig{
 		ID:        g.Name().Name,
@@ -396,29 +404,9 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("failed to start binary: %w", err)
 	}
 
-	var port string
-	for {
-		line, err := bufferedLogReader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("error reading line: %w", err)
-		}
-
-		g.filterLog(line)
-
-		// get the port from the managed process logs
-		if strings.Contains(line, "Server successfully started:") {
-			parts := strings.Split(line, ":")
-			if len(parts) == 2 {
-				port = strings.TrimSpace(parts[1])
-				g.logger.Debugf("Captured port: %s", port)
-			}
-		}
-
-		// wait until the gateway is done starting up to finish reconfiguring
-		if strings.Contains(line, "done setting up gateway") {
-			g.logger.Debugf("successfully initialized gateway")
-			break
-		}
+	port, err := g.watchLogs(ctx)
+	if err != nil {
+		return err
 	}
 
 	g.logger.Debugf("connecting to port: %s\n", port)
@@ -428,16 +416,60 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return fmt.Errorf("error connecting to server: %w", err)
 	}
 
-	g.logger.Infof("connected to client")
+	g.logger.Info("connected to concentrator client")
 	g.process = process
 	g.conn = conn
 	g.concentratorClient = pb.NewSensorServiceClient(conn)
-	g.logReader = bufferedLogReader
 	g.started = true
-	g.workers = utils.NewBackgroundStoppableWorkers(g.receivePackets)
-	g.workers.Add(g.readLogs)
+	g.workers.Add(g.receivePackets)
 
 	return nil
+}
+
+// watchLogs watches for startup logs and signals when the managed process has started.
+// After startup it continues filtering the logs from the managed process.
+func (g *gateway) watchLogs(ctx context.Context) (string, error) {
+	cancelCtx, _ := context.WithTimeout(ctx, 10*time.Second)
+
+	var port string
+
+	// Spawn goroutine to close reader when ctx done
+	// Need to do this because ReadString blocks until
+	// there is a new line or underlying reader is closed
+	go func() {
+		<-cancelCtx.Done()
+		if err := g.pipeReader.Close(); err != nil {
+			g.logger.Warnf("error closing reader: %w", err)
+		}
+	}()
+
+	for {
+		select {
+		case <-cancelCtx.Done():
+			return "", errTimedOut
+		default:
+		}
+		line, err := g.logReader.ReadString('\n')
+		if err != nil {
+			g.logger.Warnf("error reading log line: %s", err.Error())
+		}
+		g.filterLog(line)
+
+		if strings.Contains(line, "Server successfully started:") && port == "" {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				port = strings.TrimSpace(parts[1])
+				g.logger.Debugf("Captured port: %s", port)
+			}
+		}
+
+		if strings.Contains(line, "done setting up gateway") && port != "" {
+			g.logger.Debug("successfully initialized gateway")
+			// Keep reading logs in the ba
+			g.workers = utils.NewBackgroundStoppableWorkers(g.readLogs)
+			return port, nil
+		}
+	}
 }
 
 func (g *gateway) readLogs(ctx context.Context) {
@@ -472,6 +504,7 @@ func (g *gateway) filterLog(line string) {
 		g.logger.Debug(line)
 	}
 }
+
 func (g *gateway) receivePackets(ctx context.Context) {
 	for {
 		select {
@@ -857,17 +890,8 @@ func (g *gateway) Close(ctx context.Context) error {
 		g.logger.Error("error stopping gateway: %v", err)
 	}
 
-	// Close pipe files before workers to avoid a hang on shutdown.
-	if g.pipeReader != nil {
-		if err := g.pipeReader.Close(); err != nil {
-			g.logger.Errorf("error closing log reader: %s", err)
-		}
-	}
-	if g.pipeWriter != nil {
-		if err := g.pipeWriter.Close(); err != nil {
-			g.logger.Errorf("error closing log writer: %s", err)
-		}
-	}
+	// Close process before workers to avoid a hang on shutdown.
+	g.closeProcess()
 
 	if g.workers != nil {
 		g.workers.Stop()
@@ -879,6 +903,23 @@ func (g *gateway) Close(ctx context.Context) error {
 		}
 	}
 
+	g.started = false
+
+	return nil
+}
+
+func (g *gateway) closeProcess() {
+	// Close pipe files before workers to avoid a hang on shutdown.
+	if g.pipeReader != nil {
+		if err := g.pipeReader.Close(); err != nil {
+			g.logger.Errorf("error closing log reader: %s", err)
+		}
+	}
+	if g.pipeWriter != nil {
+		if err := g.pipeWriter.Close(); err != nil {
+			g.logger.Errorf("error closing log writer: %s", err)
+		}
+	}
 	if g.conn != nil {
 		if err := g.conn.Close(); err != nil {
 			g.logger.Errorf("error closing client conn: %w", err)
@@ -890,8 +931,6 @@ func (g *gateway) Close(ctx context.Context) error {
 			g.logger.Errorf("error stopping process: %s", err.Error())
 		}
 	}
-
-	return nil
 }
 
 func (g *gateway) reset(ctx context.Context) {

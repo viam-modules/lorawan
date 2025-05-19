@@ -5,9 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -77,15 +75,6 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 		g.logger.Debugf("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest{}, nil, errNoDevice
 	}
-
-	// check for a repeat join request - if we have multiple gateways configured we could have already handled the join.
-	if bytes.Equal(matched.LastDevNonce, jr.devNonce) {
-		g.logger.Debugf("found identical dev nonce - skipping join request")
-		return joinRequest{}, nil, errors.New("already handled dev nonce")
-	}
-
-	matched.LastDevNonce = jr.devNonce
-	matched.FCntUp = math.MaxUint16
 
 	err := validateMIC(types.AES128Key(matched.AppKey), payload)
 	if err != nil {

@@ -74,19 +74,14 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// get the supported requests from fopts.
 	requests := g.getFOptsToSend(fopts, device)
 
-	// fcntUp - should increase by 1 with each packet sent
-	fCntUp := binary.LittleEndian.Uint16(phyPayload[6:8])
-
-	if fCntUp <= device.FCntUp && device.FCntUp != math.MaxUint16 {
-		return "", map[string]interface{}{}, errors.New("packet already parsed")
-	}
-	device.FCntUp = fCntUp
+	// frameCnt - should increase by 1 with each packet sent
+	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
 	// only validate the MIC if we have a NwkSKey set
 	if len(device.NwkSKey) != 0 {
 		// Validate the MIC
 		mic, err := crypto.ComputeLegacyUplinkMIC(
-			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(fCntUp), phyPayload[:len(phyPayload)-4])
+			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
 		if err != nil {
 			return "", map[string]interface{}{}, err
 		}
@@ -143,7 +138,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	dAddr := types.MustDevAddr(devAddrBE)
 
 	// decrypt the frame payload
-	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(fCntUp), framePayload)
+	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(frameCnt), framePayload)
 	if err != nil {
 		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
 	}

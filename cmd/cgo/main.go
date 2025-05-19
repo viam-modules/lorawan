@@ -28,6 +28,12 @@ type sensorService struct {
 	pb.UnimplementedSensorServiceServer
 }
 
+var (
+	comType = flag.Int("comType", 1, "comtype 0 for spi 1 for usb")
+	path    = flag.String("path", "/dev/ttyACM0", "Path concentrator is connected to")
+	region  = flag.Int("region", 1, "region of concentrator, 1 for us915 2 for eu868")
+)
+
 func main() {
 	utils.ContextualMain(mainWithArgs, logging.NewDebugLogger("cgo"))
 }
@@ -35,15 +41,13 @@ func main() {
 func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) error {
 	config := parseAndValidateArguments()
 
-	fmt.Println("Attempting to bind to TCP port")
-	logger.Infof("this here info")
-
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	lorahw.DisableBuffering()
 
 	// OS will assign a free port
 	//nolint:gosec
 	lis, err := net.Listen("tcp", ":0")
+	logger.Info("Attempting to bind to TCP port")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
@@ -60,22 +64,21 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	}()
 
 	port := lis.Addr().(*net.TCPAddr).Port
+	//nolint:forbidigo
 	fmt.Println("Server successfully started:", port)
 
-	fmt.Println("here setting up gateway")
 	err = lorahw.SetupGateway(config.comType, config.path, config.region)
 	if err != nil {
 		return err
 	}
-
-	fmt.Println("done setting up gateway")
+	logger.Info("done setting up gateway")
 
 	go func() {
 		// Graceful shutdown
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
 		<-c
-		fmt.Println("Received shutdown signal")
+		logger.Infof("received shutdown signal")
 		s.GracefulStop()
 	}()
 
@@ -90,17 +93,13 @@ type concentratorConfig struct {
 }
 
 func parseAndValidateArguments() concentratorConfig {
-	var config concentratorConfig
-	comType := flag.Int("comType", 1, "comtype 0 for spi 1 for usb")
-	path := flag.String("path", "/dev/ttyACM0", "Path concentrator is connected to")
-	region := flag.Int("region", 1, "region of concentrator, 1 for us915 2 for eu868")
 	flag.Parse()
 
-	config.path = *path
-	config.region = regions.Region(*region)
-	config.comType = *comType
-
-	return config
+	return concentratorConfig{
+		comType: *comType,
+		path:    *path,
+		region:  regions.Region(*region),
+	}
 }
 
 func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) (*v1.DoCommandResponse, error) {

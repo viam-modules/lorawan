@@ -193,8 +193,6 @@ type Node struct {
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval
-	LastDevNonce       []byte  // unique dev nonce sent in the join request
-	FCntUp             uint16  // counter of uplinks sent in uplink messages
 
 	Workers *utils.StoppableWorkers
 }

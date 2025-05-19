@@ -183,7 +183,7 @@ int start_gateway() {
 }
 
 int receive(struct lgw_pkt_rx_s* packet) {
-    // testing - fill the packet with test values
+    // for testing - fill the packet with test values
     packet->size = 3;
     uint8_t payload[3] = {0x01, 0x02, 0x03};
     memcpy(packet->payload, payload, packet->size);
