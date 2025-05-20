@@ -603,8 +603,6 @@ func TestSymlinkResolution(t *testing.T) {
 	err = os.Symlink(deviceFile.Name(), byIDLink)
 	test.That(t, err, test.ShouldBeNil)
 
-	rp := 23
-
 	// Test cases
 	tests := []struct {
 		name        string
@@ -618,7 +616,7 @@ func TestSymlinkResolution(t *testing.T) {
 				Model: ModelGenericHat,
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
-					ResetPin:  &rp,
+					ResetPin:  &testRstPin,
 					Path:      byPathLink,
 				},
 			},
@@ -631,7 +629,7 @@ func TestSymlinkResolution(t *testing.T) {
 				Model: ModelGenericHat,
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
-					ResetPin:  &rp,
+					ResetPin:  &testRstPin,
 					Path:      byIDLink,
 				},
 			},
@@ -644,7 +642,7 @@ func TestSymlinkResolution(t *testing.T) {
 				Model: ModelGenericHat,
 				ConvertedAttributes: &Config{
 					BoardName: "mock-board",
-					ResetPin:  &rp,
+					ResetPin:  &testRstPin,
 					Path:      filepath.Join(byPathDir, "non-existent-link"),
 				},
 			},
