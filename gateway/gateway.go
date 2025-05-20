@@ -473,7 +473,7 @@ func (g *gateway) watchLogs(ctx context.Context) (string, error) {
 
 		if strings.Contains(line, "done setting up gateway") && port != "" {
 			g.logger.Debug("successfully initialized gateway")
-			// Keep reading logs in the ba
+			// Keep reading logs in the background.
 			g.workers = utils.NewBackgroundStoppableWorkers(g.readLogs)
 			return port, nil
 		}
