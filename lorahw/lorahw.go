@@ -167,11 +167,6 @@ func ReceivePackets() ([]RxPacket, error) {
 	return result, nil
 }
 
-// RedirectLogsToPipe redirects C logs to a pipe
-func RedirectLogsToPipe(fd uintptr) {
-	C.redirect_to_pipe(C.int(fd))
-}
-
 // DisableBuffering disables buffering on C stdout
 func DisableBuffering() {
 	C.disable_buffering()

@@ -74,7 +74,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// get the supported requests from fopts.
 	requests := g.getFOptsToSend(fopts, device)
 
-	// frameCnt - should increase by 1 with each packet sent
+	// frame count - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
 	// only validate the MIC if we have a NwkSKey set

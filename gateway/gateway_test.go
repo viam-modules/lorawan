@@ -749,7 +749,6 @@ func TestWaitForStartupLogs(t *testing.T) {
 			pr, pw := io.Pipe()
 			reader := bufio.NewReader(pr)
 
-			// Create gateway instance
 			g := &gateway{
 				logger:     logging.NewTestLogger(t),
 				logReader:  reader,
@@ -767,7 +766,6 @@ func TestWaitForStartupLogs(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
 
-			// Call waitForStartupLogs
 			port, err := g.watchLogs(ctx)
 
 			if tc.expectError {
@@ -790,9 +788,9 @@ func TestWaitForStartupLogs(t *testing.T) {
 
 func TestNativeConfig(t *testing.T) {
 	t.Run("Test Default Config", func(t *testing.T) {
-		bus := 1
 		resetPin := 85
 		powerPin := 74
+		bus := 1
 
 		validConf := resource.Config{
 			Name: "test-default",

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -68,8 +67,6 @@ const (
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
-	defaultExecutableName   = "cgo"
-	tarGzPath               = "/home/rak/lorawan.tar.gz"
 )
 
 // Model represents a lorawan gateway model.
@@ -221,7 +218,6 @@ type gateway struct {
 	concentratorClient pb.SensorServiceClient
 	conn               *grpc.ClientConn
 	process            pexec.ManagedProcess
-	cgoPath            string // path to cgo executable, can be overridden in tests
 }
 
 // NewGateway creates a new gateway.
@@ -343,8 +339,9 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	var path string
-	var comType comType
+	// defaults
+	path := "/dev/spidev0.0"
+	comType := spi
 
 	if cfg.Bus != nil {
 		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
@@ -370,14 +367,12 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		fmt.Sprintf("--region=%d", region),
 	}
 
-	cgoexe := g.cgoPath
-	if cgoexe == "" {
-		dir, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("error getting current directory: %w", err)
-		}
-		cgoexe = filepath.Join(dir, "cgo")
+	// find cgo exe
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("error getting current directory: %w", err)
 	}
+	cgoexe := filepath.Join(dir, "cgo")
 
 	_, err = os.Stat(cgoexe)
 	if err != nil {
@@ -398,12 +393,23 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		LogWriter: logWriter,
 	}
 
+	var comTypeString string
+	switch comType {
+	case spi:
+		comTypeString = "SPI"
+	case usb:
+		comTypeString = "USB"
+	}
+
+	g.logger.Infof("starting %s gateway connected to path %s", comTypeString, path)
+
 	process := pexec.NewManagedProcess(config, g.logger)
 
 	if err := process.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start binary: %w", err)
 	}
 
+	// This call blocks until the process prints the start up logs
 	port, err := g.watchLogs(ctx)
 	if err != nil {
 		return err
@@ -431,7 +437,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 func (g *gateway) watchLogs(ctx context.Context) (string, error) {
 	cancelCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-
 	var port string
 
 	// Spawn goroutine to close reader when ctx times out
@@ -520,7 +525,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			"get_packets": true,
 		})
 		if err != nil {
-			log.Fatalf("Failed to create command struct: %v", err)
+			g.logger.Error("failed to create command struct: %v", err)
 		}
 
 		req := &v1.DoCommandRequest{
@@ -529,14 +534,14 @@ func (g *gateway) receivePackets(ctx context.Context) {
 
 		resp, err := g.concentratorClient.DoCommand(ctx, req)
 		if err != nil {
-			g.logger.Errorf("DoCommand error: %v", err)
+			g.logger.Errorf("error calling docommand: %v", err)
 		}
 
 		data := resp.GetResult().AsMap()
 
 		rawPackets, ok := data["packets"]
 		if !ok {
-			g.logger.Errorf("no packets found in map")
+			g.logger.Errorf("docommand did not return packets")
 		}
 
 		// Marshal back to JSON to decode into typed struct
@@ -548,7 +553,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		var packets []lorahw.RxPacket
 		err = json.Unmarshal(rawJSON, &packets)
 		if err != nil {
-			g.logger.Errorf("failed to unmarshal into packet")
+			g.logger.Errorf("failed to unmarshal json into packet struct")
 		}
 
 		if len(packets) == 0 {

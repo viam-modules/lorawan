@@ -30,7 +30,7 @@ const int32_t ifFrequencies[9] = {
 // This defines what RF chain to use for each of the 8 if chains
 const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
-int set_up_gateway(int type, char* path, int region) {
+int set_up_gateway(int com_type, char* path, int region) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -38,12 +38,12 @@ int set_up_gateway(int type, char* path, int region) {
     boardconf.lorawan_public = true;
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
-    boardconf.com_type = type;
+    boardconf.com_type = com_type;
 
     strncpy(boardconf.com_path, path, sizeof boardconf.com_path);
+    // add null terminator
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
-        printf("here errored setting board config\n");
         return 2;
     }
 
@@ -152,7 +152,6 @@ int set_up_gateway(int type, char* path, int region) {
     return 0;
 }
 
-
 int stop_gateway() {
     return lgw_stop();
 }
@@ -163,15 +162,10 @@ struct lgw_pkt_rx_s* create_rx_packet_array() {
 
 void disable_buffering() {
     setbuf(stdout, NULL);
-    //fflush(stdout);
 }
 
 
 #ifdef TESTING
-void redirect_to_pipe(int fd) {
-    // Mock implementation for testing - does nothing
-}
-
 int send(struct lgw_pkt_tx_s* packet) {
     // for testing, return 0 - sucesssful
     return 0;
@@ -200,12 +194,6 @@ int get_status(uint8_t rf, uint8_t* status) {
 }
 
 #else
-void redirect_to_pipe(int fd) {
-    fflush(stdout);          // Flush anything in the current stdout buffer
-    dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
-   // dup2(fd, STDERR_FILENO);
-}
-
 int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }
