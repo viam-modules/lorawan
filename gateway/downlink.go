@@ -53,13 +53,9 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	}
 
 	// needs to be in map form for protobuf
-	var txPktMap map[string]interface{}
-	b, err := json.Marshal(txPkt)
+	txPktMap, err := convertTxPktToMap(txPkt)
 	if err != nil {
-		return fmt.Errorf("failed to marshal txPkt: %w", err)
-	}
-	if err := json.Unmarshal(b, &txPktMap); err != nil {
-		return fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
+		return fmt.Errorf("failed to convert packet to map: %w", err)
 	}
 
 	cmd := map[string]interface{}{SendPacketKey: txPktMap}
@@ -78,6 +74,18 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return err
 	}
 	return nil
+}
+
+func convertTxPktToMap(txPkt *lorahw.TxPacket) (map[string]interface{}, error) {
+	var txPktMap map[string]interface{}
+	b, err := json.Marshal(txPkt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal txPkt: %w", err)
+	}
+	if err := json.Unmarshal(b, &txPktMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
+	}
+	return txPktMap, nil
 }
 
 // According to lorawan docs, downlinks have a +/- 20 us error window, so regular sleep would not be accurate enough.

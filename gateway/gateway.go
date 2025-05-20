@@ -274,12 +274,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// workers and process are restarted during reconfigure
-	g.closeProcess()
-	if g.workers != nil {
-		g.workers.Stop()
-	}
-
 	// If the gateway hardware was already started, stop gateway and the background worker.
 	// Make sure to always call stopGateway() before making any changes to the c config or
 	// errors will occur.
@@ -287,6 +281,12 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	// started, so only call stopGateway if this module already started the gateway.
 	if g.started {
 		g.reset(ctx)
+	}
+
+	// workers and process are restarted during reconfigure
+	g.closeProcess()
+	if g.workers != nil {
+		g.workers.Stop()
 	}
 
 	cfg, err := getNativeConfig(conf)
@@ -407,6 +407,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.logger.Infof("starting %s gateway connected to path %s", comTypeString, path)
 
 	process := pexec.NewManagedProcess(config, g.logger)
+	g.process = process
 
 	if err := process.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start binary: %w", err)
@@ -426,7 +427,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	g.logger.Info("connected to concentrator client")
-	g.process = process
 	g.conn = conn
 	g.concentratorClient = pb.NewSensorServiceClient(conn)
 	g.started = true
@@ -547,16 +547,9 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			g.logger.Errorf("docommand did not return packets")
 		}
 
-		// Marshal back to JSON to decode into typed struct
-		rawJSON, err := json.Marshal(rawPackets)
+		packets, err := convertToRxPackets(rawPackets)
 		if err != nil {
-			g.logger.Errorf("failed to get raw json")
-		}
-
-		var packets []lorahw.RxPacket
-		err = json.Unmarshal(rawJSON, &packets)
-		if err != nil {
-			g.logger.Errorf("failed to unmarshal json into packet struct")
+			g.logger.Errorf("failed to convert packet to struct")
 		}
 
 		if len(packets) == 0 {
@@ -597,6 +590,20 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			g.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate)
 		}
 	}
+}
+
+func convertToRxPackets(rawPackets any) ([]lorahw.RxPacket, error) {
+	rawJSON, err := json.Marshal(rawPackets)
+	if err != nil {
+		return nil, err
+	}
+
+	var packets []lorahw.RxPacket
+	err = json.Unmarshal(rawJSON, &packets)
+	if err != nil {
+		return nil, err
+	}
+	return packets, nil
 }
 
 func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
@@ -955,7 +962,6 @@ func (g *gateway) reset(ctx context.Context) {
 			g.logger.Errorf("error stopping gateway")
 		}
 	}
-
 	if g.rstPin != nil {
 		err := resetGateway(ctx, g.rstPin, g.pwrPin)
 		if err != nil {
