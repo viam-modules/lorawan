@@ -39,9 +39,12 @@ import (
 
 // defining model names here to be reused in getNativeConfig.
 const (
-	oldModelName = "sx1302-gateway"
-	genericHat   = "sx1302-hat-generic"
-	waveshareHat = "sx1302-waveshare-hat"
+	oldModelName  = "sx1302-gateway"
+	genericHat    = "sx1302-hat-generic"
+	waveshareHat  = "sx1302-waveshare-hat"
+	SendPacketKey = "send_packet"
+	GetPacketsKey = "get_packets"
+	StopKey       = "stop"
 )
 
 // Error variables for validation and operations.
@@ -522,7 +525,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		}
 
 		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
-			"get_packets": true,
+			GetPacketsKey: true,
 		})
 		if err != nil {
 			g.logger.Error("failed to create command struct: %v", err)
@@ -893,11 +896,6 @@ func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// stop gateway hardware
-	if err := lorahw.StopGateway(); err != nil {
-		g.logger.Error("error stopping gateway: %v", err)
-	}
-
 	// Close process before workers to avoid a hang on shutdown.
 	g.closeProcess()
 
@@ -917,7 +915,12 @@ func (g *gateway) Close(ctx context.Context) error {
 }
 
 func (g *gateway) closeProcess() {
-	// Close pipe files before workers to avoid a hang on shutdown.
+	if g.process != nil {
+		if err := g.process.Stop(); err != nil {
+			g.logger.Errorf("error stopping process: %s", err.Error())
+		}
+	}
+
 	if g.pipeReader != nil {
 		if err := g.pipeReader.Close(); err != nil {
 			g.logger.Errorf("error closing log reader: %s", err)
@@ -933,18 +936,26 @@ func (g *gateway) closeProcess() {
 			g.logger.Errorf("error closing client conn: %w", err)
 		}
 	}
-
-	if g.process != nil {
-		if err := g.process.Stop(); err != nil {
-			g.logger.Errorf("error stopping process: %s", err.Error())
-		}
-	}
 }
 
 func (g *gateway) reset(ctx context.Context) {
-	if err := lorahw.StopGateway(); err != nil {
-		g.logger.Error("error stopping gateway: %v", err)
+	if g.concentratorClient != nil {
+		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+			StopKey: true,
+		})
+		if err != nil {
+			g.logger.Error("failed to create command struct: %v", err)
+		}
+
+		req := &v1.DoCommandRequest{
+			Command: cmdStruct,
+		}
+
+		if _, err := g.concentratorClient.DoCommand(ctx, req); err != nil {
+			g.logger.Errorf("error stopping gateway")
+		}
 	}
+
 	if g.rstPin != nil {
 		err := resetGateway(ctx, g.rstPin, g.pwrPin)
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/viam-modules/gateway/gateway"
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/regions"
 	v1 "go.viam.com/api/common/v1"
@@ -116,7 +117,7 @@ func TestSensorServiceDoCommand(t *testing.T) {
 
 	t.Run("get_packets command", func(t *testing.T) {
 		cmd := map[string]interface{}{
-			"get_packets": true,
+			gateway.GetPacketsKey: true,
 		}
 		pbCmd, err := structpb.NewStruct(cmd)
 		test.That(t, err, test.ShouldBeNil)
@@ -145,7 +146,7 @@ func TestSensorServiceDoCommand(t *testing.T) {
 			"Payload":   []byte{0x01, 0x02, 0x03},
 		}
 		cmd := map[string]interface{}{
-			"send_packet": packet,
+			gateway.SendPacketKey: packet,
 		}
 		pbCmd, err := structpb.NewStruct(cmd)
 		test.That(t, err, test.ShouldBeNil)
@@ -161,7 +162,7 @@ func TestSensorServiceDoCommand(t *testing.T) {
 
 	t.Run("stop command", func(t *testing.T) {
 		cmd := map[string]interface{}{
-			"stop": true,
+			gateway.StopKey: true,
 		}
 		pbCmd, err := structpb.NewStruct(cmd)
 		test.That(t, err, test.ShouldBeNil)

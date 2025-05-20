@@ -62,7 +62,7 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
 	}
 
-	cmd := map[string]interface{}{"send_packet": txPktMap}
+	cmd := map[string]interface{}{SendPacketKey: txPktMap}
 
 	cmdStruct, err := structpb.NewStruct(cmd)
 	if err != nil {

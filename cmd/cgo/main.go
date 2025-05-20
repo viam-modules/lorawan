@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/viam-modules/gateway/gateway"
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/regions"
 	v1 "go.viam.com/api/common/v1"
@@ -104,7 +105,7 @@ func parseAndValidateArguments() concentratorConfig {
 
 func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) (*v1.DoCommandResponse, error) {
 	cmd := req.GetCommand().AsMap()
-	if _, ok := cmd["get_packets"]; ok {
+	if _, ok := cmd[gateway.GetPacketsKey]; ok {
 		packets, err := lorahw.ReceivePackets()
 		if err != nil {
 			return nil, err
@@ -117,7 +118,7 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 		}
 		return &v1.DoCommandResponse{Result: pbRes}, nil
 	}
-	if packet, ok := cmd["send_packet"]; ok {
+	if packet, ok := cmd[gateway.SendPacketKey]; ok {
 		pkt, err := convertToTxPacket(packet.(map[string]interface{}))
 		if err != nil {
 			return nil, err
@@ -127,24 +128,13 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 			return nil, err
 		}
 	}
-	if _, ok := cmd["stop"]; ok {
+	if _, ok := cmd[gateway.StopKey]; ok {
 		err := lorahw.StopGateway()
 		if err != nil {
 			return nil, err
 		}
 	}
-
-	packets, err := lorahw.ReceivePackets()
-	if err != nil {
-		return nil, err
-	}
-
-	resp := map[string]interface{}{"packets": packets}
-	pbRes, err := protoutils.StructToStructPb(resp)
-	if err != nil {
-		return nil, err
-	}
-	return &v1.DoCommandResponse{Result: pbRes}, nil
+	return &v1.DoCommandResponse{}, nil
 }
 
 func convertToTxPacket(pktMap map[string]interface{}) (*lorahw.TxPacket, error) {
