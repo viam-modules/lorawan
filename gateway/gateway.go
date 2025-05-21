@@ -44,7 +44,8 @@ const (
 	waveshareHat  = "sx1302-waveshare-hat"
 	SendPacketKey = "send_packet"
 	GetPacketsKey = "get_packets"
-	StopKey       = "stop"
+	// the stop Docommand key tells the managed process to call stop on the gateway hardware.
+	StopKey = "stop"
 )
 
 // Error variables for validation and operations.
@@ -218,6 +219,8 @@ type gateway struct {
 	regionInfo regions.RegionInfo
 	region     regions.Region
 
+	// the concentratorClient is used to communicate
+	// with the grpc server started by the managed process.
 	concentratorClient pb.SensorServiceClient
 	conn               *grpc.ClientConn
 	process            pexec.ManagedProcess
