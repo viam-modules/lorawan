@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -13,7 +14,9 @@ import (
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	v1 "go.viam.com/api/common/v1"
 	"go.viam.com/utils"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -49,12 +52,40 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("error sending downlink: %w", ctx.Err())
 	}
 
-	err := lorahw.SendPacket(ctx, txPkt)
+	// needs to be in map form for protobuf
+	txPktMap, err := convertTxPktToMap(txPkt)
+	if err != nil {
+		return fmt.Errorf("failed to convert packet to map: %w", err)
+	}
+
+	cmd := map[string]interface{}{SendPacketKey: txPktMap}
+
+	cmdStruct, err := structpb.NewStruct(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create command struct: %w", err)
+	}
+
+	req := &v1.DoCommandRequest{
+		Command: cmdStruct,
+	}
+
+	_, err = g.concentratorClient.DoCommand(ctx, req)
 	if err != nil {
 		return err
 	}
-
 	return nil
+}
+
+func convertTxPktToMap(txPkt *lorahw.TxPacket) (map[string]interface{}, error) {
+	var txPktMap map[string]interface{}
+	b, err := json.Marshal(txPkt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal txPkt: %w", err)
+	}
+	if err := json.Unmarshal(b, &txPktMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
+	}
+	return txPktMap, nil
 }
 
 // According to lorawan docs, downlinks have a +/- 20 us error window, so regular sleep would not be accurate enough.

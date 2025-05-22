@@ -6,8 +6,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -21,19 +23,29 @@ import (
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	v1 "go.viam.com/api/common/v1"
+	pb "go.viam.com/api/component/sensor/v1"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
+	"go.viam.com/utils/pexec"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // defining model names here to be reused in getNativeConfig.
 const (
-	oldModelName = "sx1302-gateway"
-	genericHat   = "sx1302-hat-generic"
-	waveshareHat = "sx1302-waveshare-hat"
+	oldModelName  = "sx1302-gateway"
+	genericHat    = "sx1302-hat-generic"
+	waveshareHat  = "sx1302-waveshare-hat"
+	SendPacketKey = "send_packet"
+	GetPacketsKey = "get_packets"
+	// the stop Docommand key tells the managed process to call stop on the gateway hardware.
+	StopKey = "stop"
 )
 
 // Error variables for validation and operations.
@@ -49,6 +61,7 @@ var (
 	errNoDevice           = errors.New("received packet from unknown device")
 	errInvalidMIC         = errors.New("invalid MIC")
 	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
+	errTimedOut           = errors.New("timed out waiting for gateway to start")
 )
 
 // constants for MHDRs of different message types.
@@ -81,10 +94,13 @@ var sfToSNRMin = map[int]float64{
 	12: -12.5,
 }
 
-// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
-// started for each gateway. If the gateway build errors and needs to build again, we only want to start
-// the logging routine once.
-var loggingRoutineStarted = make(map[string]bool)
+type comType int
+
+// enum for com types.
+const (
+	spi comType = iota
+	usb
+)
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
 
@@ -137,11 +153,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
-
 	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
 		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
-
 	if conf.Bus != nil && conf.Path != "" {
 		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
@@ -152,6 +166,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 			return nil, err
 		}
 	}
+
 	if len(conf.BoardName) == 0 {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
@@ -185,10 +200,7 @@ type gateway struct {
 	logger logging.Logger
 	mu     sync.Mutex
 
-	// Using two wait groups so we can stop the receivingWorker at reconfigure
-	// but keep the loggingWorker running.
-	loggingWorker   *utils.StoppableWorkers
-	receivingWorker *utils.StoppableWorkers
+	workers *utils.StoppableWorkers
 
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
@@ -199,11 +211,19 @@ type gateway struct {
 	rstPin  board.GPIOPin
 	pwrPin  board.GPIOPin
 
-	logReader  *os.File
-	logWriter  *os.File
+	logReader  *bufio.Reader
+	pipeReader *io.PipeReader
+	pipeWriter *io.PipeWriter
+
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 	region     regions.Region
+
+	// the concentratorClient is used to communicate
+	// with the grpc server started by the managed process.
+	concentratorClient pb.SensorServiceClient
+	conn               *grpc.ClientConn
+	process            pexec.ManagedProcess
 }
 
 // NewGateway creates a new gateway.
@@ -266,6 +286,12 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.reset(ctx)
 	}
 
+	// workers and process are restarted during reconfigure
+	g.closeProcess()
+	if g.workers != nil {
+		g.workers.Stop()
+	}
+
 	cfg, err := getNativeConfig(conf)
 	if err != nil {
 		return err
@@ -275,9 +301,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if err != nil {
 		return err
 	}
-
-	// capture C log output
-	g.startCLogging()
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -322,22 +345,15 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	var path string
-	var comType lorahw.ComType
+	// defaults
+	path := "/dev/spidev0.0"
+	comType := spi
 
-	// no bus or path provided, use default spi bus 0
-	if cfg.Bus == nil && cfg.Path == "" {
-		comType = lorahw.SPI
-		path = "/dev/spidev0.0"
-	}
-
-	// user provided a spi bus
 	if cfg.Bus != nil {
 		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
-		comType = lorahw.SPI
+		comType = spi
 	}
 
-	// user provided a serial device path
 	if cfg.Path != "" {
 		// Resolve the symlink
 		if strings.Contains(cfg.Path, "by-path") || strings.Contains(cfg.Path, "by-id") {
@@ -348,79 +364,158 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 			cfg.Path = resolvedPath
 		}
 		path = cfg.Path
-		comType = lorahw.USB
+		comType = usb
 	}
+
+	args := []string{
+		fmt.Sprintf("--comType=%d", comType),
+		"--path=" + path,
+		fmt.Sprintf("--region=%d", region),
+	}
+
+	// find cgo exe
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("error getting current directory: %w", err)
+	}
+	cgoexe := filepath.Join(dir, "cgo")
+
+	_, err = os.Stat(cgoexe)
+	if err != nil {
+		return fmt.Errorf("error getting the cgo exe: %w", err)
+	}
+
+	logReader, logWriter := io.Pipe()
+	bufferedLogReader := bufio.NewReader(logReader)
+	g.pipeReader = logReader
+	g.pipeWriter = logWriter
+	g.logReader = bufferedLogReader
+
+	config := pexec.ProcessConfig{
+		ID:        g.Name().Name,
+		Name:      cgoexe,
+		Args:      args,
+		Log:       false,
+		LogWriter: logWriter,
+	}
+
 	var comTypeString string
 	switch comType {
-	case lorahw.SPI:
+	case spi:
 		comTypeString = "SPI"
-	case lorahw.USB:
+	case usb:
 		comTypeString = "USB"
 	}
 
 	g.logger.Infof("starting %s gateway connected to path %s", comTypeString, path)
 
-	if err := lorahw.SetupGateway(comType, path, region); err != nil {
-		return fmt.Errorf("failed to set up the gateway: %w", err)
+	process := pexec.NewManagedProcess(config, g.logger)
+	g.process = process
+
+	if err := process.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start binary: %w", err)
 	}
 
+	// This call blocks until the process prints the start up logs
+	port, err := g.watchLogs(ctx)
+	if err != nil {
+		return err
+	}
+
+	g.logger.Debugf("connecting to port: %s\n", port)
+	target := "localhost:" + port
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("error connecting to server: %w", err)
+	}
+
+	g.logger.Info("connected to concentrator client")
+	g.conn = conn
+	g.concentratorClient = pb.NewSensorServiceClient(conn)
 	g.started = true
-	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
+	g.workers.Add(g.receivePackets)
+
 	return nil
 }
 
-// startCLogging starts the goroutine to capture C logs into the logger.
-// If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging() {
-	loggingState, ok := loggingRoutineStarted[g.Name().Name]
-	if !ok || !loggingState {
-		g.logger.Debug("Starting c logger background routine")
-		stdoutR, stdoutW, err := os.Pipe()
-		if err != nil {
-			g.logger.Errorf("unable to create pipe for C logs")
-			return
+// watchLogs watches for startup logs and signals when the managed process has started.
+// After startup it continues filtering the logs from the managed process.
+func (g *gateway) watchLogs(ctx context.Context) (string, error) {
+	cancelCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var port string
+
+	// Spawn goroutine to close reader when ctx times out
+	// Need to do this because ReadString blocks until
+	// there is a new line or underlying reader is closed
+	go func() {
+		<-cancelCtx.Done()
+		if errors.Is(cancelCtx.Err(), context.DeadlineExceeded) {
+			if err := g.pipeReader.Close(); err != nil {
+				g.logger.Warnf("error closing reader: %w", err)
+			}
 		}
-		g.logReader = stdoutR
-		g.logWriter = stdoutW
+	}()
 
-		// Redirect C's stdout to the write end of the pipe
-		lorahw.RedirectLogsToPipe(g.logWriter.Fd())
-		scanner := bufio.NewScanner(g.logReader)
+	for {
+		select {
+		case <-cancelCtx.Done():
+			return "", errTimedOut
+		default:
+		}
+		line, err := g.logReader.ReadString('\n')
+		if err != nil {
+			g.logger.Warnf("error reading log line: %s", err.Error())
+		}
+		g.filterLog(line)
 
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
-		loggingRoutineStarted[g.Name().Name] = true
+		if strings.Contains(line, "Server successfully started:") && port == "" {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				port = strings.TrimSpace(parts[1])
+				g.logger.Debugf("Captured port: %s", port)
+			}
+		}
+
+		if strings.Contains(line, "done setting up gateway") && port != "" {
+			g.logger.Debug("successfully initialized gateway")
+			// Keep reading logs in the background.
+			g.workers = utils.NewBackgroundStoppableWorkers(g.readLogs)
+			return port, nil
+		}
 	}
 }
 
-// captureOutput is a background routine to capture C's stdout and log to the module's logger.
-// This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
-	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	lorahw.DisableBuffering()
-
-	// loop to read lines from the scanner and log them
+func (g *gateway) readLogs(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			if scanner.Scan() {
-				line := scanner.Text()
-				switch {
-				case strings.Contains(line, "STANDBY_RC mode"):
-					// The error setting standby_rc mode indicates a hardware initiaization failure
-					// add extra log to instruct user what to do.
-					g.logger.Error(line)
-					g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
-				case strings.Contains(line, "ERROR"):
-					g.logger.Error(line)
-				case strings.Contains(line, "WARNING"):
-					g.logger.Warn(line)
-				default:
-					g.logger.Debug(line)
-				}
-			}
 		}
+		line, err := g.logReader.ReadString('\n')
+		if err != nil {
+			g.logger.Warnf("error reading log line: %s", err.Error())
+		}
+		g.filterLog(line)
+	}
+}
+
+// captureOutput is a background routine to capture C's stdout and log to the module's logger.
+// This is necessary because the sx1302 library only uses printf to report errors.
+func (g *gateway) filterLog(line string) {
+	switch {
+	case strings.Contains(line, "STANDBY_RC mode"):
+		// The error setting standby_rc mode indicates a hardware initiaization failure
+		// add extra log to instruct user what to do.
+		g.logger.Error(line)
+		g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+	case strings.Contains(line, "ERROR"):
+		g.logger.Error(line)
+	case strings.Contains(line, "WARNING"):
+		g.logger.Warn(line)
+	default:
+		g.logger.Debug(line)
 	}
 }
 
@@ -432,10 +527,32 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 
-		packets, err := lorahw.ReceivePackets()
+		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+			GetPacketsKey: true,
+		})
 		if err != nil {
-			g.logger.Errorf("error receiving lora packet: %w", err)
-			continue
+			g.logger.Error("failed to create command struct: %v", err)
+		}
+
+		req := &v1.DoCommandRequest{
+			Command: cmdStruct,
+		}
+
+		resp, err := g.concentratorClient.DoCommand(ctx, req)
+		if err != nil {
+			g.logger.Errorf("error calling docommand: %v", err)
+		}
+
+		data := resp.GetResult().AsMap()
+
+		rawPackets, ok := data["packets"]
+		if !ok {
+			g.logger.Errorf("docommand did not return packets")
+		}
+
+		packets, err := convertToRxPackets(rawPackets)
+		if err != nil {
+			g.logger.Errorf("failed to convert packet to struct")
 		}
 
 		if len(packets) == 0 {
@@ -476,6 +593,20 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			g.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate)
 		}
 	}
+}
+
+func convertToRxPackets(rawPackets any) ([]lorahw.RxPacket, error) {
+	rawJSON, err := json.Marshal(rawPackets)
+	if err != nil {
+		return nil, err
+	}
+
+	var packets []lorahw.RxPacket
+	err = json.Unmarshal(rawJSON, &packets)
+	if err != nil {
+		return nil, err
+	}
+	return packets, nil
 }
 
 func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
@@ -774,39 +905,65 @@ func convertToBytes(key interface{}) ([]byte, error) {
 func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.reset(ctx)
 
-	if g.loggingWorker != nil {
-		if g.logReader != nil {
-			if err := g.logReader.Close(); err != nil {
-				g.logger.Errorf("error closing log reader: %s", err)
-			}
-		}
-		if g.logWriter != nil {
-			if err := g.logWriter.Close(); err != nil {
-				g.logger.Errorf("error closing log writer: %s", err)
-			}
-		}
-		g.loggingWorker.Stop()
-		delete(loggingRoutineStarted, g.Name().Name)
+	// Close process before workers to avoid a hang on shutdown.
+	g.closeProcess()
+
+	if g.workers != nil {
+		g.workers.Stop()
 	}
 
 	if g.db != nil {
 		if err := g.db.Close(); err != nil {
-			g.logger.Errorf("error closing data db: %s", err)
+			g.logger.Errorf("error closing data db: %w", err)
 		}
 	}
+
+	g.started = false
 
 	return nil
 }
 
-func (g *gateway) reset(ctx context.Context) {
-	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
-	if g.receivingWorker != nil {
-		g.receivingWorker.Stop()
+func (g *gateway) closeProcess() {
+	if g.process != nil {
+		if err := g.process.Stop(); err != nil {
+			g.logger.Errorf("error stopping process: %s", err.Error())
+		}
 	}
-	if err := lorahw.StopGateway(); err != nil {
-		g.logger.Error("error stopping gateway: %v", err)
+
+	if g.pipeReader != nil {
+		if err := g.pipeReader.Close(); err != nil {
+			g.logger.Errorf("error closing log reader: %s", err)
+		}
+	}
+	if g.pipeWriter != nil {
+		if err := g.pipeWriter.Close(); err != nil {
+			g.logger.Errorf("error closing log writer: %s", err)
+		}
+	}
+	if g.conn != nil {
+		if err := g.conn.Close(); err != nil {
+			g.logger.Errorf("error closing client conn: %w", err)
+		}
+	}
+}
+
+func (g *gateway) reset(ctx context.Context) {
+	if g.concentratorClient != nil {
+		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+			StopKey: true,
+		})
+		if err != nil {
+			g.logger.Error("failed to create command struct: %v", err)
+		}
+
+		req := &v1.DoCommandRequest{
+			Command: cmdStruct,
+		}
+
+		if _, err := g.concentratorClient.DoCommand(ctx, req); err != nil {
+			g.logger.Errorf("error stopping gateway")
+		}
 	}
 	if g.rstPin != nil {
 		err := resetGateway(ctx, g.rstPin, g.pwrPin)

@@ -268,7 +268,7 @@ func (n *Node) validateGateway(ctx context.Context, deps resource.Dependencies) 
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("failed to validate the gateway")
 	}
 	re, ok := retVal.(float64)
 	if !ok {

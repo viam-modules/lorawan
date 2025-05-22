@@ -16,11 +16,6 @@ func TestParseErrorCode(t *testing.T) {
 		expected error
 	}{
 		{
-			name:     "invalid SPI bus error",
-			errCode:  1,
-			expected: errInvalidSpiBus,
-		},
-		{
 			name:     "board config error",
 			errCode:  2,
 			expected: errBoardConfig,
@@ -97,15 +92,12 @@ func TestReceivePackets(t *testing.T) {
 }
 
 func TestSetupGateway(t *testing.T) {
+	testPath := "/dev/spidev0.0"
 	// Test successful case
-	err := SetupGateway(0, "/dev/spidev0.0", regions.US)
+	err := SetupGateway(1, testPath, regions.US)
 	test.That(t, err, test.ShouldBeNil)
 
 	// unspecifed region will not error
-	err = SetupGateway(0, "/dev/spidev0.0", regions.Unspecified)
-	test.That(t, err, test.ShouldBeNil)
-
-	// Test
-	err = SetupGateway(1, "/dev/ttyACM0", regions.US)
+	err = SetupGateway(1, testPath, regions.Unspecified)
 	test.That(t, err, test.ShouldBeNil)
 }

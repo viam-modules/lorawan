@@ -38,7 +38,7 @@ int set_up_gateway(int com_type, char* path, int region) {
     boardconf.lorawan_public = true;
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
-    boardconf.com_type = com_type; // 0 is spi 1 is USB
+    boardconf.com_type = com_type;
 
     strncpy(boardconf.com_path, path, sizeof boardconf.com_path);
     // add null terminator
@@ -164,11 +164,8 @@ void disable_buffering() {
     setbuf(stdout, NULL);
 }
 
-#ifdef TESTING
-void redirect_to_pipe(int fd) {
-    // Mock implementation for testing - does nothing
-}
 
+#ifdef TESTING
 int send(struct lgw_pkt_tx_s* packet) {
     // for testing, return 0 - sucesssful
     return 0;
@@ -180,7 +177,7 @@ int start_gateway() {
 }
 
 int receive(struct lgw_pkt_rx_s* packet) {
-    // testing - fill the packet with test values
+    // for testing - fill the packet with test values
     packet->size = 3;
     uint8_t payload[3] = {0x01, 0x02, 0x03};
     memcpy(packet->payload, payload, packet->size);
@@ -197,11 +194,6 @@ int get_status(uint8_t rf, uint8_t* status) {
 }
 
 #else
-void redirect_to_pipe(int fd) {
-    fflush(stdout);          // Flush anything in the current stdout buffer
-    dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
-}
-
 int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }

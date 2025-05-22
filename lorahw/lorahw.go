@@ -26,7 +26,6 @@ import (
 
 // Error variables for gateway setup errors
 var (
-	errInvalidSpiBus          = errors.New("invalid SPI bus")
 	errBoardConfig            = errors.New("error setting the board config")
 	errRadio0Config           = errors.New("error setting the radio frequency config for radio 0")
 	errRadio1Config           = errors.New("error setting the radio frequency config for radio 1")
@@ -34,15 +33,6 @@ var (
 	errLoraStdChannel         = errors.New("error configuring the lora STD channel")
 	errTxGainSettings         = errors.New("error configuring the tx gain settings")
 	errGatewayStart           = errors.New("error starting the gateway")
-)
-
-// ComType defines connection type to the concentrator.
-type ComType int
-
-// enum for com types
-const (
-	SPI ComType = iota
-	USB
 )
 
 // SendPacket sends a lora packet using the sx1302 concentrator
@@ -117,7 +107,7 @@ type RxPacket struct {
 }
 
 // SetupGateway initializes the gateway hardware
-func SetupGateway(comType ComType, path string, region regions.Region) error {
+func SetupGateway(comType int, path string, region regions.Region) error {
 	errCode := C.set_up_gateway(C.int(comType), C.CString(path), C.int(region))
 	if errCode != 0 {
 		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
@@ -177,11 +167,6 @@ func ReceivePackets() ([]RxPacket, error) {
 	return result, nil
 }
 
-// RedirectLogsToPipe redirects C logs to a pipe
-func RedirectLogsToPipe(fd uintptr) {
-	C.redirect_to_pipe(C.int(fd))
-}
-
 // DisableBuffering disables buffering on C stdout
 func DisableBuffering() {
 	C.disable_buffering()
@@ -189,8 +174,6 @@ func DisableBuffering() {
 
 func parseErrorCode(errCode int) error {
 	switch errCode {
-	case 1:
-		return errInvalidSpiBus
 	case 2:
 		return errBoardConfig
 	case 3:

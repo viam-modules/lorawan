@@ -51,18 +51,18 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 	if len(payload) != 23 {
 		return joinRequest{}, nil, errInvalidLength
 	}
-	var joinRequest joinRequest
+	var jr joinRequest
 
 	// everything in the join request payload is little endian
-	joinRequest.joinEUI = payload[1:9]
-	joinRequest.devEUI = payload[9:17]
-	joinRequest.devNonce = payload[17:19]
-	joinRequest.mic = payload[19:23]
+	jr.joinEUI = payload[1:9]
+	jr.devEUI = payload[9:17]
+	jr.devNonce = payload[17:19]
+	jr.mic = payload[19:23]
 
 	matched := &node.Node{}
 
 	// device.devEUI is in big endian - reverse to compare and find device.
-	devEUIBE := reverseByteArray(joinRequest.devEUI)
+	devEUIBE := reverseByteArray(jr.devEUI)
 
 	// match the dev eui to gateway device
 	for _, device := range g.devices {
@@ -73,15 +73,15 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 
 	if matched.NodeName == "" {
 		g.logger.Debugf("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
-		return joinRequest, nil, errNoDevice
+		return joinRequest{}, nil, errNoDevice
 	}
 
 	err := validateMIC(types.AES128Key(matched.AppKey), payload)
 	if err != nil {
-		return joinRequest, nil, err
+		return joinRequest{}, nil, err
 	}
 
-	return joinRequest, matched, nil
+	return jr, matched, nil
 }
 
 // Format of Join Accept message:
