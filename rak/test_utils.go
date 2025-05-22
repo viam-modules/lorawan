@@ -2,6 +2,7 @@ package rak
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -49,6 +50,7 @@ func createTestrak(t *testing.T) *rak7391 {
 		DecoderPath: testDecoderPath,
 		JoinType:    "OTAA",
 		DevEui:      testDevEUI,
+		FCntUp:      math.MaxUint16,
 	}
 	testDevices[testNodeName] = testNode
 

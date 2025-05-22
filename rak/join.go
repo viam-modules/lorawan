@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -35,7 +34,7 @@ func (r *rak7391) handleJoin(ctx context.Context, payload []byte, packetTime tim
 		return err
 	}
 
-	joinAccept, err := r.generateJoinAccept(ctx, jr, device, c)
+	joinAccept, err := r.generateJoinAccept(ctx, jr, device)
 	if err != nil {
 		return err
 	}
@@ -99,7 +98,7 @@ func (r *rak7391) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 // | MHDR | JOIN NONCE | NETID |   DEV ADDR  | DL | RX DELAY |   CFLIST   | MIC  |
 // | 1 B  |     3 B    |   3 B |     4 B     | 1B |    1B    |  0 or 16   | 4 B  |
 // https://lora-alliance.org/wp-content/uploads/2020/11/lorawan1.0.3.pdf page 35 for more info on join accept.
-func (r *rak7391) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node, c concentrator) ([]byte, error) {
+func (r *rak7391) generateJoinAccept(ctx context.Context, jr joinRequest, d *node.Node) ([]byte, error) {
 	// generate random join nonce.
 	jn, err := generateJoinNonce()
 	if err != nil {
@@ -141,10 +140,6 @@ func (r *rak7391) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	payload = append(payload, r.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
-	// enable 7-15 if using 2 concentraotrs in US
-	if len(r.concentrators) == 2 && r.region == regions.US {
-		r.regionInfo.CfList[1] = 0xFF
-	}
 	payload = append(payload, r.regionInfo.CfList...)
 
 	// generate MIC

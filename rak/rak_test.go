@@ -462,9 +462,8 @@ func TestClose(t *testing.T) {
 	}
 
 	g := &rak7391{
-		Named:   cfg.ResourceName().AsNamed(),
-		logger:  logging.NewTestLogger(t),
-		started: true,
+		Named:  cfg.ResourceName().AsNamed(),
+		logger: logging.NewTestLogger(t),
 	}
 	dataDirectory1 := t.TempDir()
 	err := g.setupSqlite(context.Background(), dataDirectory1)

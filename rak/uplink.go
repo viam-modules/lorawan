@@ -26,14 +26,16 @@ const (
 	Confirmed   uplinkType = "confirmed"
 )
 
-var errInvalidLength = errors.New("unexpected payload length")
-var errAlreadyParsed = errors.New("packet already parsed")
+var (
+	errInvalidLength = errors.New("unexpected payload length")
+	errAlreadyParsed = errors.New("packet already parsed")
+)
 
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c concentrator, freq int) (
+func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c concentrator) (
 	string, map[string]interface{}, error,
 ) {
 	// payload should be at least 13 bytes
@@ -51,8 +53,6 @@ func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		r.logger.Debugf("received packet from unknown device, ignoring")
 		return "", map[string]interface{}{}, errNoDevice
 	}
-
-	r.logger.Infof("FREQ IS %d", freq)
 
 	uplinkType := Unconfirmed
 	if phyPayload[0] == confirmedUplinkMHdr {

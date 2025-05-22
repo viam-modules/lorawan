@@ -2,6 +2,7 @@ package rak
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -11,15 +12,14 @@ import (
 	"go.viam.com/test"
 )
 
-func createUplinkData(devAddr, framePayload []byte) ([]byte, error) {
+func createUplinkData(fcnt uint16, devAddr, framePayload []byte) ([]byte, error) {
 	// Create the frame header
 	payload := []byte{unconfirmedUplinkMHdr}
 	payload = append(payload, reverseByteArray(devAddr)...)
 	// FCtrl: ADR enabled
 	payload = append(payload, 0x80)
-	// FCnt: 1 (little-endian)
-	fcnt := uint32(1)
-	fcntBytes := []byte{0x01, 0x00}
+	fcntBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(fcntBytes, fcnt)
 	payload = append(payload, fcntBytes...)
 	// FPort: 85
 	fport := byte(0x55)
@@ -29,7 +29,7 @@ func createUplinkData(devAddr, framePayload []byte) ([]byte, error) {
 	encrypted, err := crypto.EncryptUplink(
 		types.AES128Key(testAppSKey),
 		*types.MustDevAddr(testDeviceAddr),
-		fcnt,
+		uint32(fcnt),
 		framePayload,
 	)
 	if err != nil {
@@ -42,7 +42,7 @@ func createUplinkData(devAddr, framePayload []byte) ([]byte, error) {
 	mic, err := crypto.ComputeLegacyUplinkMIC(
 		types.AES128Key(testNwkSKey),
 		*types.MustDevAddr(testDeviceAddr),
-		fcnt,
+		uint32(fcnt),
 		payload,
 	)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestParseDataUplink(t *testing.T) {
 
 	c := concentrator{}
 
-	validPayload, err := createUplinkData(testDeviceAddr, plainText)
+	validPayload, err := createUplinkData(0, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test valid data uplink
@@ -104,7 +104,7 @@ func TestParseDataUplink(t *testing.T) {
 		0x00, 0xbe,
 	}
 
-	invalidPayload, err := createUplinkData(testDeviceAddr, invalidText)
+	invalidPayload, err := createUplinkData(1, testDeviceAddr, invalidText)
 	test.That(t, err, test.ShouldBeNil)
 
 	_, _, err = g.parseDataUplink(context.Background(), invalidPayload, time.Now(), 0, 0, c)
@@ -113,14 +113,14 @@ func TestParseDataUplink(t *testing.T) {
 
 	// Test unknown device
 	unknownAddr := []byte{0x1, 0x2, 0x3, 0x3}
-	unknownPayload, err := createUplinkData(unknownAddr, plainText)
+	unknownPayload, err := createUplinkData(2, unknownAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
 	_, _, err = g.parseDataUplink(context.Background(), unknownPayload, time.Now(), 0, 0, c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
 
 	// Test invalid MIC
-	validPayload, err = createUplinkData(testDeviceAddr, plainText)
+	validPayload, err = createUplinkData(3, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
 	validPayload[len(validPayload)-1] = 0x00
 	test.That(t, err, test.ShouldBeNil)
@@ -129,7 +129,7 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, err, test.ShouldBeError, errInvalidMIC)
 
 	// Test no NwkSKey
-	validPayload, err = createUplinkData(testDeviceAddr, plainText)
+	validPayload, err = createUplinkData(4, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
 	g.devices[testNodeName].NwkSKey = []byte{}
 	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0, c)
@@ -148,14 +148,22 @@ func TestParseDataUplink(t *testing.T) {
 	test.That(t, errors.Is(err, errInvalidLength), test.ShouldBeTrue)
 
 	// Test no frame payload
-	noFramePayload, err := createUplinkData(testDeviceAddr, []byte{})
+	noFramePayload, err := createUplinkData(5, testDeviceAddr, []byte{})
 	test.That(t, err, test.ShouldBeNil)
 	_, _, err = g.parseDataUplink(context.Background(), noFramePayload, time.Now(), 0, 0, c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "sent packet with no data")
 
+	// repeated fcntUp should error
+	payload, err := createUplinkData(5, testDeviceAddr, []byte{0x01, 0x04})
+	test.That(t, err, test.ShouldBeNil)
+	_, _, err = g.parseDataUplink(context.Background(), payload, time.Now(), 0, 0, c)
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, errAlreadyParsed)
+
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
+
 }
 
 func TestGetFOptsToSend(t *testing.T) {

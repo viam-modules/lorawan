@@ -126,10 +126,6 @@ type rak7391 struct {
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	logReader  *bufio.Reader
-	pipeReader *io.PipeReader
-	pipeWriter *io.PipeWriter
-
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 	region     regions.Region
@@ -138,11 +134,15 @@ type rak7391 struct {
 }
 
 type concentrator struct {
-	client  pb.SensorServiceClient
-	rstPin  board.GPIOPin
-	started bool
-	conn    *grpc.ClientConn
-	process pexec.ManagedProcess
+	client     pb.SensorServiceClient
+	rstPin     board.GPIOPin
+	started    bool
+	conn       *grpc.ClientConn
+	process    pexec.ManagedProcess
+	logReader  *bufio.Reader
+	pipeReader *io.PipeReader
+	pipeWriter *io.PipeWriter
+	workers    *utils.StoppableWorkers
 }
 
 // Model represents a lorawan gateway model.
@@ -233,14 +233,7 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		return err
 	}
 
-	for _, c := range r.concentrators {
-		if c.conn != nil {
-			c.conn.Close()
-		}
-		if c.process != nil {
-			c.process.Stop()
-		}
-	}
+	r.closeProcesses()
 
 	// maintain devices and lastReadings through reconfigure.
 	if r.devices == nil {
@@ -267,9 +260,6 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		r.regionInfo = regions.RegionInfoEU
 		r.region = regions.EU
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	r.servCancel = cancel
 
 	b, err := board.FromDependencies(deps, cfg.BoardName)
 	if err != nil {
@@ -351,6 +341,8 @@ func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin boar
 		return concentrator{}, fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
+	c := concentrator{rstPin: rstPin}
+
 	args := []string{
 		fmt.Sprintf("--comType=%d", comType),
 		"--path=" + path,
@@ -369,7 +361,10 @@ func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin boar
 	}
 
 	logReader, logWriter := io.Pipe()
-	bufferedLogReader := *bufio.NewReader(logReader)
+	bufferedLogReader := bufio.NewReader(logReader)
+	c.pipeWriter = logWriter
+	c.pipeReader = logReader
+	c.logReader = bufferedLogReader
 
 	config := pexec.ProcessConfig{
 		ID:        id,
@@ -380,33 +375,15 @@ func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin boar
 	}
 
 	process := pexec.NewManagedProcess(config, r.logger)
+	c.process = process
 
 	if err := process.Start(ctx); err != nil {
 		return concentrator{}, fmt.Errorf("failed to start binary: %w", err)
 	}
 
-	var port string
-	for {
-		line, err := bufferedLogReader.ReadString('\n')
-		if err != nil {
-			return concentrator{}, fmt.Errorf("error reading line: %w", err)
-		}
-
-		r.filterLog(line)
-
-		if strings.Contains(line, "Server successfully started:") {
-			parts := strings.Split(line, ":")
-			if len(parts) == 2 {
-				port = strings.TrimSpace(parts[1])
-				r.logger.Debugf("Captured port:", port)
-				// break
-			}
-		}
-
-		if strings.Contains(line, "done setting up gateway") {
-			r.logger.Debugf("successfully initialized gateway")
-			break
-		}
+	port, err := c.watchLogs(ctx, r.logger)
+	if err != nil {
+		return concentrator{}, err
 	}
 
 	r.logger.Debugf("connecting to port: %s\n", port)
@@ -418,12 +395,9 @@ func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin boar
 
 	r.logger.Info("connected to client")
 
-	c := concentrator{rstPin: rstPin}
-
 	c.conn = conn
 	c.client = pb.NewSensorServiceClient(conn)
 	c.started = true
-	c.process = process
 	return c, nil
 }
 
@@ -704,9 +678,8 @@ func (r *rak7391) Close(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// stop gateway hardware
-	if err := lorahw.StopGateway(); err != nil {
-		r.logger.Error("error stopping gateway: %v", err)
+	if r.workers != nil {
+		r.workers.Stop()
 	}
 
 	if r.db != nil {
@@ -721,18 +694,22 @@ func (r *rak7391) Close(ctx context.Context) error {
 }
 
 func (r *rak7391) closeProcesses() {
-	// Close pipe files before workers to avoid a hang on shutdown.
-	if r.pipeReader != nil {
-		if err := r.pipeReader.Close(); err != nil {
-			r.logger.Errorf("error closing log reader: %s", err)
-		}
-	}
-	if r.pipeWriter != nil {
-		if err := r.pipeWriter.Close(); err != nil {
-			r.logger.Errorf("error closing log writer: %s", err)
-		}
-	}
 	for _, c := range r.concentrators {
+		// Close pipe files before workers to avoid a hang on shutdown.
+		if c.pipeReader != nil {
+			if err := c.pipeReader.Close(); err != nil {
+				r.logger.Errorf("error closing log reader: %s", err)
+			}
+		}
+		if c.pipeWriter != nil {
+			if err := c.pipeWriter.Close(); err != nil {
+				r.logger.Errorf("error closing log writer: %s", err)
+			}
+		}
+		if c.workers != nil {
+			c.workers.Stop()
+		}
+
 		if c.conn != nil {
 			if err := c.conn.Close(); err != nil {
 				r.logger.Errorf("error closing client conn: %w", err)
@@ -749,7 +726,7 @@ func (r *rak7391) closeProcesses() {
 
 // watchLogs watches for startup logs and signals when the managed process has started.
 // After startup it continues filtering the logs from the managed process.
-func (g *gateway) watchLogs(ctx context.Context) (string, error) {
+func (c *concentrator) watchLogs(ctx context.Context, logger logging.Logger) (string, error) {
 	cancelCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	var port string
@@ -760,8 +737,8 @@ func (g *gateway) watchLogs(ctx context.Context) (string, error) {
 	go func() {
 		<-cancelCtx.Done()
 		if errors.Is(cancelCtx.Err(), context.DeadlineExceeded) {
-			if err := g.pipeReader.Close(); err != nil {
-				g.logger.Warnf("error closing reader: %w", err)
+			if err := c.pipeReader.Close(); err != nil {
+				logger.Warnf("error closing reader: %w", err)
 			}
 		}
 	}()
@@ -772,57 +749,59 @@ func (g *gateway) watchLogs(ctx context.Context) (string, error) {
 			return "", errTimedOut
 		default:
 		}
-		line, err := g.logReader.ReadString('\n')
+		line, err := c.logReader.ReadString('\n')
 		if err != nil {
-			g.logger.Warnf("error reading log line: %s", err.Error())
+			logger.Warnf("error reading log line: %s", err.Error())
 		}
-		g.filterLog(line)
+		filterLog(line, logger)
 
-		if strings.Contains(line, "Server successfully started:") && port == "" {
+		if strings.Contains(line, "Server successfully started:") {
 			parts := strings.Split(line, ":")
 			if len(parts) == 2 {
 				port = strings.TrimSpace(parts[1])
-				g.logger.Debugf("Captured port: %s", port)
+				logger.Debugf("Captured port: %s", port)
 			}
 		}
 
 		if strings.Contains(line, "done setting up gateway") && port != "" {
-			g.logger.Debug("successfully initialized gateway")
+			logger.Debug("successfully initialized gateway")
 			// Keep reading logs in the background.
-			g.workers = utils.NewBackgroundStoppableWorkers(g.readLogs)
+			c.workers = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) {
+				c.readLogs(ctx, logger)
+			})
 			return port, nil
 		}
 	}
 }
 
-func (r *rak7391) readLogs(ctx context.Context) {
+func (c *concentrator) readLogs(ctx context.Context, logger logging.Logger) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		line, err := r.logReader.ReadString('\n')
+		line, err := c.logReader.ReadString('\n')
 		if err != nil {
-			r.logger.Warnf("error reading log line: %s", err.Error())
+			logger.Warnf("error reading log line: %s", err.Error())
 		}
-		r.filterLog(line)
+		filterLog(line, logger)
 	}
 }
 
-func (r *rak7391) filterLog(line string) {
+func filterLog(line string, logger logging.Logger) {
 	switch {
 	case strings.Contains(line, "STANDBY_RC mode"):
 		// The error setting standby_rc mode indicates a hardware initiaization failure
 		// add extra log to instruct user what to do
-		r.logger.Error(line)
-		r.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+		logger.Error(line)
+		logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
 	case strings.Contains(line, "ERROR"):
-		r.logger.Error(line)
+		logger.Error(line)
 	case strings.Contains(line, "WARNING"):
-		r.logger.Warn(line)
+		logger.Warn(line)
 	default:
-		r.logger.Debug(line)
+		logger.Debug(line)
 	}
 }
 
@@ -885,6 +864,11 @@ func (r *rak7391) receivePackets(ctx context.Context) {
 		}
 
 		for i, c := range r.concentrators {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			resp, err := c.client.DoCommand(ctx, req)
 			if err != nil {
 				r.logger.Errorf("error calling do command on client for concentrator %d: %v", i+1, err)
@@ -966,8 +950,8 @@ func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime t
 	case unconfirmedUplinkMHdr:
 		name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf, c)
 		if err != nil {
-			// don't log as error if it was a request from unknown device.
-			if errors.Is(errNoDevice, err) {
+			// don't log as error if it was a request from unknown device or duplicate packet.
+			if errors.Is(errNoDevice, err) || errors.Is(errAlreadyParsed, err) {
 				return
 			}
 			r.logger.Errorf("error parsing uplink message: %v", err)

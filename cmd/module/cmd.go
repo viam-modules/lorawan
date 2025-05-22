@@ -8,6 +8,7 @@ import (
 	"github.com/viam-modules/gateway/milesightct101"
 	"github.com/viam-modules/gateway/milesightem310"
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/rak"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"
@@ -23,5 +24,6 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: milesightem310.Model},
 		resource.APIModel{API: sensor.API, Model: milesightct101.Model},
 		resource.APIModel{API: sensor.API, Model: draginowqslb.Model},
+		resource.APIModel{API: sensor.API, Model: rak.Model},
 	)
 }
