@@ -9,6 +9,7 @@ import (
 	"github.com/viam-modules/gateway/dragino"
 	"github.com/viam-modules/gateway/node"
 	"go.viam.com/rdk/components/sensor"
+	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 )
@@ -16,6 +17,24 @@ import (
 const (
 	decoderURL = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/" +
 		"5a2855dbddba7977e06ba710f33fbee27de124e5/WQS-LB/WQS-LB_ChirpstackV4_Decoder.txt"
+	ecK10Key     = "EC_K10"
+	ecK10Min     = 20.
+	ecK10Max     = 20000.
+	ecK1Key      = "EC_K1"
+	ecK1Min      = 0.
+	ecK1Max      = 10000.
+	phMin        = 0.
+	phMax        = 14.
+	phKey        = "PH"
+	orpKey       = "ORP"
+	orpMin       = -1999.
+	orpMax       = 1999.
+	doKey        = "dissolved_oxygen"
+	doMin        = 0.
+	doMax        = 20.
+	turbidityKey = "turbidity"
+	turbidityMin = 0.1
+	turbidityMax = 10000.
 )
 
 var (
@@ -140,6 +159,12 @@ func (n *WQSLB) Close(ctx context.Context) error {
 	return n.node.Close(ctx)
 }
 
+// probeRange defines the valid ranges for a probe.
+type probeRange struct {
+	key      string
+	min, max float64
+}
+
 // Readings returns the node's readings.
 func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	reading, err := n.node.Readings(ctx, extra)
@@ -147,7 +172,32 @@ func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map
 		return map[string]interface{}{}, err
 	}
 
+	ranges := []probeRange{
+		{ecK10Key, ecK10Min, ecK10Max},
+		{ecK1Key, ecK1Min, ecK1Max},
+		{phKey, phMin, phMax},
+		{orpKey, orpMin, orpMax},
+		{doKey, doMin, doMax},
+		{turbidityKey, turbidityMin, turbidityMax},
+	}
+
+	for _, probeRange := range ranges {
+		reading = sanitizeReading(reading, extra, probeRange)
+	}
+
 	return reading, nil
+}
+
+func sanitizeReading(reading, extra map[string]interface{}, limits probeRange) map[string]interface{} {
+	if val, ok := reading[limits.key].(float64); ok && (val > limits.max || val < limits.min) {
+		// remove reading if from data capture
+		if extra[data.FromDMString] == true {
+			delete(reading, limits.key)
+		} else {
+			reading[limits.key] = "INVALID"
+		}
+	}
+	return reading
 }
 
 // DoCommand implements the DoCommand interface.
