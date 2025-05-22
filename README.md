@@ -145,7 +145,7 @@ Example OTAA node configuration:
 ```json
 {
   "join_type": "OTAA",
-  "decoder_path": <string /path/to/decoder.js>,
+  "decoder_path": <string>,
   "dev_eui": <string>,
   "app_key": <string>,
   "uplink_interval_mins": 10,
@@ -158,7 +158,7 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "decoder_path": <string /path/to/decoder.js>,
+  "decoder_path": <string>,
   "dev_addr": <string>,
   "app_s_key": <string>,
   "network_s_key": <string>,
@@ -172,7 +172,7 @@ Example ABP node configuration:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| decoder_path | string | yes | - | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
+| decoder_path | string | yes | - | Path or URL to the payload decoder script. If providing path, it should be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
 | join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP"). |
 | uplink_interval_mins | float64 | yes | - | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
 | gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
