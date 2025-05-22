@@ -17,6 +17,10 @@ import (
 const (
 	decoderURL = "https://raw.githubusercontent.com/dragino/dragino-end-node-decoder/" +
 		"5a2855dbddba7977e06ba710f33fbee27de124e5/WQS-LB/WQS-LB_ChirpstackV4_Decoder.txt"
+
+	// Ranges for each probe were found in the user manual:
+	// https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20LoRaWAN%20End%20Nodes
+	// /WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/
 	ecK10Key     = "EC_K10"
 	ecK10Min     = 20.
 	ecK10Max     = 20000.
@@ -36,6 +40,15 @@ const (
 	turbidityMin = 0.1
 	turbidityMax = 10000.
 )
+
+var ProbeRanges = []probeRange{
+	{ecK10Key, ecK10Min, ecK10Max},
+	{ecK1Key, ecK1Min, ecK1Max},
+	{phKey, phMin, phMax},
+	{orpKey, orpMin, orpMax},
+	{doKey, doMin, doMax},
+	{turbidityKey, turbidityMin, turbidityMax},
+}
 
 var (
 	// Model represents the WQS-LB sensor model.
@@ -172,16 +185,7 @@ func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map
 		return map[string]interface{}{}, err
 	}
 
-	ranges := []probeRange{
-		{ecK10Key, ecK10Min, ecK10Max},
-		{ecK1Key, ecK1Min, ecK1Max},
-		{phKey, phMin, phMax},
-		{orpKey, orpMin, orpMax},
-		{doKey, doMin, doMax},
-		{turbidityKey, turbidityMin, turbidityMax},
-	}
-
-	for _, probeRange := range ranges {
+	for _, probeRange := range ProbeRanges {
 		reading = sanitizeReading(reading, extra, probeRange)
 	}
 
@@ -191,7 +195,7 @@ func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map
 func sanitizeReading(reading, extra map[string]interface{}, limits probeRange) map[string]interface{} {
 	if val, ok := reading[limits.key].(float64); ok && (val > limits.max || val < limits.min) {
 		// remove reading if from data capture
-		if extra[data.FromDMString] == true {
+		if extra != nil && extra[data.FromDMString] == true {
 			delete(reading, limits.key)
 		} else {
 			reading[limits.key] = "INVALID"

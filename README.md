@@ -292,8 +292,8 @@ This command will send a generic downlink payload to the gateway. the string is 
 ```
 
 ## Configure your dragino sensor
-
 If using a WSQ-LB, be sure to calibrate the sensor using the instructions below.
+Submerge the WQS-LB probes in liquid to obtain valid readings.
 
 Example OTAA node configuration:
 
