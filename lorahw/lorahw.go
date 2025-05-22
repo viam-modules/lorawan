@@ -104,6 +104,7 @@ type RxPacket struct {
 	Payload  []byte
 	SNR      float64
 	DataRate int
+	Freq     int
 }
 
 // SetupGateway initializes the gateway hardware
@@ -153,6 +154,7 @@ func ReceivePackets() ([]RxPacket, error) {
 			Size:     uint(packets[i].size),
 			SNR:      float64(packets[i].snr),
 			DataRate: int(packets[i].datarate),
+			Freq:     int(packets[i].freq_hz),
 		}
 
 		// Convert payload

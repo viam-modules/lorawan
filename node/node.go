@@ -193,6 +193,8 @@ type Node struct {
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval
+	LastDevNonce       []byte  // unique dev nonce sent in the join request
+	FCntUp             uint16  // counter of uplinks sent in uplink messages
 
 	Workers *utils.StoppableWorkers
 }
@@ -312,7 +314,7 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		// no readings available yet
 		if !ok {
 			// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
-			if extra != nil && extra[data.FromDMString] == true {
+			if extra[data.FromDMString] == true {
 				return map[string]interface{}{}, data.ErrNoCaptureToStore
 			}
 			return NoReadings, nil

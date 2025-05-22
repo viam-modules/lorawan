@@ -11,6 +11,11 @@ const int MAX_RX_PKT = 10;
 #define US_RADIO_0_FREQ     902700000
 #define US_RADIO_1_FREQ     903700000
 
+
+#define US_BASE_FREQ        902300000
+#define US_RADIO_0_OFFSET   400000
+#define US_RADIO_1_OFFSET   1600000
+
 #define EU_RADIO_0_FREQ     867500000
 #define EU_RADIO_1_FREQ     868500000
 
@@ -49,14 +54,17 @@ int set_up_gateway(int com_type, char* path, int region) {
 
     int radio0_freq;
     int radio1_freq;
+    int base_freq;
     switch(region) {
         case 2:
             radio0_freq = EU_RADIO_0_FREQ;
             radio1_freq = EU_RADIO_1_FREQ;
             break;
         default:
-            radio0_freq = US_RADIO_0_FREQ;
-            radio1_freq = US_RADIO_1_FREQ;
+            // calculate the base frequency
+            base_freq = US_BASE_FREQ + (base_channel * 200000);
+            radio0_freq = base_freq + US_RADIO_0_OFFSET;
+            radio1_freq = base_freq + US_RADIO_1_OFFSET;
             break;
     }
 
