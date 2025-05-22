@@ -41,7 +41,7 @@ const (
 	turbidityMax = 10000.
 )
 
-var ProbeRanges = []probeRange{
+var probeRanges = []probeRange{
 	{ecK10Key, ecK10Min, ecK10Max},
 	{ecK1Key, ecK1Min, ecK1Max},
 	{phKey, phMin, phMax},
@@ -185,7 +185,7 @@ func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map
 		return map[string]interface{}{}, err
 	}
 
-	for _, probeRange := range ProbeRanges {
+	for _, probeRange := range probeRanges {
 		reading = sanitizeReading(reading, extra, probeRange)
 	}
 
