@@ -268,7 +268,7 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if cfg.Concentrator1 != nil {
-		if err := r.createConcentrator(ctx, "rak2", rak7391ResetPin1, b, cfg.Concentrator1); err != nil {
+		if err := r.createConcentrator(ctx, "rak1", rak7391ResetPin1, b, cfg.Concentrator1); err != nil {
 			return err
 		}
 		r.logger.Debugf("created concentrator 1")
@@ -320,6 +320,10 @@ func (r *rak7391) createConcentrator(ctx context.Context,
 	err = resetGateway(ctx, rstPin, nil)
 	if err != nil {
 		return fmt.Errorf("error initializing the gateway: %w", err)
+	}
+
+	switch id {
+		case "rak1"
 	}
 
 	args := []string{

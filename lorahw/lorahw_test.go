@@ -94,10 +94,10 @@ func TestReceivePackets(t *testing.T) {
 func TestSetupGateway(t *testing.T) {
 	testPath := "/dev/spidev0.0"
 	// Test successful case
-	err := SetupGateway(1, testPath, regions.US)
+	err := SetupGateway(1, testPath, regions.US, 0)
 	test.That(t, err, test.ShouldBeNil)
 
 	// unspecifed region will not error
-	err = SetupGateway(1, testPath, regions.Unspecified)
+	err = SetupGateway(1, testPath, regions.Unspecified, 0)
 	test.That(t, err, test.ShouldBeNil)
 }
