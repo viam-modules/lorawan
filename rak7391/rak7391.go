@@ -1,4 +1,4 @@
-// package rak7391 provides a model for the rak7391
+// Package rak7391 provides a model for the rak7391
 package rak7391
 
 import (
