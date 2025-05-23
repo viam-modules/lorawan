@@ -147,7 +147,7 @@ type concentrator struct {
 }
 
 // Model represents a lorawan gateway model.
-var Model = node.LorawanFamily.WithModel(string("rak"))
+var Model = node.LorawanFamily.WithModel(string("rak7391"))
 
 func init() {
 	resource.RegisterComponent(

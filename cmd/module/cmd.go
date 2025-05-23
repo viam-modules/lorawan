@@ -24,6 +24,6 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: milesightem310.Model},
 		resource.APIModel{API: sensor.API, Model: milesightct101.Model},
 		resource.APIModel{API: sensor.API, Model: draginowqslb.Model},
-		resource.APIModel{API: sensor.API, Model: rak.Model},
+		resource.APIModel{API: sensor.API, Model: rak7391.Model},
 	)
 }
