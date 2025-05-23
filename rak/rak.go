@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -130,7 +131,8 @@ type rak7391 struct {
 	regionInfo regions.RegionInfo
 	region     regions.Region
 
-	concentrators []concentrator
+	concentrators []*concentrator
+	cgoPath       string
 }
 
 type concentrator struct {
@@ -245,7 +247,7 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if r.concentrators == nil {
-		r.concentrators = make([]concentrator, 0)
+		r.concentrators = make([]*concentrator, 0)
 	}
 
 	region := regions.GetRegion(cfg.Region)
@@ -267,97 +269,79 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if cfg.Concentrator1 != nil {
-		pin, err := b.GPIOPinByName(rak7391ResetPin1)
-		if err != nil {
+		if err := r.createConcentrator(ctx, "rak2", rak7391ResetPin1, b, cfg.Concentrator1); err != nil {
 			return err
 		}
-
-		var path string
-		var comType comType
-
-		// defaults if nothing configured
-		path = "/dev/spidev0.0"
-		if cfg.Concentrator1.Bus != nil {
-			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator1.Bus)
-			comType = spi
-		}
-
-		if cfg.Concentrator1.Path != "" {
-			path = cfg.Concentrator1.Path
-			comType = usb
-		}
-
-		c, err := r.createConcentrator(ctx, "rak1", pin, comType, path, region)
-		if err != nil {
-			return err
-		}
-
-		r.concentrators = append(r.concentrators, c)
-
 		r.logger.Debugf("created concentrator 1")
 	}
 
 	if cfg.Concentrator2 != nil {
-		r.logger.Debugf("creating concentrator 2")
-		pin, err := b.GPIOPinByName(rak7391ResetPin2)
-		if err != nil {
+		if err := r.createConcentrator(ctx, "rak2", rak7391ResetPin2, b, cfg.Concentrator2); err != nil {
 			return err
 		}
-
-		var path string
-		var comType comType
-
-		// defaults if nothing configured
-		path = "/dev/spidev0.0"
-		comType = spi
-
-		if cfg.Concentrator2.Bus != nil {
-			path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Concentrator2.Bus)
-			comType = spi
-		}
-
-		if cfg.Concentrator2.Path != "" {
-			path = cfg.Concentrator2.Path
-			comType = usb
-		}
-
-		c2, err := r.createConcentrator(ctx, "rak2", pin, comType, path, region)
-		if err != nil {
-			return err
-		}
-
-		r.concentrators = append(r.concentrators, c2)
 		r.logger.Debugf("created concentrator 2")
 	}
 	r.workers = utils.NewBackgroundStoppableWorkers(r.receivePackets)
 	return nil
 }
 
-func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin board.GPIOPin, comType comType, path string,
-	region regions.Region,
-) (concentrator, error) {
-	err := resetGateway(ctx, rstPin, nil)
+func (r *rak7391) createConcentrator(ctx context.Context,
+	id, restPinName string,
+	b board.Board,
+	cfg *ConcentratorConfig,
+) error {
+	rstPin, err := b.GPIOPinByName(restPinName)
 	if err != nil {
-		return concentrator{}, fmt.Errorf("error initializing the gateway: %w", err)
+		return err
+	}
+	c := concentrator{rstPin: rstPin}
+
+	// defaults if nothing configured
+	path := "/dev/spidev0.0"
+	comType := spi
+
+	if cfg.Bus != nil {
+		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
+		comType = spi
 	}
 
-	c := concentrator{rstPin: rstPin}
+	if cfg.Path != "" {
+		// Resolve the symlink
+		if strings.Contains(cfg.Path, "by-path") || strings.Contains(cfg.Path, "by-id") {
+			resolvedPath, err := filepath.EvalSymlinks(cfg.Path)
+			if err != nil {
+				return fmt.Errorf("failed to resolve symlink of path %s: %w", cfg.Path, err)
+			}
+			cfg.Path = resolvedPath
+		}
+		path = cfg.Path
+		comType = usb
+	}
+
+	err = resetGateway(ctx, rstPin, nil)
+	if err != nil {
+		return fmt.Errorf("error initializing the gateway: %w", err)
+	}
 
 	args := []string{
 		fmt.Sprintf("--comType=%d", comType),
 		"--path=" + path,
-		fmt.Sprintf("--region=%d", region),
+		fmt.Sprintf("--region=%d", r.region),
 	}
 
-	dir, err := os.Getwd()
-	if err != nil {
-		return concentrator{}, fmt.Errorf("error getting current directory: %w", err)
-	}
+	var cgoexe string
+	cgoexe = r.cgoPath
+	if r.cgoPath == "" {
+		dir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("error getting current directory: %w", err)
+		}
 
-	cgoexe := dir + "/cgo"
-	_, err = os.Stat(cgoexe)
-	if err != nil {
-		return concentrator{}, fmt.Errorf("error getting the cgo exe: %w", err)
+		cgoexe = dir + "/cgo"
+		_, err = os.Stat(cgoexe)
+		if err != nil {
+			return fmt.Errorf("error getting the cgo exe: %w", err)
+		}
 	}
 
 	logReader, logWriter := io.Pipe()
@@ -378,19 +362,19 @@ func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin boar
 	c.process = process
 
 	if err := process.Start(ctx); err != nil {
-		return concentrator{}, fmt.Errorf("failed to start binary: %w", err)
+		return fmt.Errorf("failed to start binary: %w", err)
 	}
 
 	port, err := c.watchLogs(ctx, r.logger)
 	if err != nil {
-		return concentrator{}, err
+		return err
 	}
 
 	r.logger.Debugf("connecting to port: %s\n", port)
 	target := "localhost:" + port
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return concentrator{}, fmt.Errorf("error connecting to server: %w", err)
+		return fmt.Errorf("error connecting to server: %w", err)
 	}
 
 	r.logger.Info("connected to client")
@@ -398,7 +382,8 @@ func (r *rak7391) createConcentrator(ctx context.Context, id string, rstPin boar
 	c.conn = conn
 	c.client = pb.NewSensorServiceClient(conn)
 	c.started = true
-	return c, nil
+	r.concentrators = append(r.concentrators, &c)
+	return nil
 }
 
 // Docommand provides extra functionality.
@@ -721,6 +706,7 @@ func (r *rak7391) closeProcesses() {
 				r.logger.Errorf("error stopping process: %s", err.Error())
 			}
 		}
+		c.started = false
 	}
 }
 
@@ -935,7 +921,7 @@ func (r *rak7391) receivePackets(ctx context.Context) {
 	}
 }
 
-func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int, c concentrator) {
+func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int, c *concentrator) {
 	// r *first byte is MHDR - specifies message type
 	switch payload[0] {
 	case joinRequestMHdr:

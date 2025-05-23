@@ -29,7 +29,7 @@ const (
 	dutyCycleCID  = 0x04
 )
 
-func (r *rak7391) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c concentrator) error {
+func (r *rak7391) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c *concentrator) error {
 	if len(payload) > 256 {
 		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 256 bytes", len(payload))
 	}

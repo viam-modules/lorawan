@@ -28,7 +28,7 @@ type joinRequest struct {
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (r *rak7391) handleJoin(ctx context.Context, payload []byte, packetTime time.Time, c concentrator) error {
+func (r *rak7391) handleJoin(ctx context.Context, payload []byte, packetTime time.Time, c *concentrator) error {
 	jr, device, err := r.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err

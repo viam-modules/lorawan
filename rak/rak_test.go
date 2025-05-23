@@ -1,17 +1,23 @@
 package rak
 
 import (
+	"bufio"
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 	"go.viam.com/utils/protoutils"
 )
@@ -455,24 +461,211 @@ func TestUpdateDeviceInfo(t *testing.T) {
 	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
 }
 
+func TestCreateConcentrator(t *testing.T) {
+	// Create test rak instance
+	r := createTestrak(t)
+
+	// Create mock board with inject
+	b := &inject.Board{}
+	rstPin := &inject.GPIOPin{}
+
+	// Setup mock pin behavior
+	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
+		return nil
+	}
+
+	// Setup mock board behavior
+	b.GPIOPinByNameFunc = func(name string) (board.GPIOPin, error) {
+		if name == rak7391ResetPin1 {
+			return rstPin, nil
+		}
+		return nil, fmt.Errorf("unknown pin %s", name)
+	}
+
+	// Create temp dir and binary for testing
+	dir, err := os.Getwd()
+	test.That(t, err, test.ShouldBeNil)
+	mockcgoPath := dir + "/../mockprocess/mock"
+
+	r.cgoPath = mockcgoPath
+
+	testBus := 1
+
+	tests := []struct {
+		name        string
+		config      *ConcentratorConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "SPI configuration",
+			config: &ConcentratorConfig{
+				Bus: &testBus,
+			},
+			expectError: false,
+		},
+		{
+			name: "USB configuration",
+			config: &ConcentratorConfig{
+				Path: "/dev/ttyUSB0",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pinName := rak7391ResetPin1
+			if tc.expectError {
+				pinName = "invalid-pin"
+			}
+
+			err := r.createConcentrator(context.Background(), "test-rak", pinName, b, tc.config)
+			test.That(t, err, test.ShouldBeNil)
+			test.That(t, len(r.concentrators), test.ShouldBeGreaterThan, 0)
+			test.That(t, r.concentrators[len(r.concentrators)-1].client, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].logReader, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].pipeReader, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].pipeWriter, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].started, test.ShouldBeTrue)
+
+			r.closeProcesses()
+		})
+	}
+}
+
+func TestWatchLogs(t *testing.T) {
+	logger := logging.NewTestLogger(t)
+	tests := []struct {
+		name          string
+		logLines      []string
+		expectPort    string
+		expectError   bool
+		expectedError error
+	}{
+		{
+			name: "successful startup",
+			logLines: []string{
+				"some initial log",
+				"Server successfully started:8080",
+				"configuring something",
+				"done setting up gateway",
+			},
+			expectPort:  "8080",
+			expectError: false,
+		},
+		{
+			name: "missing port information",
+			logLines: []string{
+				"some initial log",
+				"configuring something",
+				"done setting up gateway",
+			},
+			expectPort:    "",
+			expectError:   true,
+			expectedError: errTimedOut,
+		},
+		{
+			name: "missing done setup message",
+			logLines: []string{
+				"some initial log",
+				"Server successfully started:8080",
+				"configuring something",
+			},
+			expectPort:    "",
+			expectError:   true,
+			expectedError: errTimedOut,
+		},
+		{
+			name:          "timeout with no logs",
+			logLines:      []string{},
+			expectPort:    "",
+			expectError:   true,
+			expectedError: errTimedOut,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a pipe for testing
+			pr, pw := io.Pipe()
+			reader := bufio.NewReader(pr)
+			c := &concentrator{
+				pipeReader: pr,
+				pipeWriter: pw,
+				logReader:  reader,
+			}
+
+			// Start goroutine to write test logs
+			go func() {
+				for _, line := range tc.logLines {
+					_, err := pw.Write([]byte(line + "\n"))
+					test.That(t, err, test.ShouldBeNil)
+				}
+			}()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+
+			port, err := c.watchLogs(ctx, logger)
+
+			if tc.expectError {
+				test.That(t, err, test.ShouldNotBeNil)
+				test.That(t, err, test.ShouldBeError, errTimedOut)
+				test.That(t, port, test.ShouldBeEmpty)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, port, test.ShouldEqual, tc.expectPort)
+			}
+
+			if c.workers != nil {
+				c.workers.Stop()
+			}
+			pw.Close()
+			pr.Close()
+		})
+	}
+}
+
 func TestClose(t *testing.T) {
 	// Create a gateway instance for testing
 	cfg := resource.Config{
-		Name: "test-gateway",
+		Name: "test-rak",
 	}
 
-	g := &rak7391{
-		Named:  cfg.ResourceName().AsNamed(),
-		logger: logging.NewTestLogger(t),
+	pr1, pw1 := io.Pipe()
+	pr2, pw2 := io.Pipe()
+
+	r := &rak7391{
+		Named:         cfg.ResourceName().AsNamed(),
+		logger:        logging.NewTestLogger(t),
+		concentrators: []*concentrator{{pipeReader: pr1, pipeWriter: pw1, started: true}, {pipeReader: pr2, pipeWriter: pw2, started: true}},
 	}
-	dataDirectory1 := t.TempDir()
-	err := g.setupSqlite(context.Background(), dataDirectory1)
-	test.That(t, err, test.ShouldBeNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Call Close and verify cleanup
-	err = g.Close(ctx)
+	err := r.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Verify concentrator started is false
+	for _, c := range r.concentrators {
+		test.That(t, c.started, test.ShouldBeFalse)
+		// Verify logs pipe is closed
+		{
+			buf := make([]byte, 1)
+			_, err = c.pipeWriter.Write(buf)
+			test.That(t, err, test.ShouldNotBeNil)
+		}
+		{
+			buf := make([]byte, 1)
+			_, err = c.pipeReader.Read(buf)
+			test.That(t, err, test.ShouldNotBeNil)
+		}
+	}
+
+	// call close again
+	err = r.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
 }

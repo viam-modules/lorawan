@@ -71,7 +71,7 @@ func TestParseDataUplink(t *testing.T) {
 		0x04, 0x98, 0x00, 0x00, // Current: 0.0A
 	}
 
-	c := concentrator{}
+	c := &concentrator{}
 
 	validPayload, err := createUplinkData(0, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
@@ -163,7 +163,6 @@ func TestParseDataUplink(t *testing.T) {
 
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
-
 }
 
 func TestGetFOptsToSend(t *testing.T) {

@@ -35,7 +35,7 @@ var (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c concentrator) (
+func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c *concentrator) (
 	string, map[string]interface{}, error,
 ) {
 	// payload should be at least 13 bytes

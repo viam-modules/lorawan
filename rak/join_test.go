@@ -3,6 +3,7 @@ package rak
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -88,6 +89,7 @@ func TestValidateMIC(t *testing.T) {
 }
 
 func TestParseJoinRequestPacket(t *testing.T) {
+	errAlreadyHandledDevNonce := errors.New("already handled dev nonce")
 	devices := make(map[string]*node.Node)
 	testDevice := &node.Node{
 		DevEui:   testDevEUI,
@@ -133,6 +135,11 @@ func TestParseJoinRequestPacket(t *testing.T) {
 	_, _, err = g.parseJoinRequestPacket([]byte{0x00, 0x00})
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errInvalidLength)
+
+	// Test already handled dev nonce
+	testDevice.LastDevNonce = testDevNonce
+	_, _, err = g.parseJoinRequestPacket(payload)
+	test.That(t, err, test.ShouldBeError, errAlreadyHandledDevNonce)
 
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
@@ -276,12 +283,12 @@ func TestHandleJoin(t *testing.T) {
 	}
 	devices[testNodeName] = testDevice
 
-	c := concentrator{}
+	c := &concentrator{}
 
 	g := &rak7391{
 		logger:        logging.NewTestLogger(t),
 		devices:       devices,
-		concentrators: []concentrator{c},
+		concentrators: []*concentrator{c},
 	}
 	dataDirectory1 := t.TempDir()
 	err := g.setupSqlite(context.Background(), dataDirectory1)

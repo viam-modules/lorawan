@@ -691,7 +691,7 @@ func TestValidateSerialPath(t *testing.T) {
 	test.That(t, err.Error(), test.ShouldContainSubstring, "error getting serial path")
 }
 
-func TestWaitForStartupLogs(t *testing.T) {
+func TestWatchLogs(t *testing.T) {
 	tests := []struct {
 		name          string
 		logLines      []string
