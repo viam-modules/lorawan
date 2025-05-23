@@ -77,7 +77,7 @@ func TestValidate(t *testing.T) {
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err, test.ShouldBeError, errConcentrators)
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errConcentrators))
 	test.That(t, deps, test.ShouldBeNil)
 
 	// Test invalid - missing board name
@@ -486,7 +486,7 @@ func TestCreateConcentrator(t *testing.T) {
 	// Create temp dir and binary for testing
 	dir, err := os.Getwd()
 	test.That(t, err, test.ShouldBeNil)
-	mockcgoPath := dir + "/../mockprocess/mock"
+	mockcgoPath := dir + "/../mockprocess/mockprocess"
 
 	r.cgoPath = mockcgoPath
 
