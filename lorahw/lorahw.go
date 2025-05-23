@@ -104,11 +104,12 @@ type RxPacket struct {
 	Payload  []byte
 	SNR      float64
 	DataRate int
+	Freq     int
 }
 
 // SetupGateway initializes the gateway hardware
-func SetupGateway(comType int, path string, region regions.Region, channelBase int) error {
-	errCode := C.set_up_gateway(C.int(comType), C.CString(path), C.int(region), C.int(channelBase))
+func SetupGateway(comType int, path string, region regions.Region, baseChannel int) error {
+	errCode := C.set_up_gateway(C.int(comType), C.CString(path), C.int(region), C.int(baseChannel))
 	if errCode != 0 {
 		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
 	}

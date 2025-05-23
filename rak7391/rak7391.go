@@ -322,14 +322,21 @@ func (r *rak7391) createConcentrator(ctx context.Context,
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
+	var baseChannel int
 	switch id {
-		case "rak1"
+	case "rak1":
+		baseChannel = 0
+	case "rak2":
+		baseChannel = 8
+	default:
+		return errors.New("unknown concentrator id - should not happen")
 	}
 
 	args := []string{
 		fmt.Sprintf("--comType=%d", comType),
 		"--path=" + path,
 		fmt.Sprintf("--region=%d", r.region),
+		fmt.Sprintf("--baseChannel=%d", baseChannel),
 	}
 
 	var cgoexe string
@@ -916,20 +923,19 @@ func (r *rak7391) receivePackets(ctx context.Context) {
 						r.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
 						continue
 					}
-
-					r.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate, c)
+					r.handlePacket(ctx, packet, t, c)
 				}
 			}
 		}
 	}
 }
 
-func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int, c *concentrator) {
+func (r *rak7391) handlePacket(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, c *concentrator) {
 	// r *first byte is MHDR - specifies message type
-	switch payload[0] {
+	switch packet.Payload[0] {
 	case joinRequestMHdr:
 		r.logger.Debugf("received join request")
-		if err := r.handleJoin(ctx, payload, packetTime, c); err != nil {
+		if err := r.handleJoin(ctx, packet.Payload, packetTime, c); err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
 				return
@@ -937,7 +943,7 @@ func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime t
 			r.logger.Errorf("couldn't handle join request: %v", err)
 		}
 	case unconfirmedUplinkMHdr:
-		name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf, c)
+		name, readings, err := r.parseDataUplink(ctx, packet, packetTime, c)
 		if err != nil {
 			// don't log as error if it was a request from unknown device or duplicate packet.
 			if errors.Is(errNoDevice, err) || errors.Is(errAlreadyParsed, err) {
@@ -948,7 +954,7 @@ func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime t
 		}
 		r.updateReadings(name, readings)
 	case confirmedUplinkMHdr:
-		name, readings, err := r.parseDataUplink(ctx, payload, packetTime, snr, sf, c)
+		name, readings, err := r.parseDataUplink(ctx, packet, packetTime, c)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -959,7 +965,7 @@ func (r *rak7391) handlePacket(ctx context.Context, payload []byte, packetTime t
 		}
 		r.updateReadings(name, readings)
 	default:
-		r.logger.Warnf("received unsupported packet type with mhdr %x", payload[0])
+		r.logger.Warnf("received unsupported packet type with mhdr %x", packet.Payload[0])
 	}
 }
 

@@ -33,7 +33,7 @@ var (
 	comType     = flag.Int("comType", 1, "comtype 0 for spi 1 for usb")
 	path        = flag.String("path", "/dev/ttyACM0", "Path concentrator is connected to")
 	region      = flag.Int("region", 1, "region of concentrator, 1 for us915 2 for eu868")
-	channelBase = flag.Int("channelBase", 0, "base channel to receive packets")
+	baseChannel = flag.Int("baseChannel", 0, "base channel to receive packets")
 )
 
 func main() {
@@ -69,7 +69,7 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	//nolint:forbidigo
 	fmt.Println("Server successfully started:", port)
 
-	err = lorahw.SetupGateway(config.comType, config.path, config.region, config.channelBase)
+	err = lorahw.SetupGateway(config.comType, config.path, config.region, config.baseChannel)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ type concentratorConfig struct {
 	comType     int
 	path        string
 	region      regions.Region
-	channelBase int
+	baseChannel int
 }
 
 func parseAndValidateArguments() concentratorConfig {
@@ -102,7 +102,7 @@ func parseAndValidateArguments() concentratorConfig {
 		comType:     *comType,
 		path:        *path,
 		region:      regions.Region(*region),
-		channelBase: *channelBase,
+		baseChannel: *baseChannel,
 	}
 }
 

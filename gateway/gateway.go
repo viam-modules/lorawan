@@ -371,6 +371,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		fmt.Sprintf("--comType=%d", comType),
 		"--path=" + path,
 		fmt.Sprintf("--region=%d", region),
+		// using default baseChannel 0
 	}
 
 	// find cgo exe

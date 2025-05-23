@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -140,6 +141,10 @@ func (r *rak7391) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	payload = append(payload, r.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
+	// enable channels 7-15 in cfList if using 2 concentrators in US
+	if len(r.concentrators) == 2 && r.region == regions.US {
+		r.regionInfo.CfList[1] = 0xFF
+	}
 	payload = append(payload, r.regionInfo.CfList...)
 
 	// generate MIC

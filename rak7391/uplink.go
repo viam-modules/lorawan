@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/robertkrimen/otto"
+	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -35,9 +36,11 @@ var (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c *concentrator) (
+func (r *rak7391) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, c *concentrator) (
 	string, map[string]interface{}, error,
 ) {
+
+	phyPayload := packet.Payload
 	// payload should be at least 13 bytes
 	if len(phyPayload) < 13 {
 		return "", map[string]interface{}{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
@@ -58,7 +61,7 @@ func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	if phyPayload[0] == confirmedUplinkMHdr {
 		uplinkType = Confirmed
 	}
-	r.logger.Debugf("received %s uplink from %s", uplinkType, device.NodeName)
+	r.logger.Debugf("received %s uplink from %s with freq %d", uplinkType, device.NodeName, packet.Freq)
 
 	// confirmed data up, send ACK bit in downlink
 	sendAck := phyPayload[0] == confirmedUplinkMHdr
@@ -113,7 +116,7 @@ func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	setDutyCycle := false
 	if r.region == regions.EU && device.FCntDown == 0 {
 		setDutyCycle = true
-		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
+		minInterval := calculateMinUplinkInterval(packet.DataRate, len(phyPayload))
 		r.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
 		device.MinIntervalSeconds = minInterval
 	}
@@ -123,7 +126,7 @@ func (r *rak7391) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 			r.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := r.createDownlink(ctx, device, downlinkPayload, requests, sendAck, snr, sf)
+			payload, err := r.createDownlink(ctx, device, downlinkPayload, requests, sendAck, float64(packet.DataRate), int(packet.SNR))
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
