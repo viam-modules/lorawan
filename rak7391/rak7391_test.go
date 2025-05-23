@@ -1,4 +1,4 @@
-package rak
+package rak7391
 
 import (
 	"bufio"
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestValidate(t *testing.T) {
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "must configure at least one pcie concentrator")
+	test.That(t, err, test.ShouldBeError, errConcentrators)
 	test.That(t, deps, test.ShouldBeNil)
 
 	// Test invalid - missing board name
@@ -490,6 +491,29 @@ func TestCreateConcentrator(t *testing.T) {
 	r.cgoPath = mockcgoPath
 
 	testBus := 1
+	tmpDir := t.TempDir()
+
+	// Create a real device file that our symlinks will point to
+	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(deviceFile.Name())
+
+	// Create test directories to mimic Linux's /dev/serial structure
+	byPathDir := filepath.Join(tmpDir, "by-path")
+	byIDDir := filepath.Join(tmpDir, "by-id")
+	err = os.MkdirAll(byPathDir, 0o755)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.MkdirAll(byIDDir, 0o755)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Create test symlinks
+	byPathLink := filepath.Join(byPathDir, "pci-0000:00:14.0-usb-0:2:1.0")
+	byIDLink := filepath.Join(byIDDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
+
+	err = os.Symlink(deviceFile.Name(), byPathLink)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.Symlink(deviceFile.Name(), byIDLink)
+	test.That(t, err, test.ShouldBeNil)
 
 	tests := []struct {
 		name        string
@@ -508,6 +532,20 @@ func TestCreateConcentrator(t *testing.T) {
 			name: "USB configuration",
 			config: &ConcentratorConfig{
 				Path: "/dev/ttyUSB0",
+			},
+			expectError: false,
+		},
+		{
+			name: "USB configuration with symlink by-path",
+			config: &ConcentratorConfig{
+				Path: byPathDir,
+			},
+			expectError: false,
+		},
+		{
+			name: "USB configuration with symlink by-id",
+			config: &ConcentratorConfig{
+				Path: byIDDir,
 			},
 			expectError: false,
 		},

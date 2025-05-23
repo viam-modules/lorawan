@@ -44,7 +44,6 @@ int set_up_gateway(int com_type, char* path, int region) {
     // add null terminator
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
-        printf("here errored setting board config\n");
         return 2;
     }
 
@@ -153,7 +152,6 @@ int set_up_gateway(int com_type, char* path, int region) {
     return 0;
 }
 
-
 int stop_gateway() {
     return lgw_stop();
 }
@@ -164,7 +162,6 @@ struct lgw_pkt_rx_s* create_rx_packet_array() {
 
 void disable_buffering() {
     setbuf(stdout, NULL);
-    //fflush(stdout);
 }
 
 

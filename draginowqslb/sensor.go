@@ -20,7 +20,7 @@ const (
 
 	// Ranges for each probe were found in the user manual:
 	// https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20LoRaWAN%20End%20Nodes
-	// /WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/.
+	// /WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/
 	ecK10Key     = "EC_K10"
 	ecK10Min     = 20.
 	ecK10Max     = 20000.

@@ -1,5 +1,5 @@
-// Package rak provides a model for the rak7391
-package rak
+// package rak7391 provides a model for the rak7391
+package rak7391
 
 import (
 	"bufio"
@@ -60,6 +60,7 @@ var noReadings = map[string]interface{}{"": "no readings available yet"}
 // Error variables for validation and operations.
 var (
 	// Config validation errors.
+	errConcentrators = errors.New("must configure at least one pcie concentrator")
 	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
 
 	// Gateway operation errors.
@@ -87,8 +88,6 @@ const (
 	unconfirmedUplinkMHdr   = 0x40
 	unconfirmedDownLinkMHdr = 0x60
 	confirmedUplinkMHdr     = 0x80
-	defaultExecutableName   = "cgo"
-	tarGzPath               = "/home/rak/lorawan.tar.gz"
 )
 
 // Define the map of SF to minimum SNR values in dB.
@@ -132,7 +131,7 @@ type rak7391 struct {
 	region     regions.Region
 
 	concentrators []*concentrator
-	cgoPath       string
+	cgoPath       string // path to managed process exe to be used in tests.
 }
 
 type concentrator struct {
@@ -155,14 +154,14 @@ func init() {
 		sensor.API,
 		Model,
 		resource.Registration[sensor.Sensor, *Config]{
-			Constructor: newrak,
+			Constructor: newrak7391,
 		})
 }
 
 // Validate ensures all parts of the config are valid.
 func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.Concentrator1 == nil && conf.Concentrator2 == nil {
-		return nil, resource.NewConfigValidationError(path, errors.New("must configure at least one pcie concentrator"))
+		return nil, resource.NewConfigValidationError(path, errConcentrators)
 	}
 
 	if conf.BoardName == "" {
@@ -190,7 +189,7 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return []string{conf.BoardName}, nil
 }
 
-func newrak(ctx context.Context, deps resource.Dependencies,
+func newrak7391(ctx context.Context, deps resource.Dependencies,
 	conf resource.Config, logger logging.Logger,
 ) (sensor.Sensor, error) {
 	r := &rak7391{

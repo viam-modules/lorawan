@@ -314,7 +314,7 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		// no readings available yet
 		if !ok {
 			// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
-			if extra[data.FromDMString] == true {
+			if extra != nil && extra[data.FromDMString] == true {
 				return map[string]interface{}{}, data.ErrNoCaptureToStore
 			}
 			return NoReadings, nil
