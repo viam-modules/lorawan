@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -483,15 +484,35 @@ func TestCreateConcentrator(t *testing.T) {
 		return nil, fmt.Errorf("unknown pin %s", name)
 	}
 
-	// Create temp dir and binary for testing
-	dir, err := os.Getwd()
-	test.That(t, err, test.ShouldBeNil)
-	mockcgoPath := dir + "/../mockprocess/mockprocess"
+	// Create temp dir for test files
+	tmpDir := t.TempDir()
 
-	r.cgoPath = mockcgoPath
+	// Create mock CGO source file
+	mockCGOSource := `package main
+
+import "fmt"
+
+func main() {
+	port := 8080
+	fmt.Println("Server successfully started:", port)
+	fmt.Println("done setting up gateway")
+}`
+
+	srcPath := filepath.Join(tmpDir, "main.go")
+	err := os.WriteFile(srcPath, []byte(mockCGOSource), 0644)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Build the mock binary
+	cgoPath := filepath.Join(tmpDir, "cgo")
+	cmd := exec.Command("go", "build", "-o", cgoPath, srcPath)
+	err = cmd.Run()
+	test.That(t, err, test.ShouldBeNil)
+
+	// Set the binary path in rak instance
+	r.cgoPath = cgoPath
+	defer os.Remove(cgoPath) // Clean up binary after test
 
 	testBus := 1
-	tmpDir := t.TempDir()
 
 	// Create a real device file that our symlinks will point to
 	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
