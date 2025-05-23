@@ -20,7 +20,7 @@
         {
           "api": "rdk:component:sensor",
           "model": "viam:lorawan:rak7391",
-          "markdown_link": "README.md#configure-the-rak7391",
+          "markdown_link": "README.md#configure-the-viamsensorrak7391",
           "short_description": "A sensor component for the rak7391 Wisgate Connect."
         },
        {
