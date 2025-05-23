@@ -1,4 +1,4 @@
-package gateway
+package rak7391
 
 import (
 	"bufio"
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,11 +24,9 @@ import (
 	"go.viam.com/utils/protoutils"
 )
 
-var testRstPin = 1
-
 // creates a test gateway with device info populated in the file.
-func setupFileAndGateway(t *testing.T) *gateway {
-	g := createTestGateway(t)
+func setupFileAndGateway(t *testing.T) *rak7391 {
+	g := createTestrak(t)
 
 	// Write device info to file
 	devices := []deviceInfo{
@@ -45,140 +44,79 @@ func setupFileAndGateway(t *testing.T) *gateway {
 	return g
 }
 
-func createFakeBoard() *inject.Board {
-	// Create mock board
-	b := &inject.Board{}
-
-	rstPin := &inject.GPIOPin{}
-	pwrPin := &inject.GPIOPin{}
-
-	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
-		return nil
-	}
-
-	pwrPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
-		return nil
-	}
-
-	b.GPIOPinByNameFunc = func(name string) (board.GPIOPin, error) {
-		if name == "io1" {
-			return rstPin, nil
-		}
-		if name == "io2" {
-			return pwrPin, nil
-		}
-		return nil, fmt.Errorf("unknown pin %s", name)
-	}
-
-	return b
-}
-
 func TestValidate(t *testing.T) {
-	// Create temp file for serial path testing
-	tmpDir := t.TempDir()
-	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
-	test.That(t, err, test.ShouldBeNil)
-	defer os.Remove(tmpFile.Name())
-
-	// Test valid config with USB path
+	// Test valid config with one concentrator
+	bus := 0
 	conf := &Config{
 		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Path:      tmpFile.Name(),
+		Concentrator1: &ConcentratorConfig{
+			Bus: &bus,
+		},
 	}
 	deps, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deps), test.ShouldEqual, 1)
+	test.That(t, deps, test.ShouldResemble, []string{"pi"})
 
-	// Test valid config with default bus
+	// Test valid config with both concentrators
+	bus2 := 1
 	conf = &Config{
 		BoardName: "pi",
-		ResetPin:  &testRstPin,
+		Concentrator1: &ConcentratorConfig{
+			Bus: &bus,
+		},
+		Concentrator2: &ConcentratorConfig{
+			Bus: &bus2,
+		},
 	}
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deps), test.ShouldEqual, 1)
+	test.That(t, deps, test.ShouldResemble, []string{"pi"})
 
-	// Test valid config with bus=1
-	bus := 1
+	// Test invalid - no concentrators configured
 	conf = &Config{
 		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Bus:       &bus,
 	}
 	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeNil)
-	test.That(t, len(deps), test.ShouldEqual, 1)
-
-	// Test error if bus and path are configured
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Bus:       &bus,
-		Path:      "/dev/ttyUSB0",
-	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errSPIAndUSB))
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errConcentrators))
 	test.That(t, deps, test.ShouldBeNil)
 
-	// Test missing reset pin
+	// Test invalid - missing board name
 	conf = &Config{
-		BoardName: "pi",
+		Concentrator1: &ConcentratorConfig{
+			Bus: &bus,
+		},
 	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "reset_pin"))
-	test.That(t, deps, test.ShouldBeNil)
-
-	// Test invalid bus value
-	bus = 2
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Bus:       &bus,
-	}
-	deps, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
-	test.That(t, deps, test.ShouldBeNil)
-
-	// Test missing boardName
-	conf = &Config{
-		ResetPin: &testRstPin,
-	}
-
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "board"))
 	test.That(t, deps, test.ShouldBeNil)
 
-	// Test invalid region
+	// Test invalid region code
 	conf = &Config{
 		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Region:    "AS923",
+		Concentrator1: &ConcentratorConfig{
+			Bus: &bus,
+		},
+		Region: "INVALID",
 	}
-
 	deps, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidRegion))
 	test.That(t, deps, test.ShouldBeNil)
 
-	// Region code can be just the region
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Region:    "EU",
+	// Test valid region codes
+	validRegions := []string{"US915", "EU868", "US", "EU"}
+	for _, region := range validRegions {
+		conf = &Config{
+			BoardName: "pi",
+			Concentrator1: &ConcentratorConfig{
+				Bus: &bus,
+			},
+			Region: region,
+		}
+		deps, err = conf.Validate("")
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, deps, test.ShouldResemble, []string{"pi"})
 	}
-
-	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeNil)
-
-	// Region can be just be the number
-	conf = &Config{
-		BoardName: "pi",
-		ResetPin:  &testRstPin,
-		Region:    "915",
-	}
-
-	_, err = conf.Validate("")
-	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestDoCommand(t *testing.T) {
@@ -424,7 +362,7 @@ func TestMergeNodes(t *testing.T) {
 }
 
 func TestUpdateReadings(t *testing.T) {
-	g := &gateway{
+	g := &rak7391{
 		lastReadings: make(map[string]interface{}),
 	}
 
@@ -463,7 +401,7 @@ func TestUpdateReadings(t *testing.T) {
 }
 
 func TestReadings(t *testing.T) {
-	g := &gateway{
+	g := &rak7391{
 		lastReadings: make(map[string]interface{}),
 	}
 
@@ -497,7 +435,7 @@ func TestReadings(t *testing.T) {
 }
 
 func TestUpdateDeviceInfo(t *testing.T) {
-	g := createTestGateway(t)
+	g := createTestrak(t)
 
 	newAppSKey := []byte{
 		0x55, 0x72, 0x40, 0x4C,
@@ -525,61 +463,54 @@ func TestUpdateDeviceInfo(t *testing.T) {
 	test.That(t, device.Addr, test.ShouldResemble, newDevAddr)
 }
 
-func TestClose(t *testing.T) {
-	// Create a gateway instance for testing
-	cfg := resource.Config{
-		Name: "test-gateway",
+func TestCreateConcentrator(t *testing.T) {
+	// Create test rak instance
+	r := createTestrak(t)
+
+	// Create mock board with inject
+	b := &inject.Board{}
+	rstPin := &inject.GPIOPin{}
+
+	// Setup mock pin behavior
+	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
+		return nil
 	}
 
-	pr, pw := io.Pipe()
-	g := &gateway{
-		Named:      cfg.ResourceName().AsNamed(),
-		logger:     logging.NewTestLogger(t),
-		started:    true,
-		pipeWriter: pw,
-		pipeReader: pr,
-	}
-	dataDirectory1 := t.TempDir()
-	err := g.setupSqlite(context.Background(), dataDirectory1)
-	test.That(t, err, test.ShouldBeNil)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Call Close and verify cleanup
-	err = g.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
-
-	// Verify started is false
-	test.That(t, g.started, test.ShouldBeFalse)
-
-	// Verify logs pipe is closed
-	{
-		buf := make([]byte, 1)
-		_, err = g.pipeWriter.Write(buf)
-		test.That(t, err, test.ShouldNotBeNil)
-	}
-	{
-		buf := make([]byte, 1)
-		_, err = g.pipeReader.Read(buf)
-		test.That(t, err, test.ShouldNotBeNil)
+	// Setup mock board behavior
+	b.GPIOPinByNameFunc = func(name string) (board.GPIOPin, error) {
+		if name == rak7391ResetPin1 {
+			return rstPin, nil
+		}
+		return nil, fmt.Errorf("unknown pin %s", name)
 	}
 
-	_, err = g.getAllDevicesFromDB(ctx)
-	test.That(t, err, test.ShouldNotBeNil)
-
-	// call close again
-	err = g.Close(ctx)
-	test.That(t, err, test.ShouldBeNil)
-}
-
-func TestSymlinkResolution(t *testing.T) {
+	// Create temp dir for test files
 	tmpDir := t.TempDir()
 
-	// Create mock board
-	b := createFakeBoard()
-	deps := make(resource.Dependencies)
-	deps[board.Named("mock-board")] = b
+	// Create mock CGO managed process file
+	mockCGOSource := `package main
+
+import "fmt"
+
+func main() {
+	port := 8080
+	fmt.Println("Server successfully started:", port)
+	fmt.Println("done setting up gateway")
+}`
+
+	srcPath := filepath.Join(tmpDir, "main.go")
+	err := os.WriteFile(srcPath, []byte(mockCGOSource), 0644)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Build the mock binary
+	cgoPath := filepath.Join(tmpDir, "cgo")
+	cmd := exec.Command("go", "build", "-o", cgoPath, srcPath)
+	err = cmd.Run()
+	test.That(t, err, test.ShouldBeNil)
+	r.cgoPath = cgoPath
+	defer os.Remove(cgoPath)
+
+	testBus := 1
 
 	// Create a real device file that our symlinks will point to
 	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
@@ -603,95 +534,65 @@ func TestSymlinkResolution(t *testing.T) {
 	err = os.Symlink(deviceFile.Name(), byIDLink)
 	test.That(t, err, test.ShouldBeNil)
 
-	// Test cases
 	tests := []struct {
 		name        string
-		config      resource.Config
+		config      *ConcentratorConfig
 		expectError bool
+		errorMsg    string
 	}{
 		{
-			name: "by-path symlink resolves correctly",
-			config: resource.Config{
-				Name:  "foo",
-				Model: ModelGenericHat,
-				ConvertedAttributes: &Config{
-					BoardName: "mock-board",
-					ResetPin:  &testRstPin,
-					Path:      byPathLink,
-				},
+			name: "SPI configuration",
+			config: &ConcentratorConfig{
+				Bus: &testBus,
 			},
 			expectError: false,
 		},
 		{
-			name: "by-id symlink resolves correctly",
-			config: resource.Config{
-				Name:  "foo",
-				Model: ModelGenericHat,
-				ConvertedAttributes: &Config{
-					BoardName: "mock-board",
-					ResetPin:  &testRstPin,
-					Path:      byIDLink,
-				},
+			name: "USB configuration",
+			config: &ConcentratorConfig{
+				Path: "/dev/ttyUSB0",
 			},
 			expectError: false,
 		},
 		{
-			name: "broken symlink fails",
-			config: resource.Config{
-				Name:  "foo",
-				Model: ModelGenericHat,
-				ConvertedAttributes: &Config{
-					BoardName: "mock-board",
-					ResetPin:  &testRstPin,
-					Path:      filepath.Join(byPathDir, "non-existent-link"),
-				},
+			name: "USB configuration with symlink by-path",
+			config: &ConcentratorConfig{
+				Path: byPathDir,
 			},
-			expectError: true,
+			expectError: false,
+		},
+		{
+			name: "USB configuration with symlink by-id",
+			config: &ConcentratorConfig{
+				Path: byIDDir,
+			},
+			expectError: false,
 		},
 	}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := &gateway{
-				logger: logging.NewTestLogger(t),
-				Named:  tc.config.ResourceName().AsNamed(),
-			}
-
-			err := g.Reconfigure(context.Background(), deps, tc.config)
-
+			pinName := rak7391ResetPin1
 			if tc.expectError {
-				test.That(t, err, test.ShouldNotBeNil)
-				test.That(t, err.Error(), test.ShouldContainSubstring, "failed to resolve symlink")
+				pinName = "invalid-pin"
 			}
-			g.Close(context.Background())
+
+			err := r.createConcentrator(context.Background(), "test-rak", pinName, b, tc.config)
+			test.That(t, err, test.ShouldBeNil)
+			test.That(t, len(r.concentrators), test.ShouldBeGreaterThan, 0)
+			test.That(t, r.concentrators[len(r.concentrators)-1].client, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].logReader, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].pipeReader, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].pipeWriter, test.ShouldNotBeNil)
+			test.That(t, r.concentrators[len(r.concentrators)-1].started, test.ShouldBeTrue)
+
+			r.closeProcesses()
 		})
 	}
 }
 
-func TestValidateSerialPath(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Path exists
-	tmpFile, err := os.CreateTemp(tmpDir, "test-serial-*")
-	test.That(t, err, test.ShouldBeNil)
-	defer os.Remove(tmpFile.Name())
-
-	err = validateSerialPath(tmpFile.Name())
-	test.That(t, err, test.ShouldBeNil)
-
-	// Path does not exist
-	nonExistentPath := filepath.Join(tmpDir, "non-existent-device")
-	err = validateSerialPath(nonExistentPath)
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "does not exist")
-
-	// Invalid path format
-	invalidPath := string([]byte{0x00})
-	err = validateSerialPath(invalidPath)
-	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, "error getting serial path")
-}
-
 func TestWatchLogs(t *testing.T) {
+	logger := logging.NewTestLogger(t)
 	tests := []struct {
 		name          string
 		logLines      []string
@@ -746,11 +647,10 @@ func TestWatchLogs(t *testing.T) {
 			// Create a pipe for testing
 			pr, pw := io.Pipe()
 			reader := bufio.NewReader(pr)
-
-			g := &gateway{
-				logger:     logging.NewTestLogger(t),
-				logReader:  reader,
+			c := &concentrator{
 				pipeReader: pr,
+				pipeWriter: pw,
+				logReader:  reader,
 			}
 
 			// Start goroutine to write test logs
@@ -764,7 +664,7 @@ func TestWatchLogs(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
 
-			port, err := g.watchLogs(ctx)
+			port, err := c.watchLogs(ctx, logger)
 
 			if tc.expectError {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -775,8 +675,8 @@ func TestWatchLogs(t *testing.T) {
 				test.That(t, port, test.ShouldEqual, tc.expectPort)
 			}
 
-			if g.workers != nil {
-				g.workers.Stop()
+			if c.workers != nil {
+				c.workers.Stop()
 			}
 			pw.Close()
 			pr.Close()
@@ -784,50 +684,45 @@ func TestWatchLogs(t *testing.T) {
 	}
 }
 
-func TestNativeConfig(t *testing.T) {
-	t.Run("Test Default Config", func(t *testing.T) {
-		resetPin := 85
-		powerPin := 74
-		bus := 1
+func TestClose(t *testing.T) {
+	// Create a gateway instance for testing
+	cfg := resource.Config{
+		Name: "test-rak",
+	}
 
-		validConf := resource.Config{
-			Name: "test-default",
-			ConvertedAttributes: &Config{
-				BoardName: "pi",
-				ResetPin:  &resetPin,
-				Bus:       &bus,
-				PowerPin:  &powerPin,
-			},
-			Model: ModelGenericHat,
+	pr1, pw1 := io.Pipe()
+	pr2, pw2 := io.Pipe()
+
+	r := &rak7391{
+		Named:         cfg.ResourceName().AsNamed(),
+		logger:        logging.NewTestLogger(t),
+		concentrators: []*concentrator{{pipeReader: pr1, pipeWriter: pw1, started: true}, {pipeReader: pr2, pipeWriter: pw2, started: true}},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Call Close and verify cleanup
+	err := r.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Verify concentrator started is false
+	for _, c := range r.concentrators {
+		test.That(t, c.started, test.ShouldBeFalse)
+		// Verify logs pipe is closed
+		{
+			buf := make([]byte, 1)
+			_, err = c.pipeWriter.Write(buf)
+			test.That(t, err, test.ShouldNotBeNil)
 		}
-		cfg, err := getNativeConfig(validConf)
-		test.That(t, err, test.ShouldBeNil)
-		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
-		test.That(t, *cfg.ResetPin, test.ShouldEqual, resetPin)
-		test.That(t, *cfg.PowerPin, test.ShouldEqual, powerPin)
-	})
-	t.Run("Test WaveshareHat Config", func(t *testing.T) {
-		validConf := resource.Config{
-			Name: "test-default",
-			ConvertedAttributes: &ConfigSX1302WaveshareHAT{
-				BoardName: "pi",
-				Bus:       1,
-			},
-			Model: ModelSX1302WaveshareHat,
+		{
+			buf := make([]byte, 1)
+			_, err = c.pipeReader.Read(buf)
+			test.That(t, err, test.ShouldNotBeNil)
 		}
-		cfg, err := getNativeConfig(validConf)
-		test.That(t, err, test.ShouldBeNil)
-		test.That(t, cfg.BoardName, test.ShouldEqual, "pi")
-		test.That(t, *cfg.ResetPin, test.ShouldEqual, waveshareHatResetPin)
-		test.That(t, *cfg.PowerPin, test.ShouldEqual, waveshareHatPowerPin)
-	})
-	t.Run("Test some random Config", func(t *testing.T) {
-		validConf := resource.Config{
-			Name:                "test-default",
-			ConvertedAttributes: &node.Config{},
-		}
-		cfg, err := getNativeConfig(validConf)
-		test.That(t, err.Error(), test.ShouldContainSubstring, "build error in module. Unsupported Gateway model")
-		test.That(t, cfg, test.ShouldBeNil)
-	})
+	}
+
+	// call close again
+	err = r.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 }
