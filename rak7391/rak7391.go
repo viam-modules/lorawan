@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/viam-modules/gateway/gateway"
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
@@ -534,7 +535,7 @@ func (r *rak7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	// Remove a node from the device map and readings map.
 	if _, ok := cmd["test"]; ok {
 		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
-			"get_packets": true,
+			gateway.GetPacketsKey: true,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create command struct: %w", err)
@@ -810,7 +811,7 @@ func (r *rak7391) resetConcentrators(ctx context.Context) error {
 
 	// create stop command
 	cmdStruct, err := structpb.NewStruct(map[string]interface{}{
-		"stop": true,
+		gateway.StopKey: true,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create command struct: %w", err)
@@ -849,7 +850,7 @@ func (r *rak7391) receivePackets(ctx context.Context) {
 		}
 
 		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
-			"get_packets": true,
+			gateway.GetPacketsKey: true,
 		})
 		if err != nil {
 			r.logger.Errorf("Failed to create command struct: %v", err)

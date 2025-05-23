@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/viam-modules/gateway/gateway"
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
@@ -62,7 +63,7 @@ func (r *rak7391) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
 	}
 
-	cmd := map[string]interface{}{"send_packet": txPktMap}
+	cmd := map[string]interface{}{gateway.SendPacketKey: txPktMap}
 
 	cmdStruct, err := structpb.NewStruct(cmd)
 	if err != nil {
