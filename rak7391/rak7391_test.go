@@ -487,7 +487,7 @@ func TestCreateConcentrator(t *testing.T) {
 	// Create temp dir for test files
 	tmpDir := t.TempDir()
 
-	// Create mock CGO source file
+	// Create mock CGO managed process file
 	mockCGOSource := `package main
 
 import "fmt"
@@ -507,10 +507,8 @@ func main() {
 	cmd := exec.Command("go", "build", "-o", cgoPath, srcPath)
 	err = cmd.Run()
 	test.That(t, err, test.ShouldBeNil)
-
-	// Set the binary path in rak instance
 	r.cgoPath = cgoPath
-	defer os.Remove(cgoPath) // Clean up binary after test
+	defer os.Remove(cgoPath)
 
 	testBus := 1
 
