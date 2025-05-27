@@ -537,14 +537,16 @@ func main() {
 	tests := []struct {
 		name        string
 		config      *ConcentratorConfig
+		id          string
 		expectError bool
-		errorMsg    string
+		expectedErr error
 	}{
 		{
 			name: "SPI configuration",
 			config: &ConcentratorConfig{
 				Bus: &testBus,
 			},
+			id:          "rak1",
 			expectError: false,
 		},
 		{
@@ -552,6 +554,7 @@ func main() {
 			config: &ConcentratorConfig{
 				Path: "/dev/ttyUSB0",
 			},
+			id:          "rak1",
 			expectError: false,
 		},
 		{
@@ -559,6 +562,7 @@ func main() {
 			config: &ConcentratorConfig{
 				Path: byPathDir,
 			},
+			id:          "rak1",
 			expectError: false,
 		},
 		{
@@ -566,25 +570,35 @@ func main() {
 			config: &ConcentratorConfig{
 				Path: byIDDir,
 			},
+			id:          "rak1",
 			expectError: false,
+		},
+		{
+			name: "unknown id should return error",
+			config: &ConcentratorConfig{
+				Path: "/dev/ttyUSB0",
+			},
+			id:          "test-rak",
+			expectError: true,
+			expectedErr: errUnknownID,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pinName := rak7391ResetPin1
+			err := r.createConcentrator(context.Background(), tc.id, rak7391ResetPin1, b, tc.config)
 			if tc.expectError {
-				pinName = "invalid-pin"
+				test.That(t, err, test.ShouldNotBeNil)
+				test.That(t, err, test.ShouldBeError, tc.expectedErr)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, len(r.concentrators), test.ShouldBeGreaterThan, 0)
+				test.That(t, r.concentrators[len(r.concentrators)-1].client, test.ShouldNotBeNil)
+				test.That(t, r.concentrators[len(r.concentrators)-1].logReader, test.ShouldNotBeNil)
+				test.That(t, r.concentrators[len(r.concentrators)-1].pipeReader, test.ShouldNotBeNil)
+				test.That(t, r.concentrators[len(r.concentrators)-1].pipeWriter, test.ShouldNotBeNil)
+				test.That(t, r.concentrators[len(r.concentrators)-1].started, test.ShouldBeTrue)
 			}
-
-			err := r.createConcentrator(context.Background(), "test-rak", pinName, b, tc.config)
-			test.That(t, err, test.ShouldBeNil)
-			test.That(t, len(r.concentrators), test.ShouldBeGreaterThan, 0)
-			test.That(t, r.concentrators[len(r.concentrators)-1].client, test.ShouldNotBeNil)
-			test.That(t, r.concentrators[len(r.concentrators)-1].logReader, test.ShouldNotBeNil)
-			test.That(t, r.concentrators[len(r.concentrators)-1].pipeReader, test.ShouldNotBeNil)
-			test.That(t, r.concentrators[len(r.concentrators)-1].pipeWriter, test.ShouldNotBeNil)
-			test.That(t, r.concentrators[len(r.concentrators)-1].started, test.ShouldBeTrue)
 
 			r.closeProcesses()
 		})

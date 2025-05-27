@@ -42,6 +42,8 @@ const (
 	rak7391ResetPin2 = "io6"  // Default reset pin for second concentrator
 )
 
+var errUnknownID = errors.New("unknown concentrator id - should not happen")
+
 type comType int
 
 // enum for com types.
@@ -335,7 +337,7 @@ func (r *rak7391) createConcentrator(ctx context.Context,
 	case "rak2":
 		baseChannel = 8
 	default:
-		return errors.New("unknown concentrator id - should not happen")
+		return errUnknownID
 	}
 
 	args := []string{
