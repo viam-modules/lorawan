@@ -246,9 +246,7 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		r.lastReadings = make(map[string]interface{})
 	}
 
-	if r.concentrators == nil {
-		r.concentrators = make([]*concentrator, 0)
-	}
+	r.concentrators = make([]*concentrator, 0)
 
 	region := regions.GetRegion(cfg.Region)
 
