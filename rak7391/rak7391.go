@@ -246,9 +246,9 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		r.lastReadings = make(map[string]interface{})
 	}
 
-	if r.concentrators == nil {
-		r.concentrators = make([]*concentrator, 0)
-	}
+	oldNumConcentrators := len(r.concentrators)
+
+	r.concentrators = make([]*concentrator, 0)
 
 	region := regions.GetRegion(cfg.Region)
 
@@ -281,6 +281,11 @@ func (r *rak7391) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		}
 		r.logger.Debugf("created concentrator 2")
 	}
+
+	if len(r.concentrators) != oldNumConcentrators {
+		r.logger.Warnf("concentrator was added or removed - send a reset downlink to nodes that have already joined to update their frequency channels")
+	}
+
 	r.workers = utils.NewBackgroundStoppableWorkers(r.receivePackets)
 	return nil
 }

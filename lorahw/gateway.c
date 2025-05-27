@@ -10,7 +10,7 @@ const int MAX_RX_PKT = 10;
 
 #define US_BASE_FREQ        902300000
 #define US_RADIO_0_OFFSET   400000 // target midpoint of channels (ch 3-4)
-#define US_RADIO_1_OFFSET   1600000 // 8 channels ahead
+#define US_RADIO_1_OFFSET   1400000 // 7 channels ahead
 
 
 #define EU_RADIO_0_FREQ     867500000
@@ -19,7 +19,7 @@ const int MAX_RX_PKT = 10;
 // the IF chain frequencies allow the gateway to read on multiple frequency channels.
 // subtracting main frequenecy - intermediate frequency will give that channel's freq.
 const int32_t ifFrequencies[9] = {
-    -400000,
+    -400000, 
     -200000,
     0,
     200000,
@@ -58,9 +58,13 @@ int set_up_gateway(int com_type, char* path, int region, int base_channel) {
             radio1_freq = EU_RADIO_1_FREQ;
             break;
         default:
+            printf("HERE BASE_CHANNEL: %d\n", base_channel);
             base_freq = US_BASE_FREQ + (base_channel * 200000);
+            printf("HERE BASE_FREQ: %d\n", base_freq);
             radio0_freq = base_freq + US_RADIO_0_OFFSET;
             radio1_freq = base_freq + US_RADIO_1_OFFSET;
+            printf("HERE RADIO0_FREQ: %d\n", radio0_freq);
+            printf("HERE RADIO1_FREQ: %d\n", radio1_freq);
             break;
     }
 
