@@ -16,6 +16,11 @@ func TestParseErrorCode(t *testing.T) {
 		expected error
 	}{
 		{
+			name:     "base channel",
+			errCode:  1,
+			expected: errInvalidBaseChannel,
+		},
+		{
 			name:     "board config error",
 			errCode:  2,
 			expected: errBoardConfig,
@@ -98,6 +103,6 @@ func TestSetupGateway(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 
 	// unspecifed region will not error
-	err = SetupGateway(1, testPath, regions.Unspecified, 0)
+	err = SetupGateway(1, testPath, regions.Unspecified, 16)
 	test.That(t, err, test.ShouldBeNil)
 }

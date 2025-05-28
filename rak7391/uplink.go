@@ -39,7 +39,6 @@ var (
 func (r *rak7391) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, c *concentrator) (
 	string, map[string]interface{}, error,
 ) {
-
 	phyPayload := packet.Payload
 	// payload should be at least 13 bytes
 	if len(phyPayload) < 13 {

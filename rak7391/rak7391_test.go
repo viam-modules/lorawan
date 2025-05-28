@@ -499,7 +499,7 @@ func main() {
 }`
 
 	srcPath := filepath.Join(tmpDir, "main.go")
-	err := os.WriteFile(srcPath, []byte(mockCGOSource), 0644)
+	err := os.WriteFile(srcPath, []byte(mockCGOSource), 0o644)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Build the mock binary

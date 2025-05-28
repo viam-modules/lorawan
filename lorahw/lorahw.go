@@ -33,6 +33,7 @@ var (
 	errLoraStdChannel         = errors.New("error configuring the lora STD channel")
 	errTxGainSettings         = errors.New("error configuring the tx gain settings")
 	errGatewayStart           = errors.New("error starting the gateway")
+	errInvalidBaseChannel     = errors.New("base channel must be between 0-48")
 )
 
 // SendPacket sends a lora packet using the sx1302 concentrator
@@ -176,6 +177,8 @@ func DisableBuffering() {
 
 func parseErrorCode(errCode int) error {
 	switch errCode {
+	case 1:
+		return errInvalidBaseChannel
 	case 2:
 		return errBoardConfig
 	case 3:
