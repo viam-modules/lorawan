@@ -134,6 +134,11 @@ func TestParseJoinRequestPacket(t *testing.T) {
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errInvalidLength)
 
+	// Test already handled dev nonce
+	testDevice.LastDevNonce = testDevNonce
+	_, _, err = g.parseJoinRequestPacket(payload)
+	test.That(t, err, test.ShouldBeError, errAlreadyHandledDevNonce)
+
 	err = g.Close(context.Background())
 	test.That(t, err, test.ShouldBeNil)
 }
@@ -298,7 +303,9 @@ func TestHandleJoin(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	err = g.handleJoin(ctx, payload, time.Now())
+	c := &concentrator{}
+
+	err = g.handleJoin(ctx, payload, time.Now(), c)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "context deadline exceeded")
 
 	// Test with unknown device
@@ -308,7 +315,7 @@ func TestHandleJoin(t *testing.T) {
 	unknownPayload = append(unknownPayload, testDevNonce...)
 	unknownPayload = append(unknownPayload, mic[:]...)
 
-	err = g.handleJoin(ctx, unknownPayload, time.Now())
+	err = g.handleJoin(ctx, unknownPayload, time.Now(), c)
 	test.That(t, err, test.ShouldEqual, errNoDevice)
 
 	err = g.Close(ctx)

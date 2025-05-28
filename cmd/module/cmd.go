@@ -8,7 +8,6 @@ import (
 	"github.com/viam-modules/gateway/milesightct101"
 	"github.com/viam-modules/gateway/milesightem310"
 	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/rak7391"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"
@@ -19,11 +18,11 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: gateway.Model}, // TODO: remove after migration(or keep it as a secret)
 		resource.APIModel{API: sensor.API, Model: gateway.ModelGenericHat},
 		resource.APIModel{API: sensor.API, Model: gateway.ModelSX1302WaveshareHat},
+		resource.APIModel{API: sensor.API, Model: gateway.ModelRak7391},
 		resource.APIModel{API: sensor.API, Model: node.Model},
 		resource.APIModel{API: sensor.API, Model: draginolht65n.Model},
 		resource.APIModel{API: sensor.API, Model: milesightem310.Model},
 		resource.APIModel{API: sensor.API, Model: milesightct101.Model},
 		resource.APIModel{API: sensor.API, Model: draginowqslb.Model},
-		resource.APIModel{API: sensor.API, Model: rak7391.Model},
 	)
 }

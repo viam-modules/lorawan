@@ -26,13 +26,16 @@ const (
 	Confirmed   uplinkType = "confirmed"
 )
 
-var errInvalidLength = errors.New("unexpected payload length")
+var (
+	errInvalidLength = errors.New("unexpected payload length")
+	errAlreadyParsed = errors.New("packet already parsed")
+)
 
 // Structure of phyPayload:
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int) (
+func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c *concentrator) (
 	string, map[string]interface{}, error,
 ) {
 	// payload should be at least 13 bytes
@@ -74,8 +77,15 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	// get the supported requests from fopts.
 	requests := g.getFOptsToSend(fopts, device)
 
-	// frame count - should increase by 1 with each packet sent
+	// frameCnt - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
+
+	if frameCnt <= device.FCntUp && device.FCntUp != math.MaxUint16 {
+		g.logger.Debugf("skipping uplink message - packet already parsed")
+		return "", map[string]interface{}{}, errAlreadyParsed
+	}
+
+	device.FCntUp = frameCnt
 
 	// only validate the MIC if we have a NwkSKey set
 	if len(device.NwkSKey) != 0 {
@@ -117,7 +127,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
-			if err = g.sendDownlink(ctx, payload, false, packetTime); err != nil {
+			if err = g.sendDownlink(ctx, payload, false, packetTime, c); err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
 			}
 			g.logger.Debugf("sent a downlink to %s", device.NodeName)
