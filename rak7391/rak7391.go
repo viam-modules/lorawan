@@ -204,10 +204,6 @@ func newrak7391(ctx context.Context, deps resource.Dependencies,
 		return nil, err
 	}
 
-	if err := r.migrateDevicesFromJSONFile(ctx, moduleDataDir); err != nil {
-		return nil, err
-	}
-
 	if err := r.Reconfigure(ctx, deps, conf); err != nil {
 		return nil, err
 	}
@@ -316,8 +312,7 @@ func (r *rak7391) createConcentrator(ctx context.Context,
 		comType = usb
 	}
 
-	err = resetGateway(ctx, rstPin, nil)
-	if err != nil {
+	if err = resetGateway(ctx, rstPin, nil); err != nil {
 		return fmt.Errorf("error initializing the gateway: %w", err)
 	}
 
@@ -517,26 +512,6 @@ func (r *rak7391) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		}
 
 		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
-	}
-
-	// Remove a node from the device map and readings map.
-	if _, ok := cmd["test"]; ok {
-		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
-			gateway.GetPacketsKey: true,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create command struct: %w", err)
-		}
-
-		req := &v1.DoCommandRequest{
-			Command: cmdStruct,
-		}
-
-		_, err = r.concentrators[0].client.DoCommand(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]interface{}{}, err
 	}
 	return map[string]interface{}{}, nil
 }
@@ -817,9 +792,8 @@ func (r *rak7391) resetConcentrators(ctx context.Context) error {
 			}
 			// reset using GPIO pin
 			if c.rstPin != nil {
-				err := resetGateway(ctx, c.rstPin, nil)
-				if err != nil {
-					return fmt.Errorf("failed to reset concentrator: %w", err)
+				if err = resetGateway(ctx, c.rstPin, nil); err != nil {
+					return fmt.Errorf("error initializing the gateway: %w", err)
 				}
 			}
 			c.started = false
