@@ -147,6 +147,7 @@ type deviceInfo struct {
 }
 
 type concentrator struct {
+	name       string
 	client     pb.SensorServiceClient
 	rstPin     board.GPIOPin
 	pwrPin     board.GPIOPin
@@ -318,11 +319,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// If the gateway hardware was already started, stop gateway and the background worker.
-	// Make sure to always call stopGateway() before making any changes to the c config or
-	// errors will occur.
-	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
-	// started, so only call stopGateway if this module already started the gateway.
 	if err := g.resetConcentrators(ctx); err != nil {
 		return err
 	}
@@ -436,7 +432,7 @@ func (g *gateway) createConcentrator(ctx context.Context,
 		return err
 	}
 
-	c := concentrator{rstPin: rstPin}
+	c := concentrator{rstPin: rstPin, name: id}
 
 	// not every gateway has a power enable pin so it is optional.
 	if cfg.PowerPin != nil {
@@ -527,7 +523,7 @@ func (g *gateway) createConcentrator(ctx context.Context,
 		return fmt.Errorf("error connecting to server: %w", err)
 	}
 
-	g.logger.Info("connected to client")
+	g.logger.Debugf("connected to %s client", id)
 
 	c.conn = conn
 	c.client = pb.NewSensorServiceClient(conn)
@@ -641,7 +637,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			Command: cmdStruct,
 		}
 
-		for i, c := range g.concentrators {
+		for _, c := range g.concentrators {
 			select {
 			case <-ctx.Done():
 				return
@@ -649,7 +645,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 			}
 			resp, err := c.client.DoCommand(ctx, req)
 			if err != nil {
-				g.logger.Errorf("error calling do command on client for concentrator %d: %v", i+1, err)
+				g.logger.Errorf("error calling do command on client for concentrator %s: %v", c.name, err)
 			}
 			if resp != nil {
 				data := resp.GetResult().AsMap()
@@ -1027,8 +1023,13 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 	return g.lastReadings, nil
 }
 
+// If the concentrator was already started, stop gateway and the background worker.
+// Make sure to always call stop on the concentrator before making any changes to the c config or
+// errors will occur.
+// Unexpected behavior will also occur if stop is called when the concentrator hasn't been
+// started, so only call stop if c.started is true
 func (g *gateway) resetConcentrators(ctx context.Context) error {
-	// close the rutine that receives lora packets - otherwise this will error when the gateway is stopped.
+	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if g.workers != nil {
 		g.workers.Stop()
 		g.workers = nil
@@ -1067,34 +1068,42 @@ func (g *gateway) resetConcentrators(ctx context.Context) error {
 
 func (g *gateway) closeProcesses() {
 	for _, c := range g.concentrators {
-		// Close pipe files before workers to avoid a hang on shutdown.
-		if c.pipeReader != nil {
-			if err := c.pipeReader.Close(); err != nil {
-				g.logger.Errorf("error closing log reader: %s", err)
-			}
+		if err := c.Close(); err != nil {
+			g.logger.Errorf("error closing concentrator %s: %w", c.name, err)
 		}
-		if c.pipeWriter != nil {
-			if err := c.pipeWriter.Close(); err != nil {
-				g.logger.Errorf("error closing log writer: %s", err)
-			}
-		}
-		if c.workers != nil {
-			c.workers.Stop()
-		}
-
-		if c.conn != nil {
-			if err := c.conn.Close(); err != nil {
-				g.logger.Errorf("error closing client conn: %w", err)
-			}
-		}
-
-		if c.process != nil {
-			if err := c.process.Stop(); err != nil {
-				g.logger.Errorf("error stopping process: %s", err.Error())
-			}
-		}
-		c.started = false
 	}
+}
+
+func (c *concentrator) Close() error {
+	// Close pipe files before workers to avoid a hang on shutdown.
+	if c.pipeReader != nil {
+		if err := c.pipeReader.Close(); err != nil {
+			return fmt.Errorf("error closing log reader: %s", err)
+		}
+	}
+	if c.pipeWriter != nil {
+		if err := c.pipeWriter.Close(); err != nil {
+			return fmt.Errorf("error closing log writer: %s", err)
+		}
+	}
+	if c.workers != nil {
+		c.workers.Stop()
+	}
+
+	if c.conn != nil {
+		if err := c.conn.Close(); err != nil {
+			return fmt.Errorf("error closing client conn: %w", err)
+		}
+	}
+
+	if c.process != nil {
+		if err := c.process.Stop(); err != nil {
+			return fmt.Errorf("error stopping process: %s", err.Error())
+		}
+	}
+	c.started = false
+	return nil
+
 }
 
 // Close closes the gateway.
