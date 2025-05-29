@@ -9,9 +9,11 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/robertkrimen/otto"
+	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
@@ -35,9 +37,10 @@ var (
 // | MHDR | DEV ADDR|  FCTL |   FCnt  | FPort   |  FOpts     |  FRM Payload | MIC |
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
-func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packetTime time.Time, snr float64, sf int, c *concentrator) (
+func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, c *concentrator) (
 	string, map[string]interface{}, error,
 ) {
+	phyPayload := packet.Payload
 	// payload should be at least 13 bytes
 	if len(phyPayload) < 13 {
 		return "", map[string]interface{}{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
@@ -58,7 +61,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 	if phyPayload[0] == confirmedUplinkMHdr {
 		uplinkType = Confirmed
 	}
-	g.logger.Debugf("received %s uplink from %s", uplinkType, device.NodeName)
+	g.logger.Debugf("received %s uplink from %s with freq %d and sf %d", uplinkType, device.NodeName, packet.Freq, packet.DataRate)
 
 	// confirmed data up, send ACK bit in downlink
 	sendAck := phyPayload[0] == confirmedUplinkMHdr
@@ -79,6 +82,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 
 	// frameCnt - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
+
+	g.logger.Debugf("fcnt is %d", frameCnt)
 
 	if frameCnt <= device.FCntUp && device.FCntUp != math.MaxUint16 {
 		g.logger.Debugf("skipping uplink message - packet already parsed")
@@ -109,21 +114,28 @@ func (g *gateway) parseDataUplink(ctx context.Context, phyPayload []byte, packet
 		device.Downlinks = device.Downlinks[1:]
 	}
 
+	var foptsToSend []byte
+	if len(device.FoptsToSend) > 0 {
+		foptsToSend = device.FoptsToSend[0]
+		device.FoptsToSend = device.FoptsToSend[1:]
+	}
+
 	// set the duty cycle in first downlink if in EU region.
 	setDutyCycle := false
 	if g.region == regions.EU && device.FCntDown == 0 {
 		setDutyCycle = true
-		minInterval := calculateMinUplinkInterval(sf, len(phyPayload))
+		minInterval := calculateMinUplinkInterval(packet.DataRate, len(phyPayload))
 		g.logger.Warnf("Duty cycle limit on EU868 band is 1%%, minimum uplink interval is around %.1f seconds", minInterval)
 		device.MinIntervalSeconds = minInterval
 	}
 
-	if downlinkPayload != nil || len(requests) > 0 || sendAck || setDutyCycle {
+	sendDownlink := downlinkPayload != nil || foptsToSend != nil || len(requests) > 0 || sendAck || setDutyCycle
+	if sendDownlink {
 		if len(device.NwkSKey) == 0 || device.FCntDown == math.MaxUint16 {
 			g.logger.Warnf("Sensor %v must be reset to support new features. "+
 				"Please physically restart the sensor to enable downlinks", device.NodeName)
 		} else {
-			payload, err := g.createDownlink(ctx, device, downlinkPayload, requests, sendAck, snr, sf)
+			payload, err := g.createDownlink(ctx, device, downlinkPayload, foptsToSend, requests, sendAck, packet.SNR, packet.DataRate)
 			if err != nil {
 				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
@@ -301,20 +313,46 @@ func executeDecoder(ctx context.Context, script string, vars map[string]interfac
 // returns a list of the fopt mac commands the module supports sending a downlink for.
 func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 	requests := make([]byte, 0)
-	for _, b := range fopts {
-		switch b {
+	for i := 0; i < len(fopts); {
+		cid := fopts[i]
+		switch cid {
 		case deviceTimeCID:
-			requests = append(requests, b)
+			requests = append(requests, cid)
+			i += 1
 		case linkCheckCID:
-			requests = append(requests, b)
+			requests = append(requests, cid)
+			i += 1
 		case dutyCycleCID:
-			// do nothing, response
+			g.logger.Debugf("got duty cycle answer from %s", device.NodeName)
+		case linkADRCID:
+			g.logger.Debugf("got link ADR answer from %s", device.NodeName)
+			// linkADRAns is two bytes cid + status byte
+			status := fopts[i+1]
+			if status != 0x07 {
+				g.inspectLinkADRStatus(device, status)
+			}
+			i += 2
 		default:
 			// unsupported mac command
-			g.logger.Debugf("got unsupported mac command %x from %s", b, device.NodeName)
+			g.logger.Debugf("got unsupported mac command %x from %s", cid, device.NodeName)
 		}
 	}
 	return requests
+}
+
+func (g *gateway) inspectLinkADRStatus(device *node.Node, status byte) {
+	// linkADRAns is two bytes cid + status byte
+	var unacked []string
+	if status&0x01 == 0 {
+		unacked = append(unacked, "channel mask")
+	}
+	if status&0x02 == 0 {
+		unacked = append(unacked, "data rate")
+	}
+	if status&0x04 == 0 {
+		unacked = append(unacked, "TX power")
+	}
+	g.logger.Errorf("%s rejected the link ADR request, problem with the %s", device.NodeName, strings.Join(unacked, ", "))
 }
 
 // Calculate an estimated minimum uplink interval based on the sf and size of the uplink.

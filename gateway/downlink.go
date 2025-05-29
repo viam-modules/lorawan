@@ -24,9 +24,11 @@ const (
 	downlinkDelay = 2  // rx2 delay in seconds for downlink messages.
 	rx2SF         = 12 // spreading factor for rx2 window, used for both US and EU
 	// command identifiers of supported mac commands.
-	deviceTimeCID = 0x0D
-	linkCheckCID  = 0x02
-	dutyCycleCID  = 0x04
+	deviceTimeCID  = 0x0D
+	linkCheckCID   = 0x02
+	linkADRCID     = 0x03
+	dutyCycleCID   = 0x04
+	foptsMaxLength = 15
 )
 
 func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c *concentrator) error {
@@ -122,7 +124,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
 func (g *gateway) createDownlink(ctx context.Context,
 	device *node.Node,
-	framePayload, uplinkFopts []byte,
+	framePayload, fopts, uplinkFopts []byte,
 	sendAck bool,
 	snr float64,
 	sf int) (
@@ -137,11 +139,19 @@ func (g *gateway) createDownlink(ctx context.Context,
 
 	payload = append(payload, devAddrLE...)
 
-	fopts := make([]byte, 0)
+	if fopts == nil {
+		fopts = make([]byte, 0)
+	}
+
+	g.logger.Infof("sending fopts %x", fopts)
 
 	// Handle any mac commands sent in the uplink fopts.
 	if len(uplinkFopts) != 0 {
 		for _, b := range uplinkFopts {
+			// Break early if FOpts already has 15 bytes
+			if len(fopts) >= foptsMaxLength {
+				break
+			}
 			switch b {
 			case deviceTimeCID:
 				g.logger.Debugf("got device time request from %s", device.NodeName)
@@ -149,13 +159,15 @@ func (g *gateway) createDownlink(ctx context.Context,
 				if err != nil {
 					g.logger.Errorf("failed to create device time answer: %w", err)
 				}
-				fopts = append(fopts, deviceTimeAns...)
+				if len(fopts)+len(deviceTimeAns) <= 15 {
+					fopts = append(fopts, deviceTimeAns...)
+				}
 			case linkCheckCID:
 				g.logger.Debugf("got link check request from %s", device.NodeName)
 				linkCheckAns := createLinkCheckAns(snr, sf)
-				fopts = append(fopts, linkCheckAns...)
-			case dutyCycleCID:
-				g.logger.Debugf("got duty cycle answer from %s", device.NodeName)
+				if len(fopts)+len(linkCheckAns) <= 15 {
+					fopts = append(fopts, linkCheckAns...)
+				}
 			default:
 				// unknown mac command - this shouldn't happen since we remove these in parseDataUplink.
 			}
