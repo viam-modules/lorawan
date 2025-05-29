@@ -1078,12 +1078,12 @@ func (c *concentrator) Close() error {
 	// Close pipe files before workers to avoid a hang on shutdown.
 	if c.pipeReader != nil {
 		if err := c.pipeReader.Close(); err != nil {
-			return fmt.Errorf("error closing log reader: %s", err)
+			return fmt.Errorf("error closing log reader: %s", err.Error())
 		}
 	}
 	if c.pipeWriter != nil {
 		if err := c.pipeWriter.Close(); err != nil {
-			return fmt.Errorf("error closing log writer: %s", err)
+			return fmt.Errorf("error closing log writer: %s", err.Error())
 		}
 	}
 	if c.workers != nil {
