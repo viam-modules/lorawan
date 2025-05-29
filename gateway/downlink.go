@@ -29,7 +29,7 @@ const (
 	dutyCycleCID  = 0x04
 )
 
-func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
+func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c *concentrator) error {
 	if len(payload) > 256 {
 		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 256 bytes", len(payload))
 	}
@@ -69,7 +69,7 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		Command: cmdStruct,
 	}
 
-	_, err = g.concentratorClient.DoCommand(ctx, req)
+	_, err = c.client.DoCommand(ctx, req)
 	if err != nil {
 		return err
 	}

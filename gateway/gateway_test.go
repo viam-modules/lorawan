@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,7 +24,10 @@ import (
 	"go.viam.com/utils/protoutils"
 )
 
-var testRstPin = 1
+var (
+	testRstPin = 1
+	testPwrPin = 2
+)
 
 // creates a test gateway with device info populated in the file.
 func setupFileAndGateway(t *testing.T) *gateway {
@@ -412,12 +416,12 @@ func TestMergeNodes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := mergeNodes(tt.newNode, tt.oldNode)
+			actualConfig, err := mergeNodes(tt.newNode, tt.oldNode)
 			if tt.expectErr != nil {
 				test.That(t, err, test.ShouldBeError, tt.expectErr)
 			} else {
 				test.That(t, err, test.ShouldBeNil)
-				test.That(t, got, test.ShouldResemble, tt.want)
+				test.That(t, actualConfig, test.ShouldResemble, tt.want)
 			}
 		})
 	}
@@ -528,45 +532,40 @@ func TestUpdateDeviceInfo(t *testing.T) {
 func TestClose(t *testing.T) {
 	// Create a gateway instance for testing
 	cfg := resource.Config{
-		Name: "test-gateway",
+		Name: "test-rak",
 	}
 
-	pr, pw := io.Pipe()
+	pr1, pw1 := io.Pipe()
+	pr2, pw2 := io.Pipe()
+
 	g := &gateway{
-		Named:      cfg.ResourceName().AsNamed(),
-		logger:     logging.NewTestLogger(t),
-		started:    true,
-		pipeWriter: pw,
-		pipeReader: pr,
+		Named:         cfg.ResourceName().AsNamed(),
+		logger:        logging.NewTestLogger(t),
+		concentrators: []*concentrator{{pipeReader: pr1, pipeWriter: pw1, started: true}, {pipeReader: pr2, pipeWriter: pw2, started: true}},
 	}
-	dataDirectory1 := t.TempDir()
-	err := g.setupSqlite(context.Background(), dataDirectory1)
-	test.That(t, err, test.ShouldBeNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Call Close and verify cleanup
-	err = g.Close(ctx)
+	err := g.Close(ctx)
 	test.That(t, err, test.ShouldBeNil)
 
-	// Verify started is false
-	test.That(t, g.started, test.ShouldBeFalse)
-
-	// Verify logs pipe is closed
-	{
-		buf := make([]byte, 1)
-		_, err = g.pipeWriter.Write(buf)
-		test.That(t, err, test.ShouldNotBeNil)
+	// Verify concentrator started is false
+	for _, c := range g.concentrators {
+		test.That(t, c.started, test.ShouldBeFalse)
+		// Verify logs pipe is closed
+		{
+			buf := make([]byte, 1)
+			_, err = c.pipeWriter.Write(buf)
+			test.That(t, err, test.ShouldNotBeNil)
+		}
+		{
+			buf := make([]byte, 1)
+			_, err = c.pipeReader.Read(buf)
+			test.That(t, err, test.ShouldNotBeNil)
+		}
 	}
-	{
-		buf := make([]byte, 1)
-		_, err = g.pipeReader.Read(buf)
-		test.That(t, err, test.ShouldNotBeNil)
-	}
-
-	_, err = g.getAllDevicesFromDB(ctx)
-	test.That(t, err, test.ShouldNotBeNil)
 
 	// call close again
 	err = g.Close(ctx)
@@ -667,6 +666,401 @@ func TestSymlinkResolution(t *testing.T) {
 	}
 }
 
+func TestGetMultiConcentratorConfig(t *testing.T) {
+	bus1 := 0
+	bus2 := 1
+
+	tests := []struct {
+		name           string
+		config         resource.Config
+		expectedConfig *ConfigMultiConcentrator
+		expectError    bool
+	}{
+		{
+			name: "valid RAK7391 config with single concentrator",
+			config: resource.Config{
+				Name:  "test-rak",
+				Model: ModelRak7391,
+				ConvertedAttributes: &ConfigRak7391{
+					BoardName: "pi",
+					Region:    "US915",
+					Concentrator1: &ConcentratorConfig{
+						Bus: &bus1,
+					},
+				},
+			},
+			expectedConfig: &ConfigMultiConcentrator{
+				BoardName: "pi",
+				Region:    "US915",
+				Concentrators: []*ConcentratorConfig{
+					{
+						Name:     "pcie1",
+						Bus:      &bus1,
+						ResetPin: &resetPin1,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "valid RAK7391 config with two concentrators",
+			config: resource.Config{
+				Name:  "test-rak",
+				Model: ModelRak7391,
+				ConvertedAttributes: &ConfigRak7391{
+					BoardName: "pi",
+					Region:    "EU868",
+					Concentrator1: &ConcentratorConfig{
+						Bus: &bus1,
+					},
+					Concentrator2: &ConcentratorConfig{
+						Bus: &bus2,
+					},
+				},
+			},
+			expectedConfig: &ConfigMultiConcentrator{
+				BoardName: "pi",
+				Region:    "EU868",
+				Concentrators: []*ConcentratorConfig{
+					{
+						Name:     "pcie1",
+						Bus:      &bus1,
+						ResetPin: &resetPin1,
+					},
+					{
+						Name:     "pcie2",
+						Bus:      &bus2,
+						ResetPin: &resetPin2,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "unsupported model",
+			config: resource.Config{
+				Name:                "test-generic",
+				Model:               ModelGenericHat,
+				ConvertedAttributes: &Config{},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actualConfig, err := getMultiConcentratorConfig(tc.config)
+			if tc.expectError {
+				test.That(t, err, test.ShouldNotBeNil)
+				test.That(t, actualConfig, test.ShouldBeNil)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, actualConfig, test.ShouldResemble, tc.expectedConfig)
+			}
+		})
+	}
+}
+
+func TestReconfigureSingleConcentrator(t *testing.T) {
+	// Create temp dir for test files
+	tmpDir := t.TempDir()
+	cgoPath := createTestCgoPath(t, tmpDir)
+	defer os.Remove(cgoPath)
+
+	tests := []struct {
+		name        string
+		config      *Config
+		region      regions.Region
+		expectError bool
+	}{
+		{
+			name: "valid US915 config",
+			config: &Config{
+				BoardName: "mock-board",
+				ResetPin:  &testRstPin,
+				PowerPin:  &testPwrPin,
+				Region:    "US915",
+			},
+			region:      regions.US,
+			expectError: false,
+		},
+		{
+			name: "valid EU868 config",
+			config: &Config{
+				BoardName: "mock-board",
+				ResetPin:  &testRstPin,
+				Region:    "EU868",
+			},
+			region:      regions.EU,
+			expectError: false,
+		},
+		{
+			name: "invalid board name",
+			config: &Config{
+				BoardName: "non-existent-board",
+				ResetPin:  &testRstPin,
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create mock board
+			b := createFakeBoard()
+			deps := make(resource.Dependencies)
+			deps[board.Named("mock-board")] = b
+
+			g := &gateway{
+				Named:   resource.Name{Name: "test"}.AsNamed(),
+				logger:  logging.NewTestLogger(t),
+				cgoPath: cgoPath,
+			}
+
+			err := g.reconfigureSingleConcentrator(context.Background(), deps, tc.config)
+			if tc.expectError {
+				test.That(t, err, test.ShouldNotBeNil)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, g.region, test.ShouldEqual, tc.region)
+				test.That(t, len(g.concentrators), test.ShouldEqual, 1)
+			}
+
+			// Cleanup
+			if g.workers != nil {
+				g.workers.Stop()
+			}
+			for _, c := range g.concentrators {
+				if c.process != nil {
+					c.process.Stop()
+				}
+			}
+		})
+	}
+}
+
+func createTestCgoPath(t *testing.T, tmpDir string) string {
+	// Create mock CGO managed process file
+	mockCGOSource := `package main
+import "fmt"
+func main() {
+	port := 8080
+	fmt.Println("Server successfully started:", port)
+	fmt.Println("done setting up gateway")
+}`
+
+	srcPath := filepath.Join(tmpDir, "main.go")
+	err := os.WriteFile(srcPath, []byte(mockCGOSource), 0o644)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Build the mock binary
+	cgoPath := filepath.Join(tmpDir, "cgo")
+	cmd := exec.Command("go", "build", "-o", cgoPath, srcPath)
+	err = cmd.Run()
+	test.That(t, err, test.ShouldBeNil)
+	return cgoPath
+}
+
+func TestReconfigureMultiConcentrator(t *testing.T) {
+	bus1 := 0
+	bus2 := 1
+
+	// Create temp dir for test files
+	tmpDir := t.TempDir()
+	cgoPath := createTestCgoPath(t, tmpDir)
+	defer os.Remove(cgoPath)
+
+	tests := []struct {
+		name        string
+		config      *ConfigMultiConcentrator
+		region      regions.Region
+		wantCount   int
+		expectError bool
+	}{
+		{
+			name: "valid config with two concentrators",
+			config: &ConfigMultiConcentrator{
+				BoardName: "mock-board",
+				Region:    "US915",
+				Concentrators: []*ConcentratorConfig{
+					{
+						Name:     "pcie1",
+						Bus:      &bus1,
+						ResetPin: &testRstPin,
+						PowerPin: &testPwrPin,
+					},
+					{
+						Name:     "pcie2",
+						Bus:      &bus2,
+						ResetPin: &testRstPin,
+					},
+				},
+			},
+			region:      regions.US,
+			wantCount:   2,
+			expectError: false,
+		},
+		{
+			name: "valid config with one concentrator",
+			config: &ConfigMultiConcentrator{
+				BoardName: "mock-board",
+				Region:    "EU868",
+				Concentrators: []*ConcentratorConfig{
+					{
+						Name:     "pcie1",
+						Bus:      &bus1,
+						ResetPin: &testRstPin,
+					},
+				},
+			},
+			region:      regions.EU,
+			wantCount:   1,
+			expectError: false,
+		},
+		{
+			name: "invalid board name",
+			config: &ConfigMultiConcentrator{
+				BoardName: "non-existent-board",
+				Region:    "US915",
+				Concentrators: []*ConcentratorConfig{
+					{
+						Name:     "pcie1",
+						Bus:      &bus1,
+						ResetPin: &testRstPin,
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create mock board
+			b := createFakeBoard()
+			deps := make(resource.Dependencies)
+			deps[board.Named("mock-board")] = b
+
+			g := &gateway{
+				logger:        logging.NewTestLogger(t),
+				concentrators: []*concentrator{},
+				cgoPath:       cgoPath,
+			}
+
+			err := g.reconfigureMultiConcentrator(context.Background(), deps, tc.config)
+			if tc.expectError {
+				test.That(t, err, test.ShouldNotBeNil)
+			} else {
+				test.That(t, err, test.ShouldBeNil)
+				test.That(t, g.region, test.ShouldEqual, tc.region)
+				test.That(t, len(g.concentrators), test.ShouldEqual, tc.wantCount)
+			}
+
+			// Cleanup
+			if g.workers != nil {
+				g.workers.Stop()
+			}
+			for _, c := range g.concentrators {
+				if c.process != nil {
+					c.process.Stop()
+				}
+			}
+		})
+	}
+}
+
+func TestCreateConcentrator(t *testing.T) {
+	// Create test rak instance
+	g := createTestGateway(t)
+	b := createFakeBoard()
+
+	// Create temp dir for test files
+	tmpDir := t.TempDir()
+
+	cgoPath := createTestCgoPath(t, tmpDir)
+	defer os.Remove(cgoPath)
+	g.cgoPath = cgoPath
+
+	testBus := 1
+
+	// Create a real device file that our symlinks will point to
+	deviceFile, err := os.CreateTemp(tmpDir, "test-device")
+	test.That(t, err, test.ShouldBeNil)
+	defer os.Remove(deviceFile.Name())
+
+	// Create test directories to mimic Linux's /dev/serial structure
+	byPathDir := filepath.Join(tmpDir, "by-path")
+	byIDDir := filepath.Join(tmpDir, "by-id")
+	err = os.MkdirAll(byPathDir, 0o755)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.MkdirAll(byIDDir, 0o755)
+	test.That(t, err, test.ShouldBeNil)
+
+	// Create test symlinks
+	byPathLink := filepath.Join(byPathDir, "pci-0000:00:14.0-usb-0:2:1.0")
+	byIDLink := filepath.Join(byIDDir, "usb-FTDI_FT232R_USB_UART_AB0CDEFG-if00-port0")
+
+	err = os.Symlink(deviceFile.Name(), byPathLink)
+	test.That(t, err, test.ShouldBeNil)
+	err = os.Symlink(deviceFile.Name(), byIDLink)
+	test.That(t, err, test.ShouldBeNil)
+
+	tests := []struct {
+		name        string
+		config      *ConcentratorConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "SPI configuration",
+			config: &ConcentratorConfig{
+				Bus:      &testBus,
+				ResetPin: &testRstPin,
+			},
+			expectError: false,
+		},
+		{
+			name: "USB configuration",
+			config: &ConcentratorConfig{
+				Path:     "/dev/ttyUSB0",
+				ResetPin: &testRstPin,
+			},
+			expectError: false,
+		},
+		{
+			name: "USB configuration with symlink by-path",
+			config: &ConcentratorConfig{
+				Path:     byPathDir,
+				ResetPin: &testRstPin,
+			},
+			expectError: false,
+		},
+		{
+			name: "USB configuration with symlink by-id",
+			config: &ConcentratorConfig{
+				Path:     byIDDir,
+				ResetPin: &testRstPin,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := g.createConcentrator(context.Background(), "test-rak", b, tc.config)
+			test.That(t, err, test.ShouldBeNil)
+			test.That(t, len(g.concentrators), test.ShouldBeGreaterThan, 0)
+			test.That(t, g.concentrators[len(g.concentrators)-1].client, test.ShouldNotBeNil)
+			test.That(t, g.concentrators[len(g.concentrators)-1].logReader, test.ShouldNotBeNil)
+			test.That(t, g.concentrators[len(g.concentrators)-1].pipeReader, test.ShouldNotBeNil)
+			test.That(t, g.concentrators[len(g.concentrators)-1].pipeWriter, test.ShouldNotBeNil)
+			test.That(t, g.concentrators[len(g.concentrators)-1].started, test.ShouldBeTrue)
+
+			g.closeProcesses()
+		})
+	}
+}
+
 func TestValidateSerialPath(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -692,6 +1086,7 @@ func TestValidateSerialPath(t *testing.T) {
 }
 
 func TestWatchLogs(t *testing.T) {
+	logger := logging.NewTestLogger(t)
 	tests := []struct {
 		name          string
 		logLines      []string
@@ -746,11 +1141,10 @@ func TestWatchLogs(t *testing.T) {
 			// Create a pipe for testing
 			pr, pw := io.Pipe()
 			reader := bufio.NewReader(pr)
-
-			g := &gateway{
-				logger:     logging.NewTestLogger(t),
-				logReader:  reader,
+			c := &concentrator{
 				pipeReader: pr,
+				pipeWriter: pw,
+				logReader:  reader,
 			}
 
 			// Start goroutine to write test logs
@@ -761,10 +1155,10 @@ func TestWatchLogs(t *testing.T) {
 				}
 			}()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
-			port, err := g.watchLogs(ctx)
+			port, err := c.watchLogs(ctx, logger)
 
 			if tc.expectError {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -775,8 +1169,8 @@ func TestWatchLogs(t *testing.T) {
 				test.That(t, port, test.ShouldEqual, tc.expectPort)
 			}
 
-			if g.workers != nil {
-				g.workers.Stop()
+			if c.workers != nil {
+				c.workers.Stop()
 			}
 			pw.Close()
 			pr.Close()

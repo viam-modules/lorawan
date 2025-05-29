@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -26,7 +28,9 @@ type joinRequest struct {
 // network id for the device to identify the network. Must be 3 bytes.
 var netID = []byte{1, 2, 3}
 
-func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime time.Time) error {
+var errAlreadyHandledDevNonce = errors.New("already handled dev nonce")
+
+func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime time.Time, c *concentrator) error {
 	jr, device, err := g.parseJoinRequestPacket(payload)
 	if err != nil {
 		return err
@@ -39,7 +43,7 @@ func (g *gateway) handleJoin(ctx context.Context, payload []byte, packetTime tim
 
 	g.logger.Infof("sending join accept to %s", device.NodeName)
 
-	return g.sendDownlink(ctx, joinAccept, true, packetTime)
+	return g.sendDownlink(ctx, joinAccept, true, packetTime, c)
 }
 
 // payload of join request consists of
@@ -75,6 +79,14 @@ func (g *gateway) parseJoinRequestPacket(payload []byte) (joinRequest, *node.Nod
 		g.logger.Debugf("received join request with dev EUI %x - unknown device, ignoring", devEUIBE)
 		return joinRequest{}, nil, errNoDevice
 	}
+
+	if bytes.Equal(matched.LastDevNonce, jr.devNonce) {
+		g.logger.Debugf("found identical dev nonce - skipping join request")
+		return joinRequest{}, nil, errAlreadyHandledDevNonce
+	}
+
+	matched.LastDevNonce = jr.devNonce
+	matched.FCntUp = math.MaxUint16
 
 	err := validateMIC(types.AES128Key(matched.AppKey), payload)
 	if err != nil {
