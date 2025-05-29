@@ -333,6 +333,7 @@ func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 		default:
 			// unsupported mac command
 			g.logger.Debugf("got unsupported mac command %x from %s", cid, device.NodeName)
+			i += 1
 		}
 	}
 	return requests

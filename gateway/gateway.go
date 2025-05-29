@@ -451,9 +451,7 @@ func createLinkADRReq(chMask []byte) []byte {
 
 	// bits 7–4: ChMaskCtrl - / chmask is for block0 (channels 0-15)
 	// bits 3–0: NbTrans - number of transmissions for each uplink message: 1
-	chMaskCtrl := 0
-	redundancy := (chMaskCtrl << 4) | 0x01
-	payload = append(payload, byte(redundancy))
+	payload = append(payload, 0x01)
 
 	return payload
 }
@@ -866,7 +864,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			// to ensure the device uses the right frequency channels.
 			// we know the device has already joined or is ABP mode if dev addr is populated.
 			n := g.devices[node.NodeName]
-			if len(n.Addr) != 0 {
+			if len(n.Addr) != 0 && g.region == regions.US {
 				var chMask []byte
 				switch len(g.concentrators) {
 				case 1:
