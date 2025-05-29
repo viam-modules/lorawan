@@ -83,8 +83,6 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 	// frameCnt - should increase by 1 with each packet sent
 	frameCnt := binary.LittleEndian.Uint16(phyPayload[6:8])
 
-	g.logger.Debugf("fcnt is %d", frameCnt)
-
 	if frameCnt <= device.FCntUp && device.FCntUp != math.MaxUint16 {
 		g.logger.Debugf("skipping uplink message - packet already parsed")
 		return "", map[string]interface{}{}, errAlreadyParsed

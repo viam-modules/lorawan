@@ -445,7 +445,7 @@ func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resourc
 func createLinkADRReq(chMask []byte) []byte {
 	payload := make([]byte, 0)
 	payload = append(payload, linkADRCID)
-	payload = append(payload, 0x00)      // DR0 / TXPower 0
+	payload = append(payload, 0x20)      // DR2 / TX power default
 	payload = append(payload, chMask[0]) // enable/disable 0-7
 	payload = append(payload, chMask[1]) // enable/disable 8-15
 
