@@ -10,15 +10,19 @@ CGO_CFLAGS := -DTESTING
 default: clean lorawan
 
 clean:
+	rm -f cgo
 	rm -f lorawan
 	rm -f module.tar.gz
 
 lorawan: sx1302
 	CGO_LDFLAGS="$$CGO_LDFLAGS $(CGO_BUILD_LDFLAGS)" go build $(GO_BUILD_LDFLAGS) -o $@ cmd/module/cmd.go
 
-module.tar.gz: clean lorawan
+cgo:
+	go build -o $@ cmd/cgo/main.go
+
+module.tar.gz: clean lorawan cgo
 	rm -f $@
-	tar czf $@ lorawan first_run.sh meta.json
+	tar czf $@ lorawan cgo first_run.sh meta.json
 
 test: lorawan
 	sudo apt install libnlopt-dev

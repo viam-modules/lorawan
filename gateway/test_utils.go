@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/viam-modules/gateway/node"
@@ -49,6 +50,7 @@ func createTestGateway(t *testing.T) *gateway {
 		DecoderPath: testDecoderPath,
 		JoinType:    "OTAA",
 		DevEui:      testDevEUI,
+		FCntUp:      math.MaxUint16,
 	}
 	testDevices[testNodeName] = testNode
 

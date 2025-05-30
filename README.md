@@ -17,13 +17,13 @@ The LoRaWAN **gateway** models interface with a physical gateway device (such as
 ## Example use
 A typical architecture will involve:
 
-- a Raspberry Pi (any model with GPIO pins)
-- an sx1302 gateway HAT physically attached to the Raspberry Pi
-- one or more LoRaWAN sensors physically located up to a couple miles away from the Raspberry Pi/gateway
+- a Raspberry Pi
+- an sx1302 gateway physically attached to the Raspberry Pi
+- one or more LoRaWAN sensors physically located up to a couple miles away from the gateway
 
 The Raspberry Pi will be running viam-server, and the **Viam config** for this viam-server will include:
 
-- a **gateway** model for the gateway HAT
+- a **gateway** model for the gateway device
 - a **sensor** model for **each** LoRaWAN sensor
 
 ## LoRaWAN sensor models provided
@@ -44,6 +44,7 @@ See below for the Viam configuration for each of these models.
 This module provides the following models for **specific** LoRaWAN gateways:
 
 - `viam:lorawan:sx1302-waveshare-hat`: [Waveshare LoRaWAN sx1302 gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
+- `viam:lorawan:rak7391`: [rak7391 Wisgate Connect](https://docs.rakwireless.com/product-categories/wisgate/rak7391/overview/)
 
 This module also provides a **sx1302 generic** model that can be used with other sx1302 HATs:
 
@@ -56,6 +57,7 @@ See below for the Viam configuration for each of these models.
 ### Configuration for `viam:lorawan:dragino-LHT65N` and `viam:lorawan:dragino-WQSLB`
 
 If using a WSQ-LB, be sure to calibrate the sensor using the instructions below.
+Submerge the WQS-LB probes in liquid to obtain valid readings.
 
 #### Quick examples
 
@@ -64,9 +66,9 @@ Example OTAA node configuration:
 ```json
 {
   "join_type": "OTAA",
-  "dev_eui": "0123456789ABCDEF",
-  "app_key": "0123456789ABCDEF0123456789ABCDEF",
-  "gateways": ["gateway-1"]
+  "dev_eui": <string>,
+  "app_key": <string>,
+  "gateways": [<string gatewayname>]
 }
 ```
 
@@ -74,10 +76,10 @@ Example ABP node configuration:
 ```json
 {
   "join_type": "ABP",
-  "dev_addr": "01234567",
-  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
-  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
-  "gateways": ["gateway-1"]
+  "dev_addr": <string>,
+  "app_s_key": <string>,
+  "network_s_key": <string>,
+  "gateways": [<string gatewayname>]
 }
 ```
 #### General Attributes
@@ -181,7 +183,7 @@ If K=10 (10-20000 mS/cm), use the following steps to calibrate:
 2. When data is stable, send the following downlink:
 ```json
 {
-  "calibrate_ec_10": 10
+  "calibrate_ec": 10
 }
 ```
 
@@ -412,13 +414,55 @@ The following attributes are available for `viam:lorawan:sx1302-hat-generic` sen
 }
 ```
 
-### Attributes
+#### Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
 | region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+
+### Configuration for`viam:lorawan:rak7391`
+
+Before configuring the rak7391, follow [the manual](https://docs.rakwireless.com/product-categories/software-apis-and-libraries/rakpios/quickstart) to install RAKPiOS and connect to the device.
+
+You can run the following command to discover where the concentrators are connected:
+
+`docker run --privileged --rm rakwireless/udp-packet-forwarder find_concentrator`
+
+Use the returned spi or serial paths in your viam configuration.
+
+
+#### Quick Example
+
+```json
+{
+  "pcie1": {
+    "serial_path": <serial_path>
+  },
+  "pcie2": {
+    "serial_path": <serial_path>
+  },
+  "board": <string-boardname>
+}
+```
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the raspberry pi board in your RAK |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+| pcie1 | config | no | - | info about the concentrator connected to the pcie1 slot of the RAK |
+| pcie2 |config | no | - | info about the concentrator connected to the pcie2 slot of the RAK |
+
+
+The following attributes are available for the pcies:
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi), for concentrators are connected through SPI |
+| serial_path | int | no | 0 | serial path concentrator is connected to, if connected through USB |
+
 
 ## Troubleshooting
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.

@@ -17,6 +17,12 @@
           "markdown_link": "README.md#configuration-for-viamlorawansx1302-waveshare-hat",
           "short_description": "A sensor component for a Waveshare sx1302 LoRaWAN gateway HAT."
         },
+        {
+          "api": "rdk:component:sensor",
+          "model": "viam:lorawan:rak7391",
+          "markdown_link": "README.md#configuration-for-viamlorawanrak7391",
+          "short_description": "A sensor component for the rak7391 Wisgate Connect."
+        },
        {
           "api": "rdk:component:sensor",
           "model": "viam:lorawan:node",

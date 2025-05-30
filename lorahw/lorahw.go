@@ -26,7 +26,6 @@ import (
 
 // Error variables for gateway setup errors
 var (
-	errInvalidSpiBus          = errors.New("invalid SPI bus")
 	errBoardConfig            = errors.New("error setting the board config")
 	errRadio0Config           = errors.New("error setting the radio frequency config for radio 0")
 	errRadio1Config           = errors.New("error setting the radio frequency config for radio 1")
@@ -34,6 +33,7 @@ var (
 	errLoraStdChannel         = errors.New("error configuring the lora STD channel")
 	errTxGainSettings         = errors.New("error configuring the tx gain settings")
 	errGatewayStart           = errors.New("error starting the gateway")
+	errInvalidBaseChannel     = errors.New("base channel must be between 0-48")
 )
 
 // SendPacket sends a lora packet using the sx1302 concentrator
@@ -105,11 +105,12 @@ type RxPacket struct {
 	Payload  []byte
 	SNR      float64
 	DataRate int
+	Freq     int
 }
 
 // SetupGateway initializes the gateway hardware
-func SetupGateway(spiBus int, region regions.Region) error {
-	errCode := C.set_up_gateway(C.int(spiBus), C.int(region))
+func SetupGateway(comType int, path string, region regions.Region, baseChannel int) error {
+	errCode := C.set_up_gateway(C.int(comType), C.CString(path), C.int(region), C.int(baseChannel))
 	if errCode != 0 {
 		return fmt.Errorf("failed to set up gateway: %w", parseErrorCode(int(errCode)))
 	}
@@ -154,6 +155,7 @@ func ReceivePackets() ([]RxPacket, error) {
 			Size:     uint(packets[i].size),
 			SNR:      float64(packets[i].snr),
 			DataRate: int(packets[i].datarate),
+			Freq:     int(packets[i].freq_hz),
 		}
 
 		// Convert payload
@@ -168,11 +170,6 @@ func ReceivePackets() ([]RxPacket, error) {
 	return result, nil
 }
 
-// RedirectLogsToPipe redirects C logs to a pipe
-func RedirectLogsToPipe(fd uintptr) {
-	C.redirect_to_pipe(C.int(fd))
-}
-
 // DisableBuffering disables buffering on C stdout
 func DisableBuffering() {
 	C.disable_buffering()
@@ -181,7 +178,7 @@ func DisableBuffering() {
 func parseErrorCode(errCode int) error {
 	switch errCode {
 	case 1:
-		return errInvalidSpiBus
+		return errInvalidBaseChannel
 	case 2:
 		return errBoardConfig
 	case 3:

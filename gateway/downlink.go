@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -13,7 +14,9 @@ import (
 	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	v1 "go.viam.com/api/common/v1"
 	"go.viam.com/utils"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -21,12 +24,14 @@ const (
 	downlinkDelay = 2  // rx2 delay in seconds for downlink messages.
 	rx2SF         = 12 // spreading factor for rx2 window, used for both US and EU
 	// command identifiers of supported mac commands.
-	deviceTimeCID = 0x0D
-	linkCheckCID  = 0x02
-	dutyCycleCID  = 0x04
+	deviceTimeCID  = 0x0D
+	linkCheckCID   = 0x02
+	linkADRCID     = 0x03
+	dutyCycleCID   = 0x04
+	foptsMaxLength = 15
 )
 
-func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time) error {
+func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept bool, packetTime time.Time, c *concentrator) error {
 	if len(payload) > 256 {
 		return fmt.Errorf("error sending downlink, payload size is %d bytes, max size is 256 bytes", len(payload))
 	}
@@ -49,12 +54,40 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("error sending downlink: %w", ctx.Err())
 	}
 
-	err := lorahw.SendPacket(ctx, txPkt)
+	// needs to be in map form for protobuf
+	txPktMap, err := convertTxPktToMap(txPkt)
+	if err != nil {
+		return fmt.Errorf("failed to convert packet to map: %w", err)
+	}
+
+	cmd := map[string]interface{}{SendPacketKey: txPktMap}
+
+	cmdStruct, err := structpb.NewStruct(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create command struct: %w", err)
+	}
+
+	req := &v1.DoCommandRequest{
+		Command: cmdStruct,
+	}
+
+	_, err = c.client.DoCommand(ctx, req)
 	if err != nil {
 		return err
 	}
-
 	return nil
+}
+
+func convertTxPktToMap(txPkt *lorahw.TxPacket) (map[string]interface{}, error) {
+	var txPktMap map[string]interface{}
+	b, err := json.Marshal(txPkt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal txPkt: %w", err)
+	}
+	if err := json.Unmarshal(b, &txPktMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal txPkt to map: %w", err)
+	}
+	return txPktMap, nil
 }
 
 // According to lorawan docs, downlinks have a +/- 20 us error window, so regular sleep would not be accurate enough.
@@ -91,7 +124,7 @@ func accurateSleep(ctx context.Context, duration time.Duration) bool {
 // | 1 B  |   4 B    |  1 B  |    2 B   |       variable     |   1 B  |      variable            | 4 B  |.
 func (g *gateway) createDownlink(ctx context.Context,
 	device *node.Node,
-	framePayload, uplinkFopts []byte,
+	framePayload, fopts, uplinkFopts []byte,
 	sendAck bool,
 	snr float64,
 	sf int) (
@@ -106,25 +139,30 @@ func (g *gateway) createDownlink(ctx context.Context,
 
 	payload = append(payload, devAddrLE...)
 
-	fopts := make([]byte, 0)
-
 	// Handle any mac commands sent in the uplink fopts.
 	if len(uplinkFopts) != 0 {
 		for _, b := range uplinkFopts {
+			// Break early if FOpts already has 15 bytes
+			if len(fopts) >= foptsMaxLength {
+				break
+			}
 			switch b {
 			case deviceTimeCID:
 				g.logger.Debugf("got device time request from %s", device.NodeName)
 				deviceTimeAns, err := createDeviceTimeAns()
 				if err != nil {
 					g.logger.Errorf("failed to create device time answer: %w", err)
+					continue
 				}
-				fopts = append(fopts, deviceTimeAns...)
+				if len(fopts)+len(deviceTimeAns) <= 15 {
+					fopts = append(fopts, deviceTimeAns...)
+				}
 			case linkCheckCID:
 				g.logger.Debugf("got link check request from %s", device.NodeName)
 				linkCheckAns := createLinkCheckAns(snr, sf)
-				fopts = append(fopts, linkCheckAns...)
-			case dutyCycleCID:
-				g.logger.Debugf("got duty cycle answer from %s", device.NodeName)
+				if len(fopts)+len(linkCheckAns) <= 15 {
+					fopts = append(fopts, linkCheckAns...)
+				}
 			default:
 				// unknown mac command - this shouldn't happen since we remove these in parseDataUplink.
 			}

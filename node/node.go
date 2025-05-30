@@ -187,12 +187,15 @@ type Node struct {
 	JoinType      string
 	reconfigureMu sync.Mutex
 
-	FCntDown  uint16
-	FPort     byte     // for downlinks, only required when frame payload exists.
-	Downlinks [][]byte // list of downlink frame payloads to send
+	FCntDown    uint16
+	FPort       byte     // for downlinks, only required when frame payload exists.
+	Downlinks   [][]byte // list of downlink frame payloads to send
+	FoptsToSend [][]byte // list of mac commands to send
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval
+	LastDevNonce       []byte  // unique dev nonce sent in the join request
+	FCntUp             uint16  // counter of uplinks sent in uplink messages
 
 	Workers *utils.StoppableWorkers
 }
@@ -268,7 +271,7 @@ func (n *Node) validateGateway(ctx context.Context, deps resource.Dependencies) 
 
 	retVal, ok := ret["validate"]
 	if !ok {
-		return errors.New("dependency must be the sx1302-gateway sensor")
+		return errors.New("failed to validate the gateway")
 	}
 	re, ok := retVal.(float64)
 	if !ok {
@@ -312,7 +315,7 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		// no readings available yet
 		if !ok {
 			// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
-			if extra[data.FromDMString] == true {
+			if extra != nil && extra[data.FromDMString] == true {
 				return map[string]interface{}{}, data.ErrNoCaptureToStore
 			}
 			return NoReadings, nil

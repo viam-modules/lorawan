@@ -9,9 +9,11 @@ import (
 
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/testutils"
+	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/testutils/inject"
 	"go.viam.com/test"
 )
 
@@ -113,6 +115,60 @@ func TestReadings(t *testing.T) {
 		_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, readings, test.ShouldResemble, node.NoReadings)
+	})
+	t.Run("Test Inavlid Readings", func(t *testing.T) {
+		// Test OTAA config
+		validConf := resource.Config{
+			Name: testNodeName,
+			ConvertedAttributes: &Config{
+				Interval: &testInterval,
+				JoinType: node.JoinTypeOTAA,
+				DevEUI:   testDevEUI,
+				AppKey:   testAppKey,
+			},
+		}
+
+		n, err := newWQSLB(ctx, deps, validConf, logger)
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, n, test.ShouldNotBeNil)
+
+		var dep resource.Resource
+		for _, val := range deps {
+			dep = val
+		}
+		gateway, ok := dep.(sensor.Sensor)
+		test.That(t, ok, test.ShouldBeTrue)
+		injectedGateway, ok := gateway.(*inject.Sensor)
+		test.That(t, ok, test.ShouldBeTrue)
+
+		injectedGateway.ReadingsFunc = func(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+			readings := make(map[string]interface{})
+			invalidReadings := map[string]interface{}{
+				orpKey: -100000.0, // invalid orp
+				phKey:  7.0,
+			}
+			readings[testNodeName] = invalidReadings
+			return readings, nil
+		}
+
+		// if From DM should remove invalid reading
+		expectedReadings := map[string]interface{}{
+			phKey: 7.0,
+		}
+		readings, err := n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, readings, test.ShouldResemble, expectedReadings)
+
+		// If data.FromDmString is false, invalid reading should be "INVALID" string
+		// if From DM should remove invalid reading
+		expectedReadings = map[string]interface{}{
+			orpKey: "INVALID",
+			phKey:  7.0,
+		}
+
+		readings, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+		test.That(t, err, test.ShouldBeNil)
+		test.That(t, readings, test.ShouldResemble, expectedReadings)
 	})
 }
 
@@ -278,4 +334,80 @@ func TestConfigValidate(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 	test.That(t, deps[0], test.ShouldEqual, testGatewayName)
+}
+
+func TestSanitizeReading(t *testing.T) {
+	t.Run("valid readings remain unchanged", func(t *testing.T) {
+		reading := map[string]interface{}{
+			phKey:    7.0,    // valid pH
+			ecK10Key: 1000.0, // valid EC K10
+		}
+		extra := map[string]interface{}{}
+
+		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
+		test.That(t, result[phKey], test.ShouldEqual, 7.0)
+
+		result = sanitizeReading(reading, extra, probeRange{key: ecK10Key, min: ecK10Min, max: ecK10Max})
+		test.That(t, result[ecK10Key], test.ShouldEqual, 1000.0)
+	})
+
+	t.Run("invalid readings in data capture mode are deleted", func(t *testing.T) {
+		reading := map[string]interface{}{
+			phKey:    15.0,    // invalid pH
+			ecK10Key: 25000.0, // invalid EC K10
+		}
+		extra := map[string]interface{}{
+			data.FromDMString: true,
+		}
+
+		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
+		_, exists := result[phKey]
+		test.That(t, exists, test.ShouldBeFalse)
+
+		result = sanitizeReading(reading, extra, probeRange{key: ecK10Key, min: ecK10Min, max: ecK10Max})
+		_, exists = result[ecK10Key]
+		test.That(t, exists, test.ShouldBeFalse)
+	})
+
+	t.Run("invalid readings in normal mode are marked INVALID", func(t *testing.T) {
+		reading := map[string]interface{}{
+			phKey:   -1.0,    // invalid pH
+			ecK1Key: 19000.0, // invalid EC K1
+		}
+		extra := map[string]interface{}{}
+
+		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
+		test.That(t, result[phKey], test.ShouldEqual, "INVALID")
+
+		result = sanitizeReading(reading, extra, probeRange{key: ecK1Key, min: ecK1Min, max: ecK1Max})
+		test.That(t, result[ecK1Key], test.ShouldEqual, "INVALID")
+	})
+
+	t.Run("edge cases at boundaries remain valid", func(t *testing.T) {
+		reading := map[string]interface{}{
+			phKey:    phMax,    // max pH
+			ecK10Key: ecK10Min, // min EC K10
+		}
+		extra := map[string]interface{}{}
+
+		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
+		test.That(t, result[phKey], test.ShouldEqual, phMax)
+
+		result = sanitizeReading(reading, extra, probeRange{key: ecK10Key, min: ecK10Min, max: ecK10Max})
+		test.That(t, result[ecK10Key], test.ShouldEqual, ecK10Min)
+	})
+
+	t.Run("non-float64 values are ignored", func(t *testing.T) {
+		reading := map[string]interface{}{
+			phKey:    "not a number",
+			ecK10Key: true,
+		}
+		extra := map[string]interface{}{}
+
+		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
+		test.That(t, result[phKey], test.ShouldEqual, "not a number")
+
+		result = sanitizeReading(reading, extra, probeRange{key: ecK10Key, min: ecK10Min, max: ecK10Max})
+		test.That(t, result[ecK10Key], test.ShouldEqual, true)
+	})
 }

@@ -250,6 +250,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.NodeName, test.ShouldEqual, testNodeName)
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Test with valid ABP config
 	validABPConf := resource.Config{
@@ -269,8 +271,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	testNode = n.(*Node)
+	// lock to prevent a data race w the pollGateway routine
 	testNode.reconfigureMu.Lock()
-	defer testNode.reconfigureMu.Unlock()
 	test.That(t, testNode.NodeName, test.ShouldEqual, "test-node-abp")
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeABP)
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, testDecoderPath)
@@ -283,7 +285,9 @@ func TestNewNode(t *testing.T) {
 	expectedAppSKey, err := hex.DecodeString(testutils.TestAppSKey)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, testNode.AppSKey, test.ShouldResemble, expectedAppSKey)
-	n.Close(ctx)
+	testNode.reconfigureMu.Unlock()
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Decoder can be URL
 	validConf = resource.Config{
@@ -306,7 +310,8 @@ func TestNewNode(t *testing.T) {
 	test.That(t, testNode.JoinType, test.ShouldEqual, JoinTypeOTAA)
 	expectedPath := filepath.Join(tmpDir, "CT101_Decoder.js")
 	test.That(t, testNode.DecoderPath, test.ShouldEqual, expectedPath)
-	n.Close(ctx)
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 
 	// Invalid decoder file should error
 	invalidDecoderConf := resource.Config{
@@ -323,6 +328,8 @@ func TestNewNode(t *testing.T) {
 	_, err = newNode(ctx, deps, invalidDecoderConf, logger)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "provided decoder file path is not valid")
+	err = n.Close(ctx)
+	test.That(t, err, test.ShouldBeNil)
 }
 
 func TestReadings(t *testing.T) {
@@ -780,11 +787,9 @@ func TestIntervalDownlink(t *testing.T) {
 			payloadUnits:      Seconds,
 			numBytes:          4,
 			useLittleEndian:   false,
-			header:            "ff8e",
-			expectedReturn:    "",
+			header:            "02",
+			expectedReturn:    "020000001E", // 0.5 min = 30 seconds = 1E in hex
 			testGatewayReturn: false,
-			expectedErr: `requested uplink interval (0.50 minutes) exceeds the legal duty cycle limit of 1.00 minutes,
-			increase the uplink interval`,
 		},
 	}
 	for _, tt := range tests {

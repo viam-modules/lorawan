@@ -30,6 +30,7 @@ func TestCreateDownlink(t *testing.T) {
 		expectedFctrl       byte
 		expectedFOptsLength int
 		expectDutyCycleReq  bool
+		foptsToSend         []byte
 	}{
 		{
 			name: "valid downlink with standard payload",
@@ -183,6 +184,43 @@ func TestCreateDownlink(t *testing.T) {
 			uplinkFopts:   nil,
 			expectedFctrl: 0xA0,
 		},
+		{
+			name: "if there are fopts to be sent, include in fopts",
+			device: &node.Node{
+				NodeName: testNodeName,
+				Addr:     testDeviceAddr,
+				AppSKey:  testAppSKey,
+				NwkSKey:  testNwkSKey,
+				FCntDown: 0,
+				FPort:    0x00,
+				DevEui:   testDevEUI,
+				Region:   regions.US,
+			},
+			foptsToSend:    []byte{0x01, 0x02, 0x03, 0x04},
+			expectedErr:    false,
+			ack:            false,
+			expectedLength: 16, // Base length (12) + fopts (4 bytes)
+			expectedFctrl:  0x84,
+		},
+		{
+			name: "uplink fopts responses are appended to foptstosend",
+			device: &node.Node{
+				NodeName: testNodeName,
+				Addr:     testDeviceAddr,
+				AppSKey:  testAppSKey,
+				NwkSKey:  testNwkSKey,
+				FCntDown: 0,
+				FPort:    0x00,
+				DevEui:   testDevEUI,
+				Region:   regions.US,
+			},
+			uplinkFopts:    []byte{deviceTimeCID},
+			foptsToSend:    []byte{0x01, 0x02, 0x03, 0x04},
+			expectedErr:    false,
+			ack:            false,
+			expectedLength: 22, // Base length (12) + fopts (4 bytes) + devicetiemans (6)
+			expectedFctrl:  0x8A,
+		},
 	}
 
 	for _, tt := range tests {
@@ -199,7 +237,7 @@ func TestCreateDownlink(t *testing.T) {
 			// Store initial FCntDown for verification later
 			initialFCntDown := tt.device.FCntDown
 
-			payload, err := g.createDownlink(ctx, tt.device, tt.framePayload, tt.uplinkFopts, tt.ack, 0, 12)
+			payload, err := g.createDownlink(ctx, tt.device, tt.framePayload, tt.foptsToSend, tt.uplinkFopts, tt.ack, 0, 12)
 
 			if tt.expectedErr {
 				test.That(t, err, test.ShouldNotBeNil)
@@ -218,25 +256,26 @@ func TestCreateDownlink(t *testing.T) {
 				test.That(t, payload[5], test.ShouldEqual, tt.expectedFctrl)
 
 				currentPos := 8 // Start after MHDR(1) + DevAddr(4) + FCtrl(1) + FCnt(2)
-				if tt.expectedFOptsLength != 0 {
-					for _, b := range tt.uplinkFopts {
-						if b == deviceTimeCID {
-							test.That(t, payload[currentPos], test.ShouldEqual, deviceTimeCID)
-							currentPos += 6
-						}
-						if b == linkCheckCID {
-							test.That(t, payload[currentPos], test.ShouldEqual, linkCheckCID)
-							currentPos += 3
-						}
-					}
-					if tt.expectDutyCycleReq {
-						test.That(t, payload[currentPos], test.ShouldEqual, dutyCycleCID)
-						currentPos += 2
-					}
+
+				if tt.foptsToSend != nil {
+					test.That(t, payload[currentPos:currentPos+len(tt.foptsToSend)], test.ShouldResemble, tt.foptsToSend)
+					currentPos += len(tt.foptsToSend)
 				}
 
-				actualFOptsLength := currentPos - 8
-				test.That(t, actualFOptsLength, test.ShouldEqual, tt.expectedFOptsLength)
+				for _, b := range tt.uplinkFopts {
+					if b == deviceTimeCID {
+						test.That(t, payload[currentPos], test.ShouldEqual, deviceTimeCID)
+						currentPos += 6
+					}
+					if b == linkCheckCID {
+						test.That(t, payload[currentPos], test.ShouldEqual, linkCheckCID)
+						currentPos += 3
+					}
+				}
+				if tt.expectDutyCycleReq {
+					test.That(t, payload[currentPos], test.ShouldEqual, dutyCycleCID)
+					currentPos += 2
+				}
 
 				if tt.framePayload != nil {
 					portIndex := currentPos

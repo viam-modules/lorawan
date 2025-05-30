@@ -6,10 +6,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -20,33 +23,47 @@ import (
 	"github.com/viam-modules/gateway/lorahw"
 	"github.com/viam-modules/gateway/node"
 	"github.com/viam-modules/gateway/regions"
+	v1 "go.viam.com/api/common/v1"
+	pb "go.viam.com/api/component/sensor/v1"
 	"go.viam.com/rdk/components/board"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"
+	"go.viam.com/utils/pexec"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // defining model names here to be reused in getNativeConfig.
 const (
-	oldModelName = "sx1302-gateway"
-	genericHat   = "sx1302-hat-generic"
-	waveshareHat = "sx1302-waveshare-hat"
+	oldModelName  = "sx1302-gateway"
+	genericHat    = "sx1302-hat-generic"
+	waveshareHat  = "sx1302-waveshare-hat"
+	rak7391       = "rak7391"
+	SendPacketKey = "send_packet"
+	GetPacketsKey = "get_packets"
+	// the stop Docommand key tells the managed process to call stop on the gateway hardware.
+	StopKey = "stop"
 )
 
 // Error variables for validation and operations.
 var (
 	// Config validation errors.
 	errInvalidSpiBus = errors.New("spi bus can be 0 or 1 - default 0")
+	errSPIAndUSB     = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
 
 	// Gateway operation errors.
-	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
-	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
-	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
-	errNoDevice           = errors.New("received packet from unknown device")
-	errInvalidMIC         = errors.New("invalid MIC")
-	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
+	errUnexpectedJoinType         = errors.New("unexpected join type when adding node to gateway")
+	errInvalidNodeMapType         = errors.New("expected node map val to be type []interface{}, but it wasn't")
+	errInvalidByteType            = errors.New("expected node byte array val to be float64, but it wasn't")
+	errNoDevice                   = errors.New("received packet from unknown device")
+	errInvalidMIC                 = errors.New("invalid MIC")
+	errInvalidRegion              = errors.New("unrecognized region code, valid options are US915 and EU868")
+	errInvalidConcentratorsLength = errors.New("invalid concentrator length - should not happen")
+	errTimedOut                   = errors.New("timed out waiting for gateway to start")
 )
 
 // constants for MHDRs of different message types.
@@ -67,6 +84,9 @@ var ModelGenericHat = node.LorawanFamily.WithModel(string(genericHat))
 // ModelSX1302WaveshareHat represents a lorawan SX1302 Waveshare Hat gateway model.
 var ModelSX1302WaveshareHat = node.LorawanFamily.WithModel(string(waveshareHat))
 
+// ModelRak7391 represents a lorawan RAK7381 model.
+var ModelRak7391 = node.LorawanFamily.WithModel(string(rak7391))
+
 // Define the map of SF to minimum SNR values in dB.
 // Any packet received below the minimum demodulation value will not be parsed.
 // Values found at https://www.thethingsnetwork.org/docs/lorawan/rssi-and-snr/
@@ -79,20 +99,41 @@ var sfToSNRMin = map[int]float64{
 	12: -12.5,
 }
 
-// LoggingRoutineStarted is a global variable to track if the captureCOutputToLogs goroutine has
-// started for each gateway. If the gateway build errors and needs to build again, we only want to start
-// the logging routine once.
-var loggingRoutineStarted = make(map[string]bool)
+type comType int
+
+// enum for com types.
+const (
+	spi comType = iota
+	usb
+)
 
 var noReadings = map[string]interface{}{"": "no readings available yet"}
 
+// ConcentratorConfig describes the configuration for a single concentrator.
+type ConcentratorConfig struct {
+	Name        string
+	Bus         *int   `json:"spi_bus,omitempty"`
+	Path        string `json:"serial_path,omitempty"`
+	ResetPin    *int
+	PowerPin    *int
+	BaseChannel int
+}
+
+// ConfigMultiConcentrator describes a config for a gateway with multiple concentrators.
+type ConfigMultiConcentrator struct {
+	Concentrators []*ConcentratorConfig
+	Region        string
+	BoardName     string
+}
+
 // Config describes the configuration of the gateway.
 type Config struct {
-	Bus       int    `json:"spi_bus,omitempty"`
+	Bus       *int   `json:"spi_bus,omitempty"`
 	PowerPin  *int   `json:"power_en_pin,omitempty"`
 	ResetPin  *int   `json:"reset_pin"`
 	BoardName string `json:"board"`
 	Region    string `json:"region_code,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // deviceInfo is a struct containing OTAA device information.
@@ -105,6 +146,20 @@ type deviceInfo struct {
 	FCntDown          *uint16 `json:"fcnt_down"`
 	NodeName          string  `json:"node_name"`
 	MinUplinkInterval float64 `json:"min_uplink_interval"`
+}
+
+type concentrator struct {
+	name       string
+	client     pb.SensorServiceClient
+	rstPin     board.GPIOPin
+	pwrPin     board.GPIOPin
+	started    bool
+	conn       *grpc.ClientConn
+	process    pexec.ManagedProcess
+	logReader  *bufio.Reader
+	pipeReader *io.PipeReader
+	pipeWriter *io.PipeWriter
+	workers    *utils.StoppableWorkers
 }
 
 func init() {
@@ -126,6 +181,12 @@ func init() {
 		resource.Registration[sensor.Sensor, *ConfigSX1302WaveshareHAT]{
 			Constructor: newSX1302WaveshareHAT,
 		})
+	resource.RegisterComponent(
+		sensor.API,
+		ModelRak7391,
+		resource.Registration[sensor.Sensor, *ConfigRak7391]{
+			Constructor: newRak7391,
+		})
 }
 
 // Validate ensures all parts of the config are valid.
@@ -134,8 +195,18 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
-	if conf.Bus != 0 && conf.Bus != 1 {
+	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
 		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+	}
+	if conf.Bus != nil && conf.Path != "" {
+		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
+	}
+
+	if conf.Path != "" {
+		err := validateSerialPath(conf.Path)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if len(conf.BoardName) == 0 {
@@ -152,31 +223,39 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	return deps, nil
 }
 
+func validateSerialPath(path string) error {
+	_, err := os.Stat(path)
+	// serial path does not exist
+	if errors.Is(err, os.ErrNotExist) {
+		return resource.NewConfigValidationError(path, fmt.Errorf("configured path %s does not exist", path))
+	}
+	// other issue with serial path
+	if err != nil {
+		return resource.NewConfigValidationError(path, fmt.Errorf("error getting serial path %s: %w", path, err))
+	}
+	return nil
+}
+
 // Gateway defines a lorawan gateway.
 type gateway struct {
 	resource.Named
 	logger logging.Logger
 	mu     sync.Mutex
 
-	// Using two wait groups so we can stop the receivingWorker at reconfigure
-	// but keep the loggingWorker running.
-	loggingWorker   *utils.StoppableWorkers
-	receivingWorker *utils.StoppableWorkers
+	workers *utils.StoppableWorkers
 
 	lastReadings map[string]interface{} // map of devices to readings
 	readingsMu   sync.Mutex
 
 	devices map[string]*node.Node // map of node name to node struct
 
-	started bool
-	rstPin  board.GPIOPin
-	pwrPin  board.GPIOPin
-
-	logReader  *os.File
-	logWriter  *os.File
 	db         *sql.DB // store device information/keys for use across restarts in a database
 	regionInfo regions.RegionInfo
 	region     regions.Region
+
+	concentrators []*concentrator
+
+	cgoPath string
 }
 
 // NewGateway creates a new gateway.
@@ -187,9 +266,8 @@ func NewGateway(
 	logger logging.Logger,
 ) (sensor.Sensor, error) {
 	g := &gateway{
-		Named:   conf.ResourceName().AsNamed(),
-		logger:  logger,
-		started: false,
+		Named:  conf.ResourceName().AsNamed(),
+		logger: logger,
 	}
 
 	moduleDataDir := os.Getenv("VIAM_MODULE_DATA")
@@ -225,32 +303,29 @@ func getNativeConfig(conf resource.Config) (*Config, error) {
 	}
 }
 
+func getMultiConcentratorConfig(conf resource.Config) (*ConfigMultiConcentrator, error) {
+	switch conf.Model.Name {
+	case rak7391:
+		rak7391Config, err := resource.NativeConfig[*ConfigRak7391](conf)
+		if err != nil {
+			return nil, fmt.Errorf("the config %v does not match a supported config type", conf)
+		}
+		return rak7391Config.getGatewayConfig(), nil
+	default:
+		return nil, errors.New("build error in module. Unsupported Gateway model")
+	}
+}
+
 // Reconfigure reconfigures the gateway.
 func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// If the gateway hardware was already started, stop gateway and the background worker.
-	// Make sure to always call stopGateway() before making any changes to the c config or
-	// errors will occur.
-	// Unexpected behavior will also occur if stopGateway() is called when the gateway hasn't been
-	// started, so only call stopGateway if this module already started the gateway.
-	if g.started {
-		g.reset(ctx)
-	}
-
-	cfg, err := getNativeConfig(conf)
-	if err != nil {
+	if err := g.resetConcentrators(ctx); err != nil {
 		return err
 	}
-
-	board, err := board.FromDependencies(deps, cfg.BoardName)
-	if err != nil {
-		return err
-	}
-
-	// capture C log output
-	g.startCLogging()
+	// workers and process are restarted during reconfigure
+	g.closeProcesses()
 
 	// maintain devices and lastReadings through reconfigure.
 	if g.devices == nil {
@@ -261,25 +336,37 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	// adding io before the pin allows you to use the GPIO number.
-	rstPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.ResetPin))
-	if err != nil {
-		return err
-	}
-	g.rstPin = rstPin
-
-	// not every gateway has a power enable pin so it is optional.
-	if cfg.PowerPin != nil {
-		pwrPin, err := board.GPIOPinByName("io" + strconv.Itoa(*cfg.PowerPin))
+	switch conf.Model {
+	case ModelRak7391:
+		cfg, err := getMultiConcentratorConfig(conf)
 		if err != nil {
 			return err
 		}
-		g.pwrPin = pwrPin
+		if err := g.reconfigureMultiConcentrator(ctx, deps, cfg); err != nil {
+			return err
+		}
+	default:
+		cfg, err := getNativeConfig(conf)
+		if err != nil {
+			return err
+		}
+		if err := g.reconfigureSingleConcentrator(ctx, deps, cfg); err != nil {
+			return err
+		}
 	}
 
-	err = resetGateway(ctx, g.rstPin, g.pwrPin)
+	g.workers = utils.NewBackgroundStoppableWorkers(g.receivePackets)
+
+	return nil
+}
+
+func (g *gateway) reconfigureSingleConcentrator(ctx context.Context, deps resource.Dependencies, cfg *Config) error {
+	// reset concentrators list
+	g.concentrators = make([]*concentrator, 0)
+
+	board, err := board.FromDependencies(deps, cfg.BoardName)
 	if err != nil {
-		return fmt.Errorf("error initializing the gateway: %w", err)
+		return err
 	}
 
 	region := regions.GetRegion(cfg.Region)
@@ -295,67 +382,288 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.region = regions.EU
 	}
 
-	if err := lorahw.SetupGateway(cfg.Bus, region); err != nil {
-		return fmt.Errorf("failed to set up the gateway: %w", err)
+	concentratorConfig := &ConcentratorConfig{
+		PowerPin:    cfg.PowerPin,
+		ResetPin:    cfg.ResetPin,
+		Bus:         cfg.Bus,
+		Path:        cfg.Path,
+		BaseChannel: 0,
 	}
 
-	g.started = true
-	g.receivingWorker = utils.NewBackgroundStoppableWorkers(g.receivePackets)
+	err = g.createConcentrator(ctx, g.Name().Name, board, concentratorConfig)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-// startCLogging starts the goroutine to capture C logs into the logger.
-// If loggingRoutineStarted indicates routine has already started, it does nothing.
-func (g *gateway) startCLogging() {
-	loggingState, ok := loggingRoutineStarted[g.Name().Name]
-	if !ok || !loggingState {
-		g.logger.Debug("Starting c logger background routine")
-		stdoutR, stdoutW, err := os.Pipe()
-		if err != nil {
-			g.logger.Errorf("unable to create pipe for C logs")
-			return
+func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resource.Dependencies, cfg *ConfigMultiConcentrator) error {
+	// get the number of concentrators before reconfiguring
+	oldNumConcentrators := len(g.concentrators)
+
+	// reset concentrators list
+	g.concentrators = make([]*concentrator, 0)
+
+	board, err := board.FromDependencies(deps, cfg.BoardName)
+	if err != nil {
+		return err
+	}
+
+	region := regions.GetRegion(cfg.Region)
+
+	switch region {
+	case regions.US, regions.Unspecified:
+		g.logger.Infof("configuring gateway for US915 band")
+		g.regionInfo = regions.RegionInfoUS
+		g.region = regions.US
+	case regions.EU:
+		g.logger.Infof("configuring gateway for EU868 band")
+		g.regionInfo = regions.RegionInfoEU
+		g.region = regions.EU
+	}
+
+	for _, c := range cfg.Concentrators {
+		if err := g.createConcentrator(ctx, c.Name, board, c); err != nil {
+			return err
 		}
-		g.logReader = stdoutR
-		g.logWriter = stdoutW
+	}
 
-		// Redirect C's stdout to the write end of the pipe
-		lorahw.RedirectLogsToPipe(g.logWriter.Fd())
-		scanner := bufio.NewScanner(g.logReader)
+	// if the number of concentrators has changed, send a new linkADRReq downlink to each device to update frequency channels.
+	if g.region == regions.US && oldNumConcentrators != 0 && oldNumConcentrators != len(g.concentrators) {
+		chMask, err := g.getChannelMask()
+		if err != nil {
+			return err
+		}
+		for _, n := range g.devices {
+			fopts := createLinkADRReq(chMask)
+			n.FoptsToSend = append(n.FoptsToSend, fopts)
+		}
+	}
+	return nil
+}
 
-		g.loggingWorker = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) { g.captureCOutputToLogs(ctx, scanner) })
-		loggingRoutineStarted[g.Name().Name] = true
+// |    4 bits  |    4 bits  |  2 B   | 1 B
+// | data rate  |  TX power  | CHmask | redundancy.
+func createLinkADRReq(chMask []byte) []byte {
+	payload := make([]byte, 0)
+	payload = append(payload, linkADRCID)
+	payload = append(payload, 0x20)      // DR2 / TX power default
+	payload = append(payload, chMask[0]) // enable/disable 0-7
+	payload = append(payload, chMask[1]) // enable/disable 8-15
+
+	// bits 7–4: ChMaskCtrl - / chmask is for block0 (channels 0-15)
+	// bits 3–0: NbTrans - number of transmissions for each uplink message: 1
+	payload = append(payload, 0x01)
+
+	return payload
+}
+
+func (g *gateway) createConcentrator(ctx context.Context,
+	id string,
+	b board.Board,
+	cfg *ConcentratorConfig,
+) error {
+	// adding io before the pin allows you to use the GPIO number.
+	rstPin, err := b.GPIOPinByName("io" + strconv.Itoa(*cfg.ResetPin))
+	if err != nil {
+		return err
+	}
+
+	c := concentrator{rstPin: rstPin, name: id}
+
+	// not every gateway has a power enable pin so it is optional.
+	if cfg.PowerPin != nil {
+		pwrPin, err := b.GPIOPinByName("io" + strconv.Itoa(*cfg.PowerPin))
+		if err != nil {
+			return err
+		}
+		c.pwrPin = pwrPin
+	}
+
+	// defaults if nothing configured
+	path := "/dev/spidev0.0"
+	comType := spi
+
+	if cfg.Bus != nil {
+		path = fmt.Sprintf("/dev/spidev0.%d", *cfg.Bus)
+		comType = spi
+	}
+
+	if cfg.Path != "" {
+		// Resolve the symlink
+		if strings.Contains(cfg.Path, "by-path") || strings.Contains(cfg.Path, "by-id") {
+			resolvedPath, err := filepath.EvalSymlinks(cfg.Path)
+			if err != nil {
+				return fmt.Errorf("failed to resolve symlink of path %s: %w", cfg.Path, err)
+			}
+			cfg.Path = resolvedPath
+		}
+		path = cfg.Path
+		comType = usb
+	}
+
+	var comTypeString string
+	switch comType {
+	case spi:
+		comTypeString = "SPI"
+
+	case usb:
+		comTypeString = "USB"
+	}
+
+	g.logger.Infof("starting %s concentrator connected to path %s", comTypeString, path)
+
+	if err = resetGateway(ctx, rstPin, c.pwrPin); err != nil {
+		return fmt.Errorf("error initializing the gateway: %w", err)
+	}
+
+	args := []string{
+		fmt.Sprintf("--comType=%d", comType),
+		"--path=" + path,
+		fmt.Sprintf("--region=%d", g.region),
+		fmt.Sprintf("--baseChannel=%d", cfg.BaseChannel),
+	}
+
+	var cgoexe string
+	cgoexe = g.cgoPath
+	if g.cgoPath == "" {
+		dir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("error getting current directory: %w", err)
+		}
+
+		cgoexe = dir + "/cgo"
+		_, err = os.Stat(cgoexe)
+		if err != nil {
+			return fmt.Errorf("error getting the cgo exe: %w", err)
+		}
+	}
+
+	logReader, logWriter := io.Pipe()
+	bufferedLogReader := bufio.NewReader(logReader)
+	c.pipeWriter = logWriter
+	c.pipeReader = logReader
+	c.logReader = bufferedLogReader
+
+	config := pexec.ProcessConfig{
+		ID:        id,
+		Name:      cgoexe,
+		Args:      args,
+		Log:       false,
+		LogWriter: logWriter,
+	}
+
+	process := pexec.NewManagedProcess(config, g.logger)
+	c.process = process
+
+	if err := process.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start binary: %w", err)
+	}
+
+	port, err := c.watchLogs(ctx, g.logger)
+	if err != nil {
+		return err
+	}
+
+	g.logger.Debugf("connecting to port: %s\n", port)
+	target := "localhost:" + port
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("error connecting to server: %w", err)
+	}
+
+	g.logger.Debugf("connected to %s client", id)
+
+	c.conn = conn
+	c.client = pb.NewSensorServiceClient(conn)
+	c.started = true
+
+	g.concentrators = append(g.concentrators, &c)
+	return nil
+}
+
+// watchLogs watches for startup logs and signals when the managed process has started.
+// After startup it continues filtering the logs from the managed process.
+// watchLogs watches for startup logs and signals when the managed process has started.
+// After startup it continues filtering the logs from the managed process.
+func (c *concentrator) watchLogs(ctx context.Context, logger logging.Logger) (string, error) {
+	cancelCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var port string
+
+	// Spawn goroutine to close reader when ctx times out
+	// Need to do this because ReadString blocks until
+	// there is a new line or underlying reader is closed
+	go func() {
+		<-cancelCtx.Done()
+		if errors.Is(cancelCtx.Err(), context.DeadlineExceeded) {
+			if err := c.pipeReader.Close(); err != nil {
+				logger.Warnf("error closing reader: %w", err)
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-cancelCtx.Done():
+			return "", errTimedOut
+		default:
+		}
+		line, err := c.logReader.ReadString('\n')
+		if err != nil {
+			logger.Warnf("error reading log line: %s", err.Error())
+		}
+		filterLog(line, logger)
+
+		if strings.Contains(line, "Server successfully started:") {
+			parts := strings.Split(line, ":")
+			if len(parts) == 2 {
+				port = strings.TrimSpace(parts[1])
+				logger.Debugf("Captured port: %s", port)
+			}
+		}
+
+		if strings.Contains(line, "done setting up gateway") && port != "" {
+			logger.Debug("successfully initialized gateway")
+			// Keep reading logs in the background.
+			c.workers = utils.NewBackgroundStoppableWorkers(func(ctx context.Context) {
+				c.readLogs(ctx, logger)
+			})
+			return port, nil
+		}
 	}
 }
 
-// captureOutput is a background routine to capture C's stdout and log to the module's logger.
-// This is necessary because the sx1302 library only uses printf to report errors.
-func (g *gateway) captureCOutputToLogs(ctx context.Context, scanner *bufio.Scanner) {
-	// Need to disable buffering on stdout so C logs can be displayed in real time.
-	lorahw.DisableBuffering()
-
-	// loop to read lines from the scanner and log them
+func (c *concentrator) readLogs(ctx context.Context, logger logging.Logger) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			if scanner.Scan() {
-				line := scanner.Text()
-				switch {
-				case strings.Contains(line, "STANDBY_RC mode"):
-					// The error setting standby_rc mode indicates a hardware initiaization failure
-					// add extra log to instruct user what to do.
-					g.logger.Error(line)
-					g.logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
-				case strings.Contains(line, "ERROR"):
-					g.logger.Error(line)
-				case strings.Contains(line, "WARNING"):
-					g.logger.Warn(line)
-				default:
-					g.logger.Debug(line)
-				}
-			}
 		}
+		line, err := c.logReader.ReadString('\n')
+		if err != nil {
+			logger.Warnf("error reading log line: %s", err.Error())
+		}
+		filterLog(line, logger)
+	}
+}
+
+// captureOutput is a background routine to capture C's stdout and log to the module's logger.
+// This is necessary because the sx1302 library only uses printf to report errors.
+func filterLog(line string, logger logging.Logger) {
+	switch {
+	case strings.Contains(line, "STANDBY_RC mode"):
+		// The error setting standby_rc mode indicates a hardware initiaization failure
+		// add extra log to instruct user what to do.
+		logger.Error(line)
+		logger.Error("gateway hardware is misconfigured: unplug the board and wait a few minutes before trying again")
+	case strings.Contains(line, "ERROR"):
+		logger.Error(line)
+	case strings.Contains(line, "WARNING"):
+		logger.Warn(line)
+	default:
+		logger.Debug(line)
 	}
 }
 
@@ -367,58 +675,96 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 
-		packets, err := lorahw.ReceivePackets()
+		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+			GetPacketsKey: true,
+		})
 		if err != nil {
-			g.logger.Errorf("error receiving lora packet: %w", err)
-			continue
+			g.logger.Errorf("Failed to create command struct: %v", err)
 		}
 
-		if len(packets) == 0 {
-			// no packet received, wait 10 ms to receive again
+		req := &v1.DoCommandRequest{
+			Command: cmdStruct,
+		}
+
+		for _, c := range g.concentrators {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(10 * time.Millisecond):
+			default:
 			}
-			continue
-		}
-
-		t := time.Now()
-		for i, packet := range packets {
-			if packet.Size == 0 {
-				continue
+			resp, err := c.client.DoCommand(ctx, req)
+			if err != nil {
+				g.logger.Errorf("error calling do command on client for concentrator %s: %v", c.name, err)
 			}
+			if resp != nil {
+				data := resp.GetResult().AsMap()
 
-			// don't process duplicates
-			isDuplicate := false
-			for j := i - 1; j >= 0; j-- {
-				// two packets identical if payload is the same
-				if slices.Equal(packets[j].Payload, packets[i].Payload) {
-					g.logger.Debugf("skipped duplicate packet")
-					isDuplicate = true
-					break
+				rawPackets, ok := data["packets"]
+				if !ok {
+					g.logger.Errorf("no packets found in map")
+				}
+
+				// Marshal back to JSON to decode into typed struct
+				rawJSON, err := json.Marshal(rawPackets)
+				if err != nil {
+					g.logger.Errorf("failed to get raw json")
+				}
+
+				var packets []lorahw.RxPacket
+				err = json.Unmarshal(rawJSON, &packets)
+				if err != nil {
+					g.logger.Errorf("failed to unmarshal into packet")
+				}
+
+				if len(packets) == 0 {
+					// no packet received, wait 10 ms to receive again
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(10 * time.Millisecond):
+					}
+					continue
+				}
+
+				t := time.Now()
+				for i, packet := range packets {
+					if packet.Size == 0 {
+						continue
+					}
+
+					// don't process duplicates
+					isDuplicate := false
+					for j := i - 1; j >= 0; j-- {
+						// two packets identical if payload is the same
+						if slices.Equal(packets[j].Payload, packets[i].Payload) {
+							g.logger.Debugf("skipped duplicate packet")
+							isDuplicate = true
+							break
+						}
+					}
+					if isDuplicate {
+						continue
+					}
+					minSNR := sfToSNRMin[packet.DataRate]
+					if float64(packet.SNR) < minSNR {
+						g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
+						continue
+					}
+
+					g.handlePacket(ctx, packet, t, c)
 				}
 			}
-			if isDuplicate {
-				continue
-			}
-			minSNR := sfToSNRMin[packet.DataRate]
-			if float64(packet.SNR) < minSNR {
-				g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
-				continue
-			}
-
-			g.handlePacket(ctx, packet.Payload, t, packet.SNR, packet.DataRate)
 		}
 	}
 }
 
-func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime time.Time, snr float64, sf int) {
+func (g *gateway) handlePacket(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, c *concentrator) {
 	// first byte is MHDR - specifies message type
+	payload := packet.Payload
 	switch payload[0] {
 	case joinRequestMHdr:
 		g.logger.Debugf("received join request")
-		if err := g.handleJoin(ctx, payload, packetTime); err != nil {
+		if err := g.handleJoin(ctx, payload, packetTime, c); err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
 				return
@@ -426,7 +772,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 			g.logger.Errorf("couldn't handle join request: %v", err)
 		}
 	case unconfirmedUplinkMHdr:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
+		name, readings, err := g.parseDataUplink(ctx, packet, packetTime, c)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -437,7 +783,7 @@ func (g *gateway) handlePacket(ctx context.Context, payload []byte, packetTime t
 		}
 		g.updateReadings(name, readings)
 	case confirmedUplinkMHdr:
-		name, readings, err := g.parseDataUplink(ctx, payload, packetTime, snr, sf)
+		name, readings, err := g.parseDataUplink(ctx, packet, packetTime, c)
 		if err != nil {
 			// don't log as error if it was a request from unknown device.
 			if errors.Is(errNoDevice, err) {
@@ -477,12 +823,13 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	// Validate that the dependency is correct, returns the gateway's region.
 	if _, ok := cmd["validate"]; ok {
 		return map[string]interface{}{"validate": g.region}, nil
 	}
 
-	// Add the nodes to the list of devices.
+	// Add the node to gateway's list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
 		if newN, ok := newNode.(map[string]interface{}); ok {
 			node, err := convertToNode(newN)
@@ -514,8 +861,22 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			if err != nil {
 				return nil, fmt.Errorf("error while updating device info: %w", err)
 			}
+
+			// if the device has already joined the network, we should send a linkADRReq
+			// to ensure the device uses the right frequency channels.
+			// we know the device has already joined or is ABP mode if dev addr is populated.
+			n := g.devices[node.NodeName]
+			if len(n.Addr) != 0 && g.region == regions.US {
+				chMask, err := g.getChannelMask()
+				if err != nil {
+					return nil, fmt.Errorf("error getting gateway's channel mask: %w", err)
+				}
+				fopts := createLinkADRReq(chMask)
+				n.FoptsToSend = append(n.FoptsToSend, fopts)
+			}
 		}
 	}
+
 	// Remove a node from the device map and readings map.
 	if name, ok := cmd["remove_device"]; ok {
 		if n, ok := name.(string); ok {
@@ -525,6 +886,8 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			g.readingsMu.Unlock()
 		}
 	}
+
+	// Send a downlink
 	if payload, ok := cmd[node.GatewaySendDownlinkKey]; ok {
 		downlinks, ok := payload.(map[string]interface{})
 		if !ok {
@@ -567,6 +930,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		return resp, nil
 	}
 
+	// Return info about one device
 	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
 		resp := map[string]interface{}{}
 		deveui, ok := (devEUI).(string)
@@ -588,6 +952,19 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+}
+
+func (g *gateway) getChannelMask() ([]byte, error) {
+	var chMask []byte
+	switch len(g.concentrators) {
+	case 1:
+		chMask = []byte{0xFF, 0x00}
+	case 2:
+		chMask = []byte{0xFF, 0xFF}
+	default:
+		return nil, errInvalidConcentratorsLength
+	}
+	return chMask, nil
 }
 
 // updateDeviceInfo adds the device info from the db into the gateway's device map.
@@ -705,53 +1082,6 @@ func convertToBytes(key interface{}) ([]byte, error) {
 	return res, nil
 }
 
-// Close closes the gateway.
-func (g *gateway) Close(ctx context.Context) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.reset(ctx)
-
-	if g.loggingWorker != nil {
-		if g.logReader != nil {
-			if err := g.logReader.Close(); err != nil {
-				g.logger.Errorf("error closing log reader: %s", err)
-			}
-		}
-		if g.logWriter != nil {
-			if err := g.logWriter.Close(); err != nil {
-				g.logger.Errorf("error closing log writer: %s", err)
-			}
-		}
-		g.loggingWorker.Stop()
-		delete(loggingRoutineStarted, g.Name().Name)
-	}
-
-	if g.db != nil {
-		if err := g.db.Close(); err != nil {
-			g.logger.Errorf("error closing data db: %s", err)
-		}
-	}
-
-	return nil
-}
-
-func (g *gateway) reset(ctx context.Context) {
-	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
-	if g.receivingWorker != nil {
-		g.receivingWorker.Stop()
-	}
-	if err := lorahw.StopGateway(); err != nil {
-		g.logger.Error("error stopping gateway: %v", err)
-	}
-	if g.rstPin != nil {
-		err := resetGateway(ctx, g.rstPin, g.pwrPin)
-		if err != nil {
-			g.logger.Error("error resetting the gateway")
-		}
-	}
-	g.started = false
-}
-
 // Readings returns all the node's readings.
 func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
 	g.readingsMu.Lock()
@@ -760,11 +1090,113 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 	// no readings available yet
 	if len(g.lastReadings) == 0 || g.lastReadings == nil {
 		// Tell the collector not to capture the empty data.
-		if extra[data.FromDMString] == true {
+		if extra != nil && extra[data.FromDMString] == true {
 			return map[string]interface{}{}, data.ErrNoCaptureToStore
 		}
 		return noReadings, nil
 	}
 
 	return g.lastReadings, nil
+}
+
+// If the concentrator was already started, stop gateway and the background worker.
+// Make sure to always call stop on the concentrator before making any changes to the c config or
+// errors will occur.
+// Unexpected behavior will also occur if stop is called when the concentrator hasn't been
+// started, so only call stop if c.started is true.
+func (g *gateway) resetConcentrators(ctx context.Context) error {
+	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
+	if g.workers != nil {
+		g.workers.Stop()
+		g.workers = nil
+	}
+
+	// create stop command
+	cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+		StopKey: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create command struct: %w", err)
+	}
+
+	req := &v1.DoCommandRequest{
+		Command: cmdStruct,
+	}
+
+	for _, c := range g.concentrators {
+		if c.started {
+			// stop the concentrator
+			_, err = c.client.DoCommand(ctx, req)
+			if err != nil {
+				return fmt.Errorf("failed to stop concentrator: %w", err)
+			}
+			// reset using GPIO pin
+			if c.rstPin != nil {
+				if err = resetGateway(ctx, c.rstPin, nil); err != nil {
+					return fmt.Errorf("error initializing the gateway: %w", err)
+				}
+			}
+			c.started = false
+		}
+	}
+	return nil
+}
+
+func (g *gateway) closeProcesses() {
+	for _, c := range g.concentrators {
+		if err := c.Close(); err != nil {
+			g.logger.Errorf("error closing concentrator %s: %w", c.name, err)
+		}
+	}
+}
+
+func (c *concentrator) Close() error {
+	// Close pipe files before workers to avoid a hang on shutdown.
+	if c.pipeReader != nil {
+		if err := c.pipeReader.Close(); err != nil {
+			return fmt.Errorf("error closing log reader: %s", err.Error())
+		}
+	}
+	if c.pipeWriter != nil {
+		if err := c.pipeWriter.Close(); err != nil {
+			return fmt.Errorf("error closing log writer: %s", err.Error())
+		}
+	}
+	if c.workers != nil {
+		c.workers.Stop()
+	}
+
+	if c.conn != nil {
+		if err := c.conn.Close(); err != nil {
+			return fmt.Errorf("error closing client conn: %w", err)
+		}
+	}
+
+	if c.process != nil {
+		if err := c.process.Stop(); err != nil {
+			return fmt.Errorf("error stopping process: %s", err.Error())
+		}
+	}
+	c.started = false
+	return nil
+}
+
+// Close closes the gateway.
+func (g *gateway) Close(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.workers != nil {
+		g.workers.Stop()
+	}
+
+	g.closeProcesses()
+
+	if g.db != nil {
+		if err := g.db.Close(); err != nil {
+			g.logger.Errorf("error closing data db: %w", err)
+		}
+	}
+
+	return nil
 }

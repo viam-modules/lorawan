@@ -16,9 +16,9 @@ func TestParseErrorCode(t *testing.T) {
 		expected error
 	}{
 		{
-			name:     "invalid SPI bus error",
+			name:     "base channel",
 			errCode:  1,
-			expected: errInvalidSpiBus,
+			expected: errInvalidBaseChannel,
 		},
 		{
 			name:     "board config error",
@@ -97,16 +97,17 @@ func TestReceivePackets(t *testing.T) {
 }
 
 func TestSetupGateway(t *testing.T) {
+	testPath := "/dev/spidev0.0"
 	// Test successful case
-	err := SetupGateway(1, regions.US)
+	err := SetupGateway(1, testPath, regions.US, 0)
 	test.That(t, err, test.ShouldBeNil)
 
 	// unspecifed region will not error
-	err = SetupGateway(1, regions.Unspecified)
+	err = SetupGateway(1, testPath, regions.Unspecified, 16)
 	test.That(t, err, test.ShouldBeNil)
 
-	// Test invalid SPI bus
-	err = SetupGateway(999, regions.US)
+	// invalid basechannel
+	err = SetupGateway(1, testPath, regions.Unspecified, 100)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, errors.Is(err, errInvalidSpiBus), test.ShouldBeTrue)
+	test.That(t, err.Error(), test.ShouldContainSubstring, errInvalidBaseChannel.Error())
 }

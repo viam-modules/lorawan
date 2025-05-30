@@ -8,8 +8,10 @@
 
 const int MAX_RX_PKT = 10;
 
-#define US_RADIO_0_FREQ     902700000
-#define US_RADIO_1_FREQ     903700000
+#define US_BASE_FREQ        902300000
+#define US_RADIO_0_OFFSET   400000 // target midpoint of radio 0 channels
+#define US_RADIO_1_OFFSET   1400000 // 7 channels ahead of radio0
+
 
 #define EU_RADIO_0_FREQ     867500000
 #define EU_RADIO_1_FREQ     868500000
@@ -30,7 +32,7 @@ const int32_t ifFrequencies[9] = {
 // This defines what RF chain to use for each of the 8 if chains
 const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
-int set_up_gateway(int bus, int region) {
+int set_up_gateway(int com_type, char* path, int region, int base_channel) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -38,23 +40,14 @@ int set_up_gateway(int bus, int region) {
     boardconf.lorawan_public = true;
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
-    boardconf.com_type = LGW_COM_SPI;
+    boardconf.com_type = com_type;
 
-    const char * com_path;
-
-    switch(bus) {
-        case 0:
-            com_path = "/dev/spidev0.0";
-            break;
-        case 1:
-            com_path = "/dev/spidev0.1";
-            break;
-        default:
-            //error invalid spi bus
-            return 1;
+    if (base_channel > 48 || base_channel < 0) {
+        return 1;
     }
 
-    strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
+    strncpy(boardconf.com_path, path, sizeof boardconf.com_path);
+    // add null terminator
     boardconf.com_path[sizeof boardconf.com_path - 1] = '\0';
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         return 2;
@@ -62,14 +55,16 @@ int set_up_gateway(int bus, int region) {
 
     int radio0_freq;
     int radio1_freq;
+    int base_freq;
     switch(region) {
         case 2:
             radio0_freq = EU_RADIO_0_FREQ;
             radio1_freq = EU_RADIO_1_FREQ;
             break;
         default:
-            radio0_freq = US_RADIO_0_FREQ;
-            radio1_freq = US_RADIO_1_FREQ;
+            base_freq = US_BASE_FREQ + (base_channel * 200000);
+            radio0_freq = base_freq + US_RADIO_0_OFFSET;
+            radio1_freq = base_freq + US_RADIO_1_OFFSET;
             break;
     }
 
@@ -177,11 +172,8 @@ void disable_buffering() {
     setbuf(stdout, NULL);
 }
 
-#ifdef TESTING
-void redirect_to_pipe(int fd) {
-    // Mock implementation for testing - does nothing
-}
 
+#ifdef TESTING
 int send(struct lgw_pkt_tx_s* packet) {
     // for testing, return 0 - sucesssful
     return 0;
@@ -193,7 +185,7 @@ int start_gateway() {
 }
 
 int receive(struct lgw_pkt_rx_s* packet) {
-    // testing - fill the packet with test values
+    // for testing - fill the packet with test values
     packet->size = 3;
     uint8_t payload[3] = {0x01, 0x02, 0x03};
     memcpy(packet->payload, payload, packet->size);
@@ -210,11 +202,6 @@ int get_status(uint8_t rf, uint8_t* status) {
 }
 
 #else
-void redirect_to_pipe(int fd) {
-    fflush(stdout);          // Flush anything in the current stdout buffer
-    dup2(fd, STDOUT_FILENO); // Redirect stdout to the pipe's file descriptor
-}
-
 int send(struct lgw_pkt_tx_s* packet) {
     return lgw_send(packet);
 }
