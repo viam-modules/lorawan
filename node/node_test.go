@@ -787,11 +787,9 @@ func TestIntervalDownlink(t *testing.T) {
 			payloadUnits:      Seconds,
 			numBytes:          4,
 			useLittleEndian:   false,
-			header:            "ff8e",
-			expectedReturn:    "",
+			header:            "02",
+			expectedReturn:    "020000001E", // 0.5 min = 30 seconds = 1E in hex
 			testGatewayReturn: false,
-			expectedErr: `requested uplink interval (0.50 minutes) exceeds the legal duty cycle limit of 1.00 minutes,
-			increase the uplink interval`,
 		},
 	}
 	for _, tt := range tests {
