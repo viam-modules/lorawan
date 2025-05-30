@@ -112,6 +112,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 		device.Downlinks = device.Downlinks[1:]
 	}
 
+	// we will send one mac command per uplink, get the first one.
 	var foptsToSend []byte
 	if len(device.FoptsToSend) > 0 {
 		foptsToSend = device.FoptsToSend[0]
