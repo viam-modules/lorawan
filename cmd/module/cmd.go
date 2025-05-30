@@ -18,6 +18,7 @@ func main() {
 		resource.APIModel{API: sensor.API, Model: gateway.Model}, // TODO: remove after migration(or keep it as a secret)
 		resource.APIModel{API: sensor.API, Model: gateway.ModelGenericHat},
 		resource.APIModel{API: sensor.API, Model: gateway.ModelSX1302WaveshareHat},
+		resource.APIModel{API: sensor.API, Model: gateway.ModelRak7391},
 		resource.APIModel{API: sensor.API, Model: node.Model},
 		resource.APIModel{API: sensor.API, Model: draginolht65n.Model},
 		resource.APIModel{API: sensor.API, Model: milesightem310.Model},

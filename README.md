@@ -9,13 +9,14 @@ This module provides the following models:
 
 - `sx1302-waveshare-hat`: Sensor model for the [waveshare loRaWAN gateway hat](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
 - `sx1302-hat-generic`: Sensor model for other SX1302 LoRaWAN concentrator hats.
+- `rak7391`: Sensor model for the [rak7391 Wisgate Connect](https://docs.rakwireless.com/product-categories/wisgate/rak7391/overview/)
 - `node`: Sensor model for any class A, US915/EU868 LoraWAN end device.
 - `dragino-LHT65N`: Sensor model for the dragino LHT65N temperature and humidity sensor.
 - `dragino-WQSLB`: Sensor model for the dragino WQS-LB water quality sensor.
 - `milesight-ct101`: Sensor model for the milesight ct101 current transformer.
 - `milesight-em310-tilt`: Sensor model for the milesight em310 tilt sensor.
 
-You'll configure the `sx1302-gateway` model, and one or more `node`s depending on how many sensors you have.
+You'll configure a gateway model, and one or more `node`s depending on how many sensors you have.
 
 Compatible with:
 - US915 or EU868 frequency band
@@ -130,6 +131,48 @@ The following attributes are available for `viam:sensor:sx1302-waveshare-hat` se
 | board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
 | spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
 | region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+
+
+## Configure the `viam:sensor:rak7391`
+
+Before configuring the rak7391, follow [the manual](https://docs.rakwireless.com/product-categories/software-apis-and-libraries/rakpios/quickstart) to install RAKPiOS and connect to the device.
+
+You can run the following command to discover where the concentrators are connected:
+
+`docker run --privileged --rm rakwireless/udp-packet-forwarder find_concentrator`
+
+Use the returned spi or serial paths in your viam configuration.
+
+The following attributes are available for `viam:sensor:rak7391` sensors:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the raspberry pi board in your RAK |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+| pcie1 | config | no | - | info about the concentrator connected to the pcie1 slot of the RAK |
+| pcie2 |config | no | - | info about the concentrator connected to the pcie2 slot of the RAK |
+
+
+The following attributes are available for the pcies:
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi), for concentrators are connected through SPI |
+| serial_path | int | no | 0 | serial path concentrator is connected to, if connected through USB |
+
+Example rak7391 configuration:
+
+```json
+{
+  "pcie1": {
+    "serial_path": <serial_path>
+  },
+  "pcie2": {
+    "serial_path": <serial_path>
+  },
+  "board": <string-boardname>
+}
+```
+
 
 ## Set up the `viam:sensor:node`
 
