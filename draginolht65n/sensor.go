@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/viam-modules/gateway/dragino"
-	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/lorawan/dragino"
+	"github.com/viam-modules/lorawan/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"

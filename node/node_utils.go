@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/regions"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/utils"

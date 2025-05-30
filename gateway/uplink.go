@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/robertkrimen/otto"
-	"github.com/viam-modules/gateway/lorahw"
-	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/lorahw"
+	"github.com/viam-modules/lorawan/node"
+	"github.com/viam-modules/lorawan/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )

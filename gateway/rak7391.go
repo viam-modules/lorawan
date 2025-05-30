@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/regions"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"

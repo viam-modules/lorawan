@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/node"
+	"github.com/viam-modules/lorawan/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/rdk/logging"

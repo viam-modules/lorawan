@@ -21,7 +21,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/regions"
 )
 
 // Error variables for gateway setup errors

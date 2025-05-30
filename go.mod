@@ -1,4 +1,4 @@
-module github.com/viam-modules/gateway
+module github.com/viam-modules/lorawan
 
 go 1.23.0
 
