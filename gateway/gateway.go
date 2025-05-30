@@ -324,7 +324,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	if err := g.resetConcentrators(ctx); err != nil {
 		return err
 	}
-
 	// workers and process are restarted during reconfigure
 	g.closeProcesses()
 

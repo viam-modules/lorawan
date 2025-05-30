@@ -22,6 +22,7 @@ func createUplinkData(fcnt uint16, devAddr, framePayload []byte) ([]byte, error)
 	// FCnt: 1 (little-endian)
 	fcntBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(fcntBytes, fcnt)
+	binary.LittleEndian.PutUint16(fcntBytes, fcnt)
 	payload = append(payload, fcntBytes...)
 	// FPort: 85
 	fport := byte(0x55)
