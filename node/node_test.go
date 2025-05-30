@@ -781,18 +781,6 @@ func TestIntervalDownlink(t *testing.T) {
 			testGatewayReturn: false,
 			expectedErr:       "cannot send interval downlink, interval of 256 minutes exceeds maximum number of bytes 1",
 		},
-		{
-			name:              "interval lower than min",
-			interval:          0.5,
-			payloadUnits:      Seconds,
-			numBytes:          4,
-			useLittleEndian:   false,
-			header:            "ff8e",
-			expectedReturn:    "",
-			testGatewayReturn: false,
-			expectedErr: `requested uplink interval (0.50 minutes) exceeds the legal duty cycle limit of 1.00 minutes,
-			increase the uplink interval`,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

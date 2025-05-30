@@ -366,9 +366,8 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 	n.reconfigureMu.Lock()
 	if n.MinIntervalSeconds != 0 {
 		if n.MinIntervalSeconds > (req.IntervalMin * 60.0) {
-			n.reconfigureMu.Unlock()
-			return nil, fmt.Errorf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f minutes,
-			increase the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
+			n.logger.Warnf(`requested uplink interval (%.2f minutes) exceeds the legal duty cycle limit of %.2f minutes,
+			consider increasing the uplink interval`, req.IntervalMin, n.MinIntervalSeconds/60.0)
 		}
 	}
 	n.reconfigureMu.Unlock()
