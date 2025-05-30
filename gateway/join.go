@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -141,6 +142,11 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	// Bits 3-0: RX2DR
 	payload = append(payload, g.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
+
+	// enable 7-15 if using dual concentrator in US
+	if len(g.concentrators) == 2 && g.region == regions.US {
+		g.regionInfo.CfList[1] = 0xFF
+	}
 
 	payload = append(payload, g.regionInfo.CfList...)
 

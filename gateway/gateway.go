@@ -336,8 +336,6 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	//g.concentrators = make([]*concentrator, 0)
-
 	switch conf.Model {
 	case ModelRak7391:
 		cfg, err := getMultiConcentratorConfig(conf)
@@ -400,7 +398,6 @@ func (g *gateway) reconfigureSingleConcentrator(ctx context.Context, deps resour
 }
 
 func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resource.Dependencies, cfg *ConfigMultiConcentrator) error {
-
 	// get the number of concentrators before reconfiguring
 	oldNumConcentrators := len(g.concentrators)
 
@@ -433,8 +430,6 @@ func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resourc
 
 	// if the number of concentrators has changed, send a new linkADRReq downlink to each device to update frequency channels.
 	if g.region == regions.US && oldNumConcentrators != 0 && oldNumConcentrators != len(g.concentrators) {
-		g.logger.Infof("reconfigure send ADR req")
-		// must update the allowed channels on all devices that have already joined the network
 		chMask, err := g.getChannelMask()
 		if err != nil {
 			return err

@@ -333,14 +333,13 @@ func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 		default:
 			// unsupported mac command
 			g.logger.Debugf("got unsupported mac command %x from %s", cid, device.NodeName)
-			i += 1
+			i++
 		}
 	}
 	return requests
 }
 
 func (g *gateway) inspectLinkADRStatus(device *node.Node, status byte) {
-	// linkADRAns is two bytes cid + status byte
 	var unacked []string
 	if status&0x01 == 0 {
 		unacked = append(unacked, "channel mask")
