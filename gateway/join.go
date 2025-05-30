@@ -143,12 +143,13 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	payload = append(payload, g.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
-	// enable 7-15 if using dual concentrator in US
+	cfList := g.regionInfo.CfList
+	// enable 8-15 if using dual concentrator in US
 	if len(g.concentrators) == 2 && g.region == regions.US {
-		g.regionInfo.CfList[1] = 0xFF
+		cfList[1] = 0xFF
 	}
 
-	payload = append(payload, g.regionInfo.CfList...)
+	payload = append(payload, cfList...)
 
 	// generate MIC
 	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)
