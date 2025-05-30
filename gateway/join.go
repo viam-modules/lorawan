@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/gateway/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -142,7 +143,13 @@ func (g *gateway) generateJoinAccept(ctx context.Context, jr joinRequest, d *nod
 	payload = append(payload, g.regionInfo.DlSettings)
 	payload = append(payload, 0x01) // rx1 delay: 1 second
 
-	payload = append(payload, g.regionInfo.CfList...)
+	cfList := g.regionInfo.CfList
+	// enable 8-15 if using dual concentrator in US
+	if len(g.concentrators) == 2 && g.region == regions.US {
+		cfList[1] = 0xFF
+	}
+
+	payload = append(payload, cfList...)
 
 	// generate MIC
 	resMIC, err := crypto.ComputeLegacyJoinAcceptMIC(types.AES128Key(d.AppKey), payload)

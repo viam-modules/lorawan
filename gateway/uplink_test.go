@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/viam-modules/gateway/lorahw"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/test"
@@ -20,6 +21,7 @@ func createUplinkData(fcnt uint16, devAddr, framePayload []byte) ([]byte, error)
 	payload = append(payload, 0x80)
 	// FCnt: 1 (little-endian)
 	fcntBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(fcntBytes, fcnt)
 	binary.LittleEndian.PutUint16(fcntBytes, fcnt)
 	payload = append(payload, fcntBytes...)
 	// FPort: 85
@@ -77,8 +79,12 @@ func TestParseDataUplink(t *testing.T) {
 	validPayload, err := createUplinkData(0, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
 
+	rxPacket := lorahw.RxPacket{
+		Payload: validPayload,
+	}
+
 	// Test valid data uplink
-	deviceName, readings, err := g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0, c)
+	deviceName, readings, err := g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldNotBeNil)
 	test.That(t, deviceName, test.ShouldEqual, testNodeName)
@@ -107,8 +113,9 @@ func TestParseDataUplink(t *testing.T) {
 
 	invalidPayload, err := createUplinkData(1, testDeviceAddr, invalidText)
 	test.That(t, err, test.ShouldBeNil)
+	rxPacket.Payload = invalidPayload
 
-	_, _, err = g.parseDataUplink(context.Background(), invalidPayload, time.Now(), 0, 0, c)
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "data received by node test-device was not parsable")
 
@@ -116,49 +123,56 @@ func TestParseDataUplink(t *testing.T) {
 	unknownAddr := []byte{0x1, 0x2, 0x3, 0x3}
 	unknownPayload, err := createUplinkData(2, unknownAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
-	_, _, err = g.parseDataUplink(context.Background(), unknownPayload, time.Now(), 0, 0, c)
+	rxPacket.Payload = unknownPayload
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errNoDevice)
 
 	// Test invalid MIC
-	validPayload, err = createUplinkData(3, testDeviceAddr, plainText)
+	invalidMICPayload, err := createUplinkData(3, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
-	validPayload[len(validPayload)-1] = 0x00
+	invalidMICPayload[len(invalidMICPayload)-1] = 0x00
 	test.That(t, err, test.ShouldBeNil)
-	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0, c)
+	rxPacket.Payload = invalidMICPayload
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errInvalidMIC)
 
 	// Test no NwkSKey
 	validPayload, err = createUplinkData(4, testDeviceAddr, plainText)
 	test.That(t, err, test.ShouldBeNil)
+	rxPacket.Payload = validPayload
 	g.devices[testNodeName].NwkSKey = []byte{}
-	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0, c)
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldBeNil)
 
 	// Test invalid length
-	_, _, err = g.parseDataUplink(context.Background(), []byte{0x00, 0x00}, time.Now(), 0, 0, c)
+	rxPacket.Payload = []byte{0x00, 0x00}
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "unexpected payload length, payload should be at least 13 bytes")
 
 	// Test invalid fopts length
 	validPayload = validPayload[:len(validPayload)-13]
 	validPayload[5] = 0x88 // expected fopts length is 8 bytes, but whole payload only 14 bytes
-	_, _, err = g.parseDataUplink(context.Background(), validPayload, time.Now(), 0, 0, c)
+	rxPacket.Payload = validPayload
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, errors.Is(err, errInvalidLength), test.ShouldBeTrue)
 
 	// Test no frame payload
 	noFramePayload, err := createUplinkData(5, testDeviceAddr, []byte{})
 	test.That(t, err, test.ShouldBeNil)
-	_, _, err = g.parseDataUplink(context.Background(), noFramePayload, time.Now(), 0, 0, c)
+	rxPacket.Payload = noFramePayload
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "sent packet with no data")
 
 	// repeated fcntUp should error
 	payload, err := createUplinkData(5, testDeviceAddr, []byte{0x01, 0x04})
 	test.That(t, err, test.ShouldBeNil)
-	_, _, err = g.parseDataUplink(context.Background(), payload, time.Now(), 0, 0, c)
+	rxPacket.Payload = payload
+	_, _, err = g.parseDataUplink(context.Background(), rxPacket, time.Now(), c)
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, errAlreadyParsed)
 

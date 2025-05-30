@@ -217,6 +217,7 @@ func TestDoCommand(t *testing.T) {
 	// Test Register device command - device not in file
 	// clear devices
 	g.devices = map[string]*node.Node{}
+	g.concentrators = []*concentrator{{}}
 	registerCmd := make(map[string]interface{})
 	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
@@ -252,9 +253,10 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, dev.AppKey, test.ShouldResemble, testAppKey)
 	test.That(t, dev.DevEui, test.ShouldResemble, testDevEUI)
 	test.That(t, dev.DecoderPath, test.ShouldResemble, "/newpath")
-	// The dev addr and AppsKey should also be populated
+	// The dev addr and AppsKey should also be populated from file.
 	test.That(t, dev.AppSKey, test.ShouldResemble, testAppSKey)
 	test.That(t, dev.Addr, test.ShouldResemble, testDeviceAddr)
+	test.That(t, len(dev.FoptsToSend), test.ShouldEqual, 1)
 
 	// Test remove device command
 	removeCmd := make(map[string]interface{})
@@ -703,6 +705,32 @@ func TestGetMultiConcentratorConfig(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "valid RAK7391 config with single pcie2 configured",
+			config: resource.Config{
+				Name:  "test-rak",
+				Model: ModelRak7391,
+				ConvertedAttributes: &ConfigRak7391{
+					BoardName: "pi",
+					Region:    "US915",
+					Concentrator2: &ConcentratorConfig{
+						Bus: &bus1,
+					},
+				},
+			},
+			expectedConfig: &ConfigMultiConcentrator{
+				BoardName: "pi",
+				Region:    "US915",
+				Concentrators: []*ConcentratorConfig{
+					{
+						Name:     "pcie2",
+						Bus:      &bus1,
+						ResetPin: &resetPin2,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "valid RAK7391 config with two concentrators",
 			config: resource.Config{
 				Name:  "test-rak",
@@ -728,9 +756,10 @@ func TestGetMultiConcentratorConfig(t *testing.T) {
 						ResetPin: &resetPin1,
 					},
 					{
-						Name:     "pcie2",
-						Bus:      &bus2,
-						ResetPin: &resetPin2,
+						Name:        "pcie2",
+						Bus:         &bus2,
+						ResetPin:    &resetPin2,
+						BaseChannel: 8,
 					},
 				},
 			},
@@ -1224,4 +1253,18 @@ func TestNativeConfig(t *testing.T) {
 		test.That(t, err.Error(), test.ShouldContainSubstring, "build error in module. Unsupported Gateway model")
 		test.That(t, cfg, test.ShouldBeNil)
 	})
+}
+
+func TestCreateLinkADRReq(t *testing.T) {
+	chMask := []byte{0xff, 0x00}
+	req := createLinkADRReq(chMask)
+
+	test.That(t, len(req), test.ShouldEqual, 5) // 1 byte CID + 4 bytes payload
+	test.That(t, req[0], test.ShouldEqual, linkADRCID)
+
+	// data rate /tx power byte - 0x20
+	test.That(t, req[1], test.ShouldEqual, byte(0x20))
+	test.That(t, req[2], test.ShouldEqual, chMask[0])
+	test.That(t, req[3], test.ShouldEqual, chMask[1])
+	test.That(t, req[4], test.ShouldEqual, byte(0x01))
 }

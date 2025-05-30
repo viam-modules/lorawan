@@ -187,9 +187,10 @@ type Node struct {
 	JoinType      string
 	reconfigureMu sync.Mutex
 
-	FCntDown  uint16
-	FPort     byte     // for downlinks, only required when frame payload exists.
-	Downlinks [][]byte // list of downlink frame payloads to send
+	FCntDown    uint16
+	FPort       byte     // for downlinks, only required when frame payload exists.
+	Downlinks   [][]byte // list of downlink frame payloads to send
+	FoptsToSend [][]byte // list of mac commands to send
 
 	Region             regions.Region
 	MinIntervalSeconds float64 // estimated minimum uplink interval

@@ -29,6 +29,11 @@ func (conf *ConfigRak7391) getGatewayConfig() *ConfigMultiConcentrator {
 	cfg := &ConfigMultiConcentrator{Region: conf.Region, BoardName: conf.BoardName}
 	cfg.Concentrators = []*ConcentratorConfig{}
 
+	dualConcentrator := false
+	if conf.Concentrator1 != nil && conf.Concentrator2 != nil {
+		dualConcentrator = true
+	}
+
 	if conf.Concentrator1 != nil {
 		conf.Concentrator1.ResetPin = &resetPin1
 		conf.Concentrator1.Name = "pcie1"
@@ -37,6 +42,10 @@ func (conf *ConfigRak7391) getGatewayConfig() *ConfigMultiConcentrator {
 	if conf.Concentrator2 != nil {
 		conf.Concentrator2.ResetPin = &resetPin2
 		conf.Concentrator2.Name = "pcie2"
+		// If both concentrators in use, use channels 8-15, otherwise use 0-7
+		if dualConcentrator {
+			conf.Concentrator2.BaseChannel = 8
+		}
 		cfg.Concentrators = append(cfg.Concentrators, conf.Concentrator2)
 	}
 

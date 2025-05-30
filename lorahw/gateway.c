@@ -8,8 +8,10 @@
 
 const int MAX_RX_PKT = 10;
 
-#define US_RADIO_0_FREQ     902700000
-#define US_RADIO_1_FREQ     903700000
+#define US_BASE_FREQ        902300000
+#define US_RADIO_0_OFFSET   400000 // target midpoint of radio 0 channels
+#define US_RADIO_1_OFFSET   1400000 // 7 channels ahead of radio0
+
 
 #define EU_RADIO_0_FREQ     867500000
 #define EU_RADIO_1_FREQ     868500000
@@ -30,7 +32,7 @@ const int32_t ifFrequencies[9] = {
 // This defines what RF chain to use for each of the 8 if chains
 const int32_t rfChains [9] = {0, 0, 0, 0, 0, 1, 1, 1};
 
-int set_up_gateway(int com_type, char* path, int region) {
+int set_up_gateway(int com_type, char* path, int region, int base_channel) {
     // the board config defines parameters for the entire gateway HAT.
     struct lgw_conf_board_s boardconf;
 
@@ -39,6 +41,10 @@ int set_up_gateway(int com_type, char* path, int region) {
     boardconf.clksrc = 0;
     boardconf.full_duplex = false;
     boardconf.com_type = com_type;
+
+    if (base_channel > 48 || base_channel < 0) {
+        return 1;
+    }
 
     strncpy(boardconf.com_path, path, sizeof boardconf.com_path);
     // add null terminator
@@ -49,14 +55,16 @@ int set_up_gateway(int com_type, char* path, int region) {
 
     int radio0_freq;
     int radio1_freq;
+    int base_freq;
     switch(region) {
         case 2:
             radio0_freq = EU_RADIO_0_FREQ;
             radio1_freq = EU_RADIO_1_FREQ;
             break;
         default:
-            radio0_freq = US_RADIO_0_FREQ;
-            radio1_freq = US_RADIO_1_FREQ;
+            base_freq = US_BASE_FREQ + (base_channel * 200000);
+            radio0_freq = base_freq + US_RADIO_0_OFFSET;
+            radio1_freq = base_freq + US_RADIO_1_OFFSET;
             break;
     }
 
