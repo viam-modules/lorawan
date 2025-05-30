@@ -316,10 +316,10 @@ func (g *gateway) getFOptsToSend(fopts []byte, device *node.Node) []byte {
 		switch cid {
 		case deviceTimeCID:
 			requests = append(requests, cid)
-			i += 1
+			i++
 		case linkCheckCID:
 			requests = append(requests, cid)
-			i += 1
+			i++
 		case dutyCycleCID:
 			g.logger.Debugf("got duty cycle answer from %s", device.NodeName)
 		case linkADRCID:

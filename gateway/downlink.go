@@ -139,12 +139,6 @@ func (g *gateway) createDownlink(ctx context.Context,
 
 	payload = append(payload, devAddrLE...)
 
-	if fopts == nil {
-		fopts = make([]byte, 0)
-	}
-
-	g.logger.Infof("sending fopts %x", fopts)
-
 	// Handle any mac commands sent in the uplink fopts.
 	if len(uplinkFopts) != 0 {
 		for _, b := range uplinkFopts {
@@ -158,6 +152,7 @@ func (g *gateway) createDownlink(ctx context.Context,
 				deviceTimeAns, err := createDeviceTimeAns()
 				if err != nil {
 					g.logger.Errorf("failed to create device time answer: %w", err)
+					continue
 				}
 				if len(fopts)+len(deviceTimeAns) <= 15 {
 					fopts = append(fopts, deviceTimeAns...)

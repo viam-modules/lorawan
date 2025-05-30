@@ -1256,8 +1256,8 @@ func TestNativeConfig(t *testing.T) {
 	})
 }
 
-func testCreateLinkADRReq(t *testing.T) {
-	chMask := []byte{0xff, 00}
+func TestCreateLinkADRReq(t *testing.T) {
+	chMask := []byte{0xff, 0x00}
 	req := createLinkADRReq(chMask)
 
 	test.That(t, len(req), test.ShouldEqual, 4) // 1 byte CID + 4 bytes payload

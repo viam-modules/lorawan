@@ -109,5 +109,5 @@ func TestSetupGateway(t *testing.T) {
 	// invalid basechannel
 	err = SetupGateway(1, testPath, regions.Unspecified, 100)
 	test.That(t, err, test.ShouldNotBeNil)
-	test.That(t, err.Error(), test.ShouldContainSubstring, errInvalidBaseChannel.Error()
+	test.That(t, err.Error(), test.ShouldContainSubstring, errInvalidBaseChannel.Error())
 }

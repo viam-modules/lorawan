@@ -56,13 +56,14 @@ var (
 	errSPIAndUSB     = errors.New("cannot have both spi_bus and path attributes, add path for USB or spi_bus for SPI gateways")
 
 	// Gateway operation errors.
-	errUnexpectedJoinType = errors.New("unexpected join type when adding node to gateway")
-	errInvalidNodeMapType = errors.New("expected node map val to be type []interface{}, but it wasn't")
-	errInvalidByteType    = errors.New("expected node byte array val to be float64, but it wasn't")
-	errNoDevice           = errors.New("received packet from unknown device")
-	errInvalidMIC         = errors.New("invalid MIC")
-	errInvalidRegion      = errors.New("unrecognized region code, valid options are US915 and EU868")
-	errTimedOut           = errors.New("timed out waiting for gateway to start")
+	errUnexpectedJoinType         = errors.New("unexpected join type when adding node to gateway")
+	errInvalidNodeMapType         = errors.New("expected node map val to be type []interface{}, but it wasn't")
+	errInvalidByteType            = errors.New("expected node byte array val to be float64, but it wasn't")
+	errNoDevice                   = errors.New("received packet from unknown device")
+	errInvalidMIC                 = errors.New("invalid MIC")
+	errInvalidRegion              = errors.New("unrecognized region code, valid options are US915 and EU868")
+	errInvalidConcentratorsLength = errors.New("invalid concentrator length - should not happen")
+	errTimedOut                   = errors.New("timed out waiting for gateway to start")
 )
 
 // constants for MHDRs of different message types.
@@ -336,7 +337,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 		g.lastReadings = make(map[string]interface{})
 	}
 
-	g.concentrators = make([]*concentrator, 0)
+	//g.concentrators = make([]*concentrator, 0)
 
 	switch conf.Model {
 	case ModelRak7391:
@@ -363,6 +364,9 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 }
 
 func (g *gateway) reconfigureSingleConcentrator(ctx context.Context, deps resource.Dependencies, cfg *Config) error {
+	// reset concentrators list
+	g.concentrators = make([]*concentrator, 0)
+
 	board, err := board.FromDependencies(deps, cfg.BoardName)
 	if err != nil {
 		return err
@@ -397,6 +401,13 @@ func (g *gateway) reconfigureSingleConcentrator(ctx context.Context, deps resour
 }
 
 func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resource.Dependencies, cfg *ConfigMultiConcentrator) error {
+
+	// get the number of concentrators before reconfiguring
+	oldNumConcentrators := len(g.concentrators)
+
+	// reset concentrators list
+	g.concentrators = make([]*concentrator, 0)
+
 	board, err := board.FromDependencies(deps, cfg.BoardName)
 	if err != nil {
 		return err
@@ -421,16 +432,13 @@ func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resourc
 		}
 	}
 
-	if g.region == regions.US {
+	// if the number of concentrators has changed, send a new linkADRReq downlink to each device to update frequency channels.
+	if g.region == regions.US && oldNumConcentrators != 0 && oldNumConcentrators != len(g.concentrators) {
+		g.logger.Infof("reconfigure send ADR req")
 		// must update the allowed channels on all devices that have already joined the network
-		var chMask []byte
-		switch len(g.concentrators) {
-		case 1:
-			chMask = []byte{0xFF, 0x00}
-		case 2:
-			chMask = []byte{0xFF, 0xFF}
-		default:
-			return fmt.Errorf("invalid concentrator length - should not happen")
+		chMask, err := g.getChannelMask()
+		if err != nil {
+			return err
 		}
 		for _, n := range g.devices {
 			fopts := createLinkADRReq(chMask)
@@ -441,7 +449,7 @@ func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resourc
 }
 
 // |    4 bits  |    4 bits  |  2 B   | 1 B
-// | data rate  |  TX power  | CHmask | redundancy
+// | data rate  |  TX power  | CHmask | redundancy.
 func createLinkADRReq(chMask []byte) []byte {
 	payload := make([]byte, 0)
 	payload = append(payload, linkADRCID)
@@ -865,19 +873,13 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			// we know the device has already joined or is ABP mode if dev addr is populated.
 			n := g.devices[node.NodeName]
 			if len(n.Addr) != 0 && g.region == regions.US {
-				var chMask []byte
-				switch len(g.concentrators) {
-				case 1:
-					chMask = []byte{0xFF, 0x00}
-				case 2:
-					chMask = []byte{0xFF, 0xFF}
-				default:
-					return nil, fmt.Errorf("invalid concentrator length - should not happen")
+				chMask, err := g.getChannelMask()
+				if err != nil {
+					return nil, fmt.Errorf("error getting gateway's channel mask: %w", err)
 				}
 				fopts := createLinkADRReq(chMask)
 				n.FoptsToSend = append(n.FoptsToSend, fopts)
 			}
-
 		}
 	}
 
@@ -956,6 +958,19 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	}
 
 	return map[string]interface{}{}, nil
+}
+
+func (g *gateway) getChannelMask() ([]byte, error) {
+	var chMask []byte
+	switch len(g.concentrators) {
+	case 1:
+		chMask = []byte{0xFF, 0x00}
+	case 2:
+		chMask = []byte{0xFF, 0xFF}
+	default:
+		return nil, errInvalidConcentratorsLength
+	}
+	return chMask, nil
 }
 
 // updateDeviceInfo adds the device info from the db into the gateway's device map.
@@ -1094,7 +1109,7 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 // Make sure to always call stop on the concentrator before making any changes to the c config or
 // errors will occur.
 // Unexpected behavior will also occur if stop is called when the concentrator hasn't been
-// started, so only call stop if c.started is true
+// started, so only call stop if c.started is true.
 func (g *gateway) resetConcentrators(ctx context.Context) error {
 	// close the routine that receives lora packets - otherwise this will error when the gateway is stopped.
 	if g.workers != nil {
@@ -1170,7 +1185,6 @@ func (c *concentrator) Close() error {
 	}
 	c.started = false
 	return nil
-
 }
 
 // Close closes the gateway.
@@ -1178,12 +1192,11 @@ func (g *gateway) Close(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// Close process before workers to avoid a hang on shutdown.
-	g.closeProcesses()
-
 	if g.workers != nil {
 		g.workers.Stop()
 	}
+
+	g.closeProcesses()
 
 	if g.db != nil {
 		if err := g.db.Close(); err != nil {
