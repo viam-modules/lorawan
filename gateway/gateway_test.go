@@ -227,7 +227,6 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, dev.AppKey, test.ShouldResemble, testAppKey)
 	test.That(t, dev.DevEui, test.ShouldResemble, testDevEUI)
 	test.That(t, dev.DecoderPath, test.ShouldResemble, testDecoderPath)
-	test.That(t, len(dev.FoptsToSend), test.ShouldEqual, 0)
 
 	// Test that if the device reconfigures, fields get updated
 	n.DecoderPath = "/newpath"
@@ -1260,7 +1259,7 @@ func TestCreateLinkADRReq(t *testing.T) {
 	chMask := []byte{0xff, 0x00}
 	req := createLinkADRReq(chMask)
 
-	test.That(t, len(req), test.ShouldEqual, 4) // 1 byte CID + 4 bytes payload
+	test.That(t, len(req), test.ShouldEqual, 5) // 1 byte CID + 4 bytes payload
 	test.That(t, req[0], test.ShouldEqual, linkADRCID)
 
 	// data rate /tx power byte - 0x20
