@@ -2,12 +2,12 @@
 package main
 
 import (
-	"github.com/viam-modules/gateway/draginolht65n"
-	"github.com/viam-modules/gateway/draginowqslb"
-	"github.com/viam-modules/gateway/gateway"
-	"github.com/viam-modules/gateway/milesightct101"
-	"github.com/viam-modules/gateway/milesightem310"
-	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/lorawan/draginolht65n"
+	"github.com/viam-modules/lorawan/draginowqslb"
+	"github.com/viam-modules/lorawan/gateway"
+	"github.com/viam-modules/lorawan/milesightct101"
+	"github.com/viam-modules/lorawan/milesightem310"
+	"github.com/viam-modules/lorawan/node"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/testutils"
+	"github.com/viam-modules/lorawan/node"
+	"github.com/viam-modules/lorawan/testutils"
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/data"
 	"go.viam.com/rdk/logging"

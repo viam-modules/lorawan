@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/viam-modules/gateway/lorahw"
+	"github.com/viam-modules/lorawan/lorahw"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.viam.com/test"

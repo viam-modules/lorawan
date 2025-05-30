@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/viam-modules/gateway/lorahw"
-	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/lorahw"
+	"github.com/viam-modules/lorawan/node"
+	"github.com/viam-modules/lorawan/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	v1 "go.viam.com/api/common/v1"

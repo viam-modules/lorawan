@@ -12,9 +12,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/viam-modules/gateway/gateway"
-	"github.com/viam-modules/gateway/lorahw"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/gateway"
+	"github.com/viam-modules/lorawan/lorahw"
+	"github.com/viam-modules/lorawan/regions"
 	v1 "go.viam.com/api/common/v1"
 	pb "go.viam.com/api/component/sensor/v1"
 	"go.viam.com/rdk/logging"

@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/viam-modules/gateway/gateway"
-	"github.com/viam-modules/gateway/lorahw"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/gateway"
+	"github.com/viam-modules/lorawan/lorahw"
+	"github.com/viam-modules/lorawan/regions"
 	v1 "go.viam.com/api/common/v1"
 	"go.viam.com/test"
 	"google.golang.org/protobuf/types/known/structpb"

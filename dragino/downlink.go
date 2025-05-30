@@ -4,7 +4,7 @@ package dragino
 import (
 	"context"
 
-	"github.com/viam-modules/gateway/node"
+	"github.com/viam-modules/lorawan/node"
 )
 
 // Common constants for Dragino sensors.

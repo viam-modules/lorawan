@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/regions"
 	"go.viam.com/test"
 )
 

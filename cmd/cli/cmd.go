@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/viam-modules/gateway/gateway"
+	"github.com/viam-modules/lorawan/gateway"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 )

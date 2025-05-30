@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/node"
+	"github.com/viam-modules/lorawan/regions"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/test"
 )

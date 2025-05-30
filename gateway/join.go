@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/viam-modules/gateway/node"
-	"github.com/viam-modules/gateway/regions"
+	"github.com/viam-modules/lorawan/node"
+	"github.com/viam-modules/lorawan/regions"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoservices"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
