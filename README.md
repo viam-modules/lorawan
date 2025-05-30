@@ -1,343 +1,66 @@
-# [`lorawan module`](<https://github.com/oliviamiller/lorawan-gateway>)
-
-LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol, enabling efficient communication over large distances with minimal energy usage.
-For more on why this is useful, see the [article on the Viam blog](https://www.viam.com/post/launch-lorawan-support-viam).
-
-This module combines the functionality of a LoRaWAN gateway and network server, enabling communication between LoRaWAN sensors and the Viam app.
-It handles packet forwarding, device management, and message routing to allow LoRaWAN sensor data to be viewed and managed directly in Viam.
-This module provides the following models:
-
-- `sx1302-waveshare-hat`: Sensor model for the [waveshare loRaWAN gateway hat](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
-- `sx1302-hat-generic`: Sensor model for other SX1302 LoRaWAN concentrator hats.
-- `rak7391`: Sensor model for the [rak7391 Wisgate Connect](https://docs.rakwireless.com/product-categories/wisgate/rak7391/overview/)
-- `node`: Sensor model for any class A, US915/EU868 LoraWAN end device.
-- `dragino-LHT65N`: Sensor model for the dragino LHT65N temperature and humidity sensor.
-- `dragino-WQSLB`: Sensor model for the dragino WQS-LB water quality sensor.
-- `milesight-ct101`: Sensor model for the milesight ct101 current transformer.
-- `milesight-em310-tilt`: Sensor model for the milesight em310 tilt sensor.
-
-You'll configure a gateway model, and one or more `node`s depending on how many sensors you have.
-
-Compatible with:
-- US915 or EU868 frequency band
-- Class A Devices
-- LoraWAN MAC version 1.0.3
-
-## Requirements
-
-Hardware Required:
-- Raspberry Pi (any model with GPIO pins)
-- SX1302 Gateway HAT/concentrator board
-- LoRaWAN sensors
-
-See [Hardware Tested Section](https://github.com/viam-modules/lorawan?tab=readme-ov-file#hardware-tested) for hardware we have used this module with successfully.
-
-## Setup the `viam:sensor:sx1302-gateway`
 
-Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
-[Add sx1302-gateway to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
+# LoRaWAN module
 
-## Configure the `viam:sensor:sx1302-gateway`
+## LoRaWAN Background
+LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol in which the **sensors** communicate over radio to **gateways** that receive the messages.
 
-Example gateway configuration for SPI gateway:
-```json
-{
-    "board": <string-boardname>,
-    "spi_bus": 0,
-    "reset_pin": int,
-    "power_en_pin": int,
-    "region_code": "US915"
-}
-```
 
+For more, see the [article on the Viam blog](https://www.viam.com/post/launch-lorawan-support-viam).
 
-Example gateway configuration for USB gateway:
-```json
-{
-    "board": <string-boardname>,
-    "path": <string /dev/path>,
-    "reset_pin": int,
-    "power_en_pin": int,
-    "region_code": "US915",
-}
-```
+## What's in this module
+This Viam module provides models for LoRaWAN **sensors** (end devices/transmitters) as well as LoRaWAN **gateways** (receivers).
 
-### Attributes
+The LoRaWAN **sensor** models allow registering a LoRaWAN sensor with a LoRaWAN gateway model. These models also implement Viam's Sensor GetReadings method by calling GetReadings on the gateway model and filtering the output to just the particular sensor's readings.
 
+The LoRaWAN **gateway** models interface with a physical gateway device (such as the [Waveshare sx1302 LoRaWAN gateway HAT for Raspberry Pi](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)) to pull all sensor readings from the gateway device and return them through Viam's Sensor [GetReadings](https://docs.viam.com/dev/reference/apis/components/sensor/#getreadings) method.
 
-The following attributes are available for `viam:sensor:sx1302-gateway` sensors:
+## Example use
+A typical architecture will involve:
 
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
-| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
-| spi_bus | int | no | 0 | SPI bus number (0 or 1) |
-| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
-| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
-| path | string | required for USB gateways | - | serial device path the concentrator is connected to |
+- a Raspberry Pi
+- an sx1302 gateway physically attached to the Raspberry Pi
+- one or more LoRaWAN sensors physically located up to a couple miles away from the gateway
 
-## Setup the `viam:sensor:sx1302-hat-generic`
+The Raspberry Pi will be running viam-server, and the **Viam config** for this viam-server will include:
 
-Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
-[Add sx1302-hat-generic to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
+- a **gateway** model for the gateway device
+- a **sensor** model for **each** LoRaWAN sensor
 
-## Configure the `viam:sensor:sx1302-hat-generic`
+## LoRaWAN sensor models provided
+This module provides the following models for **specific** LoRaWAN sensors:
 
-Example gateway configuration - note - the gpio pins MUST be set to the gpio pin numbers on your board connected to the reset and power-enable pins of the sx1302 hat to avoid a 15-minute reset loop.
-```json
-{
-    "board": <string-boardname>,
-    "spi_bus": 0,
-    "reset_pin": int,
-    "power_en_pin": int,
-    "region_code": "US915"
-}
-```
+- `viam:lorawan:dragino-LHT65N`: [Dragino LHT65N](https://www.amazon.com/LHT65N-LoRaWAN-Temperature-Humidity-Sensor/dp/B0BL7X7X6C) temperature and humidity sensor.
+- `viam:lorawan:dragino-WQSLB`: [Dragino WQS-LB](https://www.dragino.com/products/water-air-quality-sensor/item/345-wqs-lb.html) water quality sensor
+- `viam:lorawan:milesight-ct101`: [Milesight ct101](https://www.milesight.com/iot/product/lorawan-sensor/ct10x) current transformer
+- `viam:lorawan:milesight-em310-tilt`: [Milesight em310 tilt sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)
 
-### Attributes
+This module also provides a **generic** model that can be used with any LoRaWAN sensor that meets the criteria, but requires inputting slightly more via the config attributes:
 
-The following attributes are available for `viam:sensor:sx1302-hat-generic` sensors:
+- `node`: Any LoRaWAN sensor that is Class A, supports either the US915 or EU868 frequency band, and uses LoRaWAN MAC specification version 1.0.3
 
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
-| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
-| spi_bus | int | no | 0 | SPI bus number  |
-| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
-| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+See below for the Viam configuration for each of these models.
 
-## Setup the `viam:sensor:sx1302-waveshare-hat`
+## LoRaWAN gateway models provided
+This module provides the following models for **specific** LoRaWAN gateways:
 
-Navigate to the **CONFIGURE** tab of your machine in the [Viam app](https://app.viam.com/) and click the **+** button.
-[Add sx1302-waveshare-hat to your machine](https://docs.viam.com/operate/get-started/supported-hardware/#configure-hardware-on-your-machine).
+- `viam:lorawan:sx1302-waveshare-hat`: [Waveshare LoRaWAN sx1302 gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
+- `viam:lorawan:rak7391`: [rak7391 Wisgate Connect](https://docs.rakwireless.com/product-categories/wisgate/rak7391/overview/)
 
-## Configure the `viam:sensor:sx1302-waveshare-hat`
+This module also provides a **sx1302 generic** model that can be used with other sx1302 HATs:
 
-Example gateway configuration:
-```json
-{
-    "board": <string-boardname>,
-    "spi_bus": 0,
-    "region_code": "US915"
-}
-```
+- `viam:lorawan:sx1302-hat-generic`: Other sx1302 LoRaWAN gateway HATs
 
-### Attributes
+See below for the Viam configuration for each of these models.
 
-The following attributes are available for `viam:sensor:sx1302-waveshare-hat` sensors:
+## Configuration for LoRaWAN sensor models
 
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
-| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
-| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+### Configuration for `viam:lorawan:dragino-LHT65N` and `viam:lorawan:dragino-WQSLB`
 
-
-## Configure the `viam:sensor:rak7391`
-
-Before configuring the rak7391, follow [the manual](https://docs.rakwireless.com/product-categories/software-apis-and-libraries/rakpios/quickstart) to install RAKPiOS and connect to the device.
-
-You can run the following command to discover where the concentrators are connected:
-
-`docker run --privileged --rm rakwireless/udp-packet-forwarder find_concentrator`
-
-Use the returned spi or serial paths in your viam configuration.
-
-The following attributes are available for `viam:sensor:rak7391` sensors:
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| board | string | yes | - | Name of the raspberry pi board in your RAK |
-| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
-| pcie1 | config | no | - | info about the concentrator connected to the pcie1 slot of the RAK |
-| pcie2 |config | no | - | info about the concentrator connected to the pcie2 slot of the RAK |
-
-
-The following attributes are available for the pcies:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi), for concentrators are connected through SPI |
-| serial_path | int | no | 0 | serial path concentrator is connected to, if connected through USB |
-
-Example rak7391 configuration:
-
-```json
-{
-  "pcie1": {
-    "serial_path": <serial_path>
-  },
-  "pcie2": {
-    "serial_path": <serial_path>
-  },
-  "board": <string-boardname>
-}
-```
-
-
-## Set up the `viam:sensor:node`
-
-As when configuring the gateway, use the **+** button on your machine's **CONFIGURE** tab to add the `viam:sensor:node` model to your machine.
-
-The node model supports any class A V1.0.3 device sending on EU868 or US915 frequency band.
-The node component supports two types of activation: OTAA (Over-the-Air Activation) and ABP (Activation by Personalization).
-
-## Configure the `viam:sensor:node`
-
-Example OTAA node configuration:
-
-```json
-{
-  "join_type": "OTAA",
-  "decoder_path": <string>,
-  "dev_eui": <string>,
-  "app_key": <string>,
-  "uplink_interval_mins": 10,
-  "gateways": [<string gatewayname>]
-}
-```
-
-Example ABP node configuration:
-
-```json
-{
-  "join_type": "ABP",
-  "decoder_path": <string>,
-  "dev_addr": <string>,
-  "app_s_key": <string>,
-  "network_s_key": <string>,
-  "uplink_interval_mins": 10,
-  "gateways": [<string gatewayname>],
-  "fport": "55"
-}
-```
-
-### Common Attributes
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| decoder_path | string | yes | - | Path or URL to the payload decoder script. If providing path, it should be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
-| join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP"). |
-| uplink_interval_mins | float64 | yes | - | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
-| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
-| fport | string | no | - | port (in hex) to send downlinks to the device. |
-
-The node registers itself with the gateway so the gateway will recognize messages from the node.
-
-### OTAA Attributes
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | yes | - | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
-
-### ABP Attributes
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | yes | - | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
-| network_s_key | string | yes | - | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
-
-### DoCommand
-
-The sensor node model uses DoCommands to send downlinks to sensors from the gateway.
-
-#### Send a downlink
-
-This command will send a generic downlink payload to the gateway. The string is expected to be a set of bytes in hex.
-
-```json
-{
-  "send_downlink": "<BYTESINHEX>"
-}
-```
-
-## Configure your milesight sensor
-
-Example OTAA node configuration:
-
-```json
-{
-  "join_type": "OTAA",
-  "dev_eui": <string>,
-  "gateways": [<string gatewayname>]
-}
-```
-
-Example ABP node configuration:
-
-```json
-{
-  "join_type": "ABP",
-  "dev_addr": <string>,
-  "gateways": [<string gatewayname>]
-}
-```
-
-### Common Attributes
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| join_type | string | no | "OTTA" | Join type ("OTAA" or "ABP") |
-| uplink_interval_mins | float64 | no | **10** for the ct101 and **1080** for the em310-tilt | Desired interval between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
-| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
-
-The node registers itself with the gateway so the gateway will recognize messages from the node.
-
-### OTAA Attributes
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
-| app_key | string | no | 5572404C696E6B4C6F52613230313823 | Application Key (16 bytes in hex). Used to securely join the network. |
-
-### ABP Attributes
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
-| app_s_key | string | no | 5572404C696E6B4C6F52613230313823 | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. |
-| network_s_key | string | no | 5572404C696E6B4C6F52613230313823 | Network Session Key (16 bytes in hex) Used to decypt uplink messages. |
-
-### DoCommand
-
-The milesight models uses DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
-**The sensor must already be connected for downlink requests to work.**
-
-#### Update the uplink interval
-
-This command will update the interval the milesight sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
-
-```json
-{
-  "set_interval": 1.0
-}
-```
-
-#### Restart the device
-
-This command will restart the milesight sensor, triggering a new join request.
-
-```json
-{
-  "restart_sensor": ""
-}
-```
-
-#### Send a generic downlink
-
-This command will send a generic downlink payload to the gateway. the string is expected to be a set of bytes in hex. See the [em310 tilt sensor user guide](https://resource.milesight.com/milesight/iot/document/em310-tilt-user-guide-en.pdf) or the [ct101 user guide](https://resource.milesight.com/milesight/iot/document/ct10x-user-guide-en.pdf) for their respective downlink commands.
-
-```json
-{
-  "send_downlink": "<BYTESINHEX>"
-}
-```
-
-## Configure your dragino sensor
 If using a WSQ-LB, be sure to calibrate the sensor using the instructions below.
 Submerge the WQS-LB probes in liquid to obtain valid readings.
 
+#### Quick examples
+
 Example OTAA node configuration:
 
 ```json
@@ -359,24 +82,22 @@ Example ABP node configuration:
   "gateways": [<string gatewayname>]
 }
 ```
-### Common Attributes
+#### General Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP") |
-| uplink_interval_mins | float64 | no | 20 | Desired interval between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
+| uplink_interval_mins | float64 | no | 20 | Desired interval in minutes between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
 | gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
 
-The node registers itself with the gateway so the gateway will recognize messages from the node.
-
-### OTAA Attributes
+#### OTAA Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
 | app_key | string | yes | - | Application Key (16 bytes in hex). Used to securely join the network. Unique to the specific device, can be found on the box. |
 
-### ABP Attributes
+#### ABP Attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
@@ -384,12 +105,12 @@ The node registers itself with the gateway so the gateway will recognize message
 | app_s_key | string | yes | - | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
 | network_s_key | string | yes | - | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
 
-### DoCommand
+#### DoCommand
 
-The dragino model uses DoCommands to send downlinks to sensors from the gateway. A purple light will flash after the sensor sends an uplink once a downlink has been successfully sent.
-**The sensor must already be connected for downlink requests to work.**
+The dragino model uses DoCommand to send downlinks to sensors from the gateway. The sensor may indicate when it has received an uplink or downlink, e.g. a blue light when it sends an uplink and purple light when it receives a downlink.
+**The sensor must already be connected to Viam (i.e., "Live" on app.viam.com) for downlink requests to work.**
 
-#### Update the uplink interval
+##### Update the uplink interval
 
 This command will update the interval the dragino sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
 
@@ -399,7 +120,7 @@ This command will update the interval the dragino sends data at. This can also b
 }
 ```
 
-#### Restart the device
+##### Restart the device
 
 This command will restart the dragino sensor, triggering a new join request.
 
@@ -410,7 +131,7 @@ This command will restart the dragino sensor, triggering a new join request.
 }
 ```
 
-#### Send a generic downlink
+##### Send a generic downlink
 
 This command will send a generic downlink payload to the gateway. the string is expected to be a set of bytes in hex. See the [LHT64 temperature sensor user guide](https://www.dragino.com/downloads/downloads/LHT65/UserManual/LHT65_Temperature_Humidity_Sensor_UserManual_v1.3.pdf) for other downlink commands.
 
@@ -420,11 +141,11 @@ This command will send a generic downlink payload to the gateway. the string is 
 }
 ```
 
-### Calibrate your `dragino-WQS-LB`
+#### Calibrate your `dragino-WQS-LB`
 The WQS-LB water quality sensor should be calibrated upon first use. The calibration can be completed using do commands on the UI.
 For more information about calibrating the devices, consult the [user manual.](https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20LoRaWAN%20End%20Nodes/WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/)
 
-### Calibrate the PH Probe
+##### Calibrate the PH Probe
 The PH probe uses a 3 point calibration, follow the below steps to calibrate:
 1. Wash the electrode with distilled water and place it in a 9.18 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
 ```json
@@ -445,7 +166,7 @@ The PH probe uses a 3 point calibration, follow the below steps to calibrate:
 }
 ```
 
-### Calibrate the electrical conductivity probe
+##### Calibrate the electrical conductivity probe
 The EC probe uses one-point calibration.
 
 If K=1 (1-2000 uS/cm) use the following steps to calibrate:
@@ -466,7 +187,7 @@ If K=10 (10-20000 mS/cm), use the following steps to calibrate:
 }
 ```
 
-### Calibrate the turbidity probe
+##### Calibrate the turbidity probe
 The turbidity probe uses a one-point calibration, use the following steps to calibrate:
 
 1. Prepare a 0 NTU, 200 NTU, 400 NTU, 600 NTU, 800 NTU, or 1000 NTU solution
@@ -478,7 +199,7 @@ The turbidity probe uses a one-point calibration, use the following steps to cal
 }
 ```
 
-### Calibrate the orp probe
+##### Calibrate the orp probe
 The orp probe use 2-point calibration. To calibrate, follow these steps:
 1. Wash the electrode with distilled water and place it in a 86mV standard buffer.
 2. Once the data is stable, send the following downlink to the node:
@@ -496,7 +217,254 @@ The orp probe use 2-point calibration. To calibrate, follow these steps:
 }
 ```
 
-## Troubleshooting Notes
+### Configuration for `viam:lorawan:milesight-ct101` and `viam:lorawan:milesight-em310-tilt`
+
+#### Quick examples
+Example OTAA node configuration:
+
+```json
+{
+  "join_type": "OTAA",
+  "dev_eui": "0123456789ABCDEF",
+  "gateways": ["gateway-1"]
+}
+```
+
+Example ABP node configuration:
+
+```json
+{
+  "join_type": "ABP",
+  "dev_addr": "01234567",
+  "gateways": ["gateway-1"]
+}
+```
+
+#### General Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP") |
+| uplink_interval_mins | float64 | no | **10** for the ct101 and **1080** for the em310-tilt | Desired interval in minutes between uplink messages sent by the node. The sensor will send a set interval downlink if configured. |
+| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
+
+#### OTAA Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | no | 5572404C696E6B4C6F52613230313823 | Application Key (16 bytes in hex). Used to securely join the network. |
+
+#### ABP Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | no | 5572404C696E6B4C6F52613230313823 | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. |
+| network_s_key | string | no | 5572404C696E6B4C6F52613230313823 | Network Session Key (16 bytes in hex) Used to decypt uplink messages. |
+
+#### DoCommand
+
+The Milesight models use DoCommands to send downlinks to sensors from the gateway.
+**The sensor must already be connected to Viam (i.e., "Live" on app.viam.com) for downlink requests to work.**
+
+##### Update the uplink interval
+
+This command will update the interval the milesight sends data at. This can also be set via the 'uplink_interval_mins' field in the config.
+
+```json
+{
+  "set_interval": 1.0
+}
+```
+
+##### Restart the device
+
+This command will restart the milesight sensor, triggering a new join request.
+
+```json
+{
+  "restart_sensor": ""
+}
+```
+
+##### Send a generic downlink
+
+This command will send a generic downlink payload to the gateway. The string is expected to be a set of bytes in hex. See the [em310 tilt sensor user guide](https://resource.milesight.com/milesight/iot/document/em310-tilt-user-guide-en.pdf) or the [ct101 user guide](https://resource.milesight.com/milesight/iot/document/ct10x-user-guide-en.pdf) for their respective downlink commands.
+
+```json
+{
+  "send_downlink": "<BYTESINHEX>"
+}
+```
+
+### Configuration for `viam:lorawan:node`
+
+#### Quick examples
+
+Example OTAA node configuration:
+
+```json
+{
+  "join_type": "OTAA",
+  "decoder_path": "/path/to/decoder.js",
+  "dev_eui": "0123456789ABCDEF",
+  "app_key": "0123456789ABCDEF0123456789ABCDEF",
+  "uplink_interval_mins": 10,
+  "gateways": ["gateway-1"]
+}
+```
+
+Example ABP node configuration:
+
+```json
+{
+  "join_type": "ABP",
+  "decoder_path": "/path/to/decoder.js",
+  "dev_addr": "01234567",
+  "app_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "network_s_key": "0123456789ABCDEF0123456789ABCDEF",
+  "uplink_interval_mins": 10,
+  "gateways": ["gateway-1"],
+  "fport": "55"
+}
+```
+
+#### General Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| decoder_path | string | yes | - | Path to the payload decoder script. This must be a .js file. If the device provides multiple decoder files, use the chirpstack version. |
+| join_type | string | no | "OTAA" | Join type ("OTAA" or "ABP"). |
+| uplink_interval_mins | float64 | yes | - | Expected interval between uplink messages sent by the node. The default can be found on the datasheet and can be modified using device specific software. |
+| gateways | []string | yes | - | gateways the node can send data to. Can also be in the `Depends on` drop down. |
+| fport | string | no | - | port (in hex) to send downlinks to the device. |
+
+The node registers itself with the gateway so the gateway will recognize messages from the node.
+
+#### OTAA Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_eui | string | yes | - | Device EUI (8 bytes in hex). Unique indentifer for the node. Can be found printed on your device or on the box.|
+| app_key | string | yes | - | Application Key (16 bytes in hex). Used to securely join the network. The default can normally be found in the node's datasheet. |
+
+#### ABP Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| dev_addr | string | yes | - | Device Address (4 bytes in hex). Used to identify uplink messages. Can normally be found on datasheet or box. |
+| app_s_key | string | yes | - | Application Session Key (16 bytes in hex) Used to decrypt uplink messages. Default can normally be found on the node's datasheet or box. |
+| network_s_key | string | yes | - | Network Session Key (16 bytes in hex) Used to decypt uplink messages. Default can normally be found on the node's datasheet or box. |
+
+#### DoCommand
+
+The sensor node model uses DoCommands to send downlinks to sensors from the gateway.
+
+##### Send a downlink
+
+This command will send a generic downlink payload to the gateway. The string is expected to be a set of bytes in hex.
+
+```json
+{
+  "send_downlink": "<BYTESINHEX>"
+}
+```
+
+
+## Configuration for LoRaWAN gateway models
+
+### Configuration for `viam:lorawan:sx1302-hat-generic`
+
+Note: The gpio pins MUST be set to the gpio pin numbers on your board connected to the reset and power-enable pins of the sx1302 hat to avoid a 15-minute reset loop.
+
+#### Quick example
+
+```json
+{
+    "board": "rpi",
+    "spi_bus": 0,
+    "reset_pin": int,
+    "power_en_pin": int,
+    "region_code": "US915"
+}
+```
+
+#### Attributes
+
+The following attributes are available for `viam:lorawan:sx1302-hat-generic` sensors:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
+| reset_pin | int | yes | - | GPIO pin number for sx1302 reset pin |
+| spi_bus | int | no | 0 | SPI bus number  |
+| power_en_pin | int | no | - | GPIO pin number for the power enable pin |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+
+### Configuration for `viam:lorawan:sx1302-waveshare-hat`
+
+#### Quick example
+
+```json
+{
+    "board": "rpi",
+    "spi_bus": 0,
+    "region_code": "US915"
+}
+```
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the board connected to the HAT. The board communicates with the gateway through SPI |
+| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi) |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+
+### Configuration for`viam:lorawan:rak7391`
+
+Before configuring the rak7391, follow [the manual](https://docs.rakwireless.com/product-categories/software-apis-and-libraries/rakpios/quickstart) to install RAKPiOS and connect to the device.
+
+You can run the following command to discover where the concentrators are connected:
+
+`docker run --privileged --rm rakwireless/udp-packet-forwarder find_concentrator`
+
+Use the returned spi or serial paths in your viam configuration.
+
+
+#### Quick Example
+
+```json
+{
+  "pcie1": {
+    "serial_path": <serial_path>
+  },
+  "pcie2": {
+    "serial_path": <serial_path>
+  },
+  "board": <string-boardname>
+}
+```
+
+#### Attributes
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| board | string | yes | - | Name of the raspberry pi board in your RAK |
+| region_code | string | no | US915 | frequency region of your gateway (US915 or EU868) |
+| pcie1 | config | no | - | info about the concentrator connected to the pcie1 slot of the RAK |
+| pcie2 |config | no | - | info about the concentrator connected to the pcie2 slot of the RAK |
+
+
+The following attributes are available for the pcies:
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| spi_bus | int | no | 0 | SPI bus number (0 or 1 on a raspberry pi), for concentrators are connected through SPI |
+| serial_path | int | no | 0 | serial path concentrator is connected to, if connected through USB |
+
+
+## Troubleshooting
 When the gateway is properly configured, the pwr LED will be solid red and the rx and tx LEDs will be blinking red.
 
 It may take several minutes after starting the module to start receiving data, especially if your node transmits on more than 8 frequency channels.
@@ -507,13 +475,3 @@ The gateway communicates through SPI, so [ensure that SPI in enabled on the Pi](
 To avoid capturing duplicate data, set the data capture frequency equal to or less than the expected uplink interval.
 
 If you see the error `ERROR: Failed to set SX1250_0 in STANDBY_RC mode` in logs, unplug the Raspberry Pi for a few minutes and then try again.
-
-## Hardware Tested
-The sx1302-gateway model has been tested with:\
-[Waveshare Gateway HAT](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)
-
-The node model has been tested with:\
-[Milesight CT101 Smart Current Transformer](https://www.milesight.com/iot/product/lorawan-sensor/ct10x)\
-[Milesight EM310 Tilt Sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)\
-[Dragino LHT65 Temperature & Humidity Sensor](https://www.dragino.com/products/temperature-humidity-sensor/item/151-lht65.html)
-
