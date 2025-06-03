@@ -9,13 +9,13 @@
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:sx1302-hat-generic",
       "markdown_link": "README.md#configuration-for-viamlorawansx1302-hat-generic",
-      "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT connected by SPI to a single board computer."
+      "short_description": "A sensor component for any SX1302-based LoRaWAN gateway HAT connected by SPI to a single board computer."
     },
     {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:sx1302-waveshare-hat",
       "markdown_link": "README.md#configuration-for-viamlorawansx1302-waveshare-hat",
-      "short_description": "A sensor component for a Waveshare sx1302 LoRaWAN gateway HAT."
+      "short_description": "A sensor component for a Waveshare SX1302 LoRaWAN Gateway HAT."
     },
     {
       "api": "rdk:component:sensor",
@@ -27,7 +27,7 @@
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:node",
       "markdown_link": "README.md#configuration-for-viamlorawannode",
-      "short_description": "A sensor component for a generic LoRaWAN node."
+      "short_description": "A sensor component for any generic LoRaWAN node."
     },
     {
       "api": "rdk:component:sensor",
