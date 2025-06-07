@@ -2,63 +2,63 @@
   "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "viam:lorawan",
   "visibility": "public",
-  "url": "https://github.com/oliviamiller/lorawan",
-  "description": "A module to collect data from LoRaWAN sensors",
+  "url": "https://github.com/viam-modules/lorawan",
+  "description": "A module that helps you configure gateways and nodes in a LoRaWAN network",
   "models": [
-        {
-          "api": "rdk:component:sensor",
-          "model": "viam:lorawan:sx1302-hat-generic",
-          "markdown_link": "README.md#configuration-for-viamlorawansx1302-hat-generic",
-          "short_description": "A sensor component for a sx1302 LoRaWAN gateway HAT connected by SPI to a single board computer."
-        },
-        {
-          "api": "rdk:component:sensor",
-          "model": "viam:lorawan:sx1302-waveshare-hat",
-          "markdown_link": "README.md#configuration-for-viamlorawansx1302-waveshare-hat",
-          "short_description": "A sensor component for a Waveshare sx1302 LoRaWAN gateway HAT."
-        },
-        {
-          "api": "rdk:component:sensor",
-          "model": "viam:lorawan:rak7391",
-          "markdown_link": "README.md#configuration-for-viamlorawanrak7391",
-          "short_description": "A sensor component for the rak7391 Wisgate Connect."
-        },
-       {
-          "api": "rdk:component:sensor",
-          "model": "viam:lorawan:node",
-          "markdown_link": "README.md#configuration-for-viamlorawannode",
-          "short_description": "A sensor component for a LoRaWAN node."
-       },
-       {
-        "api": "rdk:component:sensor",
-        "model": "viam:lorawan:dragino-LHT65N",
-        "markdown_link": "README.md#configuration-for-viamlorawandragino-LHT65N-and-viamlorawandragino-WQSLB",
-        "short_description": "A sensor component for a dragino LHT65N LoRaWAN node."
-     },
-     {
+    {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:sx1302-hat-generic",
+      "markdown_link": "README.md#configuration-for-viamlorawansx1302-hat-generic",
+      "short_description": "A sensor component for any SX1302-based LoRaWAN gateway HAT connected to a single board computer."
+    },
+    {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:sx1302-waveshare-hat",
+      "markdown_link": "README.md#configuration-for-viamlorawansx1302-waveshare-hat",
+      "short_description": "A sensor component for a Waveshare SX1302 LoRaWAN Gateway HAT."
+    },
+    {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:rak7391",
+      "markdown_link": "README.md#configuration-for-viamlorawanrak7391",
+      "short_description": "A sensor component for a RAK7391 Wisgate Connect LoRaWAN gateway."
+    },
+    {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:node",
+      "markdown_link": "README.md#configuration-for-viamlorawannode",
+      "short_description": "A sensor component for any generic LoRaWAN node."
+    },
+    {
+      "api": "rdk:component:sensor",
+      "model": "viam:lorawan:dragino-LHT65N",
+      "markdown_link": "README.md#configuration-for-viamlorawandragino-LHT65N-and-viamlorawandragino-WQSLB",
+      "short_description": "A sensor component for a Dragino LHT65N LoRaWAN node."
+    },
+    {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:dragino-WQS-LB",
       "markdown_link": "README.md#configuration-for-viamlorawandragino-LHT65N-and-viamlorawandragino-WQSLB",
-      "short_description": "A sensor component for a dragino WQS-LB LoRaWAN node."
-     },
-     {
+      "short_description": "A sensor component for a Dragino WQS-LB LoRaWAN node."
+    },
+    {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:milesight-em310-tilt",
       "markdown_link": "README.md#configuration-for-viamlorawanmilesight-ct101-and-viamlorawanmilesight-em310-tilt",
-      "short_description": "A sensor component for a milesight em310 tilt node."
-     },
-     {
+      "short_description": "A sensor component for a Milesight EM310-TILT LoRaWAN node."
+    },
+    {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:milesight-ct101",
       "markdown_link": "README.md#configuration-for-viamlorawanmilesight-ct101-and-viamlorawanmilesight-em310-tilt",
       "short_description": "A sensor component for a Milesight CT101 LoRaWAN node."
-     }
+    }
   ],
   "build": {
-      "path": "module.tar.gz",
-      "build": "make module.tar.gz",
-      "arch": ["linux/arm64"]
-    },
+    "path": "module.tar.gz",
+    "build": "make module.tar.gz",
+    "arch": ["linux/arm64"]
+  },
   "entrypoint": "lorawan",
   "first_run": "first_run.sh"
-  }
+}
