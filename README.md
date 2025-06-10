@@ -1,15 +1,15 @@
 
 # LoRaWAN module
 
-LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol in which the **sensors** communicate over radio with **gateways**.
+LoRaWAN (Long Range Wide Area Network) is a low-power, long-range wireless protocol in which the **nodes** communicate over radio with **gateways**.
 
 For more, see the [the Viam documentation page](https://docs.viam.com/data-ai/capture-data/lorawan/).
 
 ## What's in this module?
 
-This Viam module provides models for LoRaWAN **sensors** (end devices/transmitters) as well as LoRaWAN **gateways** (receivers).
+This Viam module provides models for LoRaWAN **nodes** (end devices/transmitters) as well as LoRaWAN **gateways** (receivers).
 
-The LoRaWAN **node** models allow registering a LoRaWAN node with a LoRaWAN gateway. These models also implement Viam's Sensor GetReadings method by calling GetReadings on the gateway model and filtering the output to just the particular sensor's readings.
+The LoRaWAN **node** models allow registering a LoRaWAN node with a LoRaWAN gateway. These models also implement Viam's Sensor GetReadings method by calling GetReadings on the gateway model and filtering the output to just the particular nodes's readings.
 
 The LoRaWAN **gateway** models interface with a physical gateway device (such as the [Waveshare SX1302 LoRaWAN gateway HAT for Raspberry Pi](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT)) to pull all sensor readings from the gateway device and return them through Viam's Sensor [GetReadings](https://docs.viam.com/dev/reference/apis/components/sensor/#getreadings) method.
 
@@ -17,7 +17,7 @@ The LoRaWAN **gateway** models interface with a physical gateway device (such as
 A typical architecture involves:
 
 - a gateway physically attached to a machine -- either an HAT connected to a Raspberry Pi SBC or a machine with internal LoRaWAN radios
-- one or more LoRaWAN sensors physically located up to a couple miles away from the gateway
+- one or more LoRaWAN nodes physically located up to a couple miles away from the gateway
 
 The machine runs `viam-server`. The `viam-server` configuration must include:
 
@@ -33,7 +33,7 @@ This module provides models for the following LoRaWAN node hardware:
 - `viam:lorawan:dragino-WQSLB`: [Dragino WQS-LB](https://www.dragino.com/products/water-air-quality-sensor/item/345-wqs-lb.html) water quality sensor
 - `viam:lorawan:milesight-ct101`: [Milesight CT101](https://www.milesight.com/iot/product/lorawan-sensor/ct10x) current transformer
 - `viam:lorawan:milesight-em310-tilt`: [Milesight EM310-TILT sensor](https://www.milesight.com/iot/product/lorawan-sensor/em310-tilt)
-- `viam:lorawan:node`: a generic model that can be used with any LoRaWAN sensor that meets the following criteria:
+- `viam:lorawan:node`: a generic model that can be used with any LoRaWAN node that meets the following criteria:
   - Class A
   - supports the `US915` or `EU868` frequency bands
   - uses LoRaWAN MAC specification version 1.0.3
@@ -309,7 +309,7 @@ Send a generic downlink payload (in hexadecimal) to the node:
 }
 ```
 
-For more information about downlink commands, see the [EM310-TILT sensor user guide](https://resource.milesight.com/milesight/iot/document/em310-tilt-user-guide-en.pdf) or the [CT101 user guide](https://resource.milesight.com/milesight/iot/document/ct10x-user-guide-en.pdf).
+For more information about downlink commands, see the [EM310-TILT user guide](https://resource.milesight.com/milesight/iot/document/em310-tilt-user-guide-en.pdf) or the [CT101 user guide](https://resource.milesight.com/milesight/iot/document/ct10x-user-guide-en.pdf).
 
 ### Configuration for `viam:lorawan:node`
 
@@ -457,8 +457,6 @@ Note: To avoid a 15-minute reset loop, set the GPIO pins to the GPIO pin numbers
 
 #### Attributes
 
-The following attributes are available for `viam:lorawan:sx1302-hat-generic` sensors:
-
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `board` | string | yes | - | Name of the [board component](https://docs.viam.com/operate/reference/components/board/) that the peripheral is connected to. Used for GPIO pin control. |
@@ -467,7 +465,6 @@ The following attributes are available for `viam:lorawan:sx1302-hat-generic` sen
 | `power_en_pin` | int | no | - | GPIO pin used for peripheral power enable. |
 | `path` | string | no | - | Serial path that the peripheral is mounted at, if connected through USB. |
 | `region_code` | string | no | `US915` | Frequency region of your gateway. Options: [`US915`, `EU868`] |
-
 
 ## Troubleshooting
 
