@@ -83,9 +83,12 @@ Example ABP node configuration:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
+| `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
+| `decoder_path` | string | no | (see description) | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. Defaults to the latest decoder published by the manufacturer on GitHub. |
 | `join_type` | string | no | `OTAA` | The [activation protocol](https://docs.viam.com/data-ai/capture-data/lorawan/#activation-protocols) used to secure this network. Options: [`OTAA`, `ABP`] |
 | `uplink_interval_mins` | float64 | no | 20.0 | Interval between uplink messages sent from the node, in minutes. Found in the device datasheet, but can be modified. Configured by downlink after initial connection. |
-| `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
+| `fport` | string | no | `01` (`0x01`) | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. |
+
 
 #### OTAA Attributes
 
@@ -251,11 +254,11 @@ Example ABP node configuration:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `decoder_path` | string | yes | (see description) | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. Defaults to the latest decoder published by the manufacturer on GitHub. |
-| `join_type` | string | no | `OTAA` | The [activation protocol](https://docs.viam.com/data-ai/capture-data/lorawan/#activation-protocols) used to secure this network. Options: [`OTAA`, `ABP`] |
-| `uplink_interval_mins` | float64 | no | Defaults: `10` for the CT101, `1080` for EM310-TILT | Interval between uplink messages sent from the node, in minutes. Found in the device datasheet, but can be modified. Configured by downlink after initial connection. |
 | `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
-| `fport` | string | no | `01` (`0x01`) | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. <br> On supported Milesight models, defaults to `"55"` (equivalent to `0x55`). |
+| `decoder_path` | string | no | (see description) | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. Defaults to the latest decoder published by the manufacturer on GitHub. |
+| `join_type` | string | no | `OTAA` | The [activation protocol](https://docs.viam.com/data-ai/capture-data/lorawan/#activation-protocols) used to secure this network. Options: [`OTAA`, `ABP`] |
+| `uplink_interval_mins` | float64 | no | `10` for the CT101, `1080` for EM310-TILT | Interval between uplink messages sent from the node, in minutes. Found in the device datasheet, but can be modified. Configured by downlink after initial connection. |
+| `fport` | string | no | `55` (`0x55`) | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. |
 
 #### OTAA Attributes
 
@@ -342,11 +345,11 @@ Example ABP node configuration:
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `decoder_path` | string | yes | (see description) | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. Defaults to the latest decoder published by the manufacturer on GitHub. |
+| `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
+| `decoder_path` | string | no | (see description) | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. Defaults to the latest decoder published by the manufacturer on GitHub. |
 | `join_type` | string | no | `OTAA` | The [activation protocol](https://docs.viam.com/data-ai/capture-data/lorawan/#activation-protocols) used to secure this network. Options: [`OTAA`, `ABP`] |
 | `uplink_interval_mins` | float64 | no | Defaults: `10` for the CT101, `1080` for EM310-TILT | Interval between uplink messages sent from the node, in minutes. Found in the device datasheet, but can be modified. Configured by downlink after initial connection. |
-| `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
-| `fport` | string | no | `55` (aka `0x55`) | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. |
+| `fport` | string | no | - | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. |
 
 #### OTAA Attributes
 
@@ -397,7 +400,7 @@ Send a generic downlink payload (in hexadecimal) to the node:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `board` | string | yes | - | Name of the [board component](https://docs.viam.com/operate/reference/components/board/) that the peripheral is connected to. Used for GPIO pin control. |
-| `spi_bus` | int | no | 0 | SPI bus number used to connect the gateway peripheral. Options: [`0`, `1`] |
+| `spi_bus` | int | no | `0` | SPI bus number used to connect the gateway peripheral. Options: [`0`, `1`] |
 | `region_code` | string | no | `US915` | Frequency region of your gateway. Options: [`US915`, `EU868`] |
 
 ### Configuration for `viam:lorawan:rak7391`
@@ -436,6 +439,7 @@ Use the returned SPI or serial paths in your viam configuration.
 | `pcie1` | config | no | - | PCIe configuration for concentrator connected to PCIe slot 1: <br> <ul><li>`spi_bus` (integer) (Optional): SPI bus that the concentrator is connected to, if connected through SPI. </li><li>`serial_path` (string) (Optional): Serial path that the concentrator is mounted at, if connected through USB. </li></ul> |
 | `pcie2` |config | no | - | PCIe configuration for concentrator connected to PCIe slot 2: <br> <ul><li>`spi_bus` (integer) (Optional): SPI bus that the concentrator is connected to, if connected through SPI. </li><li>`serial_path` (string) (Optional): Serial path that the concentrator is mounted at, if connected through USB. </li></ul> |
 
+You must specify at least one PCIe configuration.
 
 ### Configuration for `viam:lorawan:sx1302-hat-generic`
 
@@ -461,7 +465,7 @@ Note: To avoid a 15-minute reset loop, set the GPIO pins to the GPIO pin numbers
 |------|------|----------|---------|-------------|
 | `board` | string | yes | - | Name of the [board component](https://docs.viam.com/operate/reference/components/board/) that the peripheral is connected to. Used for GPIO pin control. |
 | `reset_pin` | int | yes | - | GPIO pin used for peripheral reset. |
-| `spi_bus` | int | no | 0 | SPI bus number used to connect the gateway peripheral. Options: [`0`, `1`]  |
+| `spi_bus` | int | no | `0` | SPI bus number used to connect the gateway peripheral. Options: [`0`, `1`]  |
 | `power_en_pin` | int | no | - | GPIO pin used for peripheral power enable. |
 | `path` | string | no | - | Serial path that the peripheral is mounted at, if connected through USB. |
 | `region_code` | string | no | `US915` | Frequency region of your gateway. Options: [`US915`, `EU868`] |
