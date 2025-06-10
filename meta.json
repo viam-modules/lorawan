@@ -9,7 +9,7 @@
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:sx1302-hat-generic",
       "markdown_link": "README.md#configuration-for-viamlorawansx1302-hat-generic",
-      "short_description": "A sensor component for any SX1302-based LoRaWAN gateway HAT connected to a single board computer."
+      "short_description": "A generic sensor component for LoRaWAN gateway peripherals built using the SX1302 or SX1303 chips."
     },
     {
       "api": "rdk:component:sensor",
@@ -27,18 +27,18 @@
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:node",
       "markdown_link": "README.md#configuration-for-viamlorawannode",
-      "short_description": "A sensor component for any generic LoRaWAN node."
+      "short_description": "A generic sensor component for any LoRaWAN node."
     },
     {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:dragino-LHT65N",
-      "markdown_link": "README.md#configuration-for-viamlorawandragino-LHT65N-and-viamlorawandragino-WQSLB",
+      "markdown_link": "README.md#configuration-for-viamlorawandragino-lht65n-and-viamlorawandragino-wqs-lb",
       "short_description": "A sensor component for a Dragino LHT65N LoRaWAN node."
     },
     {
       "api": "rdk:component:sensor",
       "model": "viam:lorawan:dragino-WQS-LB",
-      "markdown_link": "README.md#configuration-for-viamlorawandragino-LHT65N-and-viamlorawandragino-WQSLB",
+      "markdown_link": "README.md#configuration-for-viamlorawandragino-lht65n-and-viamlorawandragino-wqs-lb",
       "short_description": "A sensor component for a Dragino WQS-LB LoRaWAN node."
     },
     {
