@@ -187,15 +187,15 @@ Example ABP node configuration:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `dev_addr` | string | yes | - | 32-bit hexadecimal **device address** used to identify this device in LoRaWAN messages. Found in the device datasheet or in device packaging. |
-| `app_s_key` | string | yes | `5572404C696E6B4C6F52613230313823` | 128-bit hexadecimal **application session key** used to decrypt messages containing application data.  Found in the device datasheet or in device packaging. |
-| `network_s_key` | string | yes | `5572404C696E6B4C6F52613230313823` | 128-bit hexadecimal **network session key** used to decrypt network management messages. Found in the device datasheet or in device packaging. |
+| `app_s_key` | string | no | `5572404C696E6B4C6F52613230313823` | 128-bit hexadecimal **application session key** used to decrypt messages containing application data.  Found in the device datasheet or in device packaging. |
+| `network_s_key` | string | no | `5572404C696E6B4C6F52613230313823` | 128-bit hexadecimal **network session key** used to decrypt network management messages. Found in the device datasheet or in device packaging. |
 
 #### ABP attributes
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `dev_eui` | string | yes | - | The **device EUI (Extended Unique Identifier)**, a unique 64-bit identifier for the LoRaWAN device in hexadecimal format (16 characters). Found on your device or in device packaging. |
-| `app_key` | string | yes | `5572404C696E6B4C6F52613230313823` | The 128-bit hexadecimal AES **application key** used for device authentication and session key derivation. Found in the device datasheet. |
+| `app_key` | string | no | `5572404C696E6B4C6F52613230313823` | The 128-bit hexadecimal AES **application key** used for device authentication and session key derivation. Found in the device datasheet. |
 
 
 #### DoCommand
