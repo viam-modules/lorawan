@@ -361,10 +361,19 @@ Use the returned SPI or serial paths in your viam configuration.
 |------|------|----------|---------|-------------|
 | `board` | string | yes | - | Name of the [board component](https://docs.viam.com/operate/reference/components/board/) that represents the Raspberry Pi Compute Module inside the RAK7391. Used for GPIO pin control. |
 | `region_code` | string | no | `US915` | Frequency region of your gateway. Options: [`US915`, `EU868`] |
-| `pcie1` | config | no | - | PCIe configuration for concentrator connected to PCIe slot 1: <br> <ul><li>`spi_bus` (integer) (Optional): SPI bus that the concentrator is connected to, if connected through SPI. </li><li>`serial_path` (string) (Optional): Serial path that the concentrator is mounted at, if connected through USB. </li></ul> |
-| `pcie2` |config | no | - | PCIe configuration for concentrator connected to PCIe slot 2: <br> <ul><li>`spi_bus` (integer) (Optional): SPI bus that the concentrator is connected to, if connected through SPI. </li><li>`serial_path` (string) (Optional): Serial path that the concentrator is mounted at, if connected through USB. </li></ul> |
+| `pcie1` | config | no | - | PCIe configuration for concentrator connected to PCIe slot 1. For information about configuration of this attribute, see [PCIe field attributes](#pcie-field-attributes) below. |
+| `pcie2` |config | no | - | PCIe configuration for concentrator connected to PCIe slot 2. For information about configuration of this attribute, see [PCIe field attributes](#pcie-field-attributes) below. |
 
 You must specify at least one PCIe configuration.
+
+#### PCIe field attributes
+
+The PCIe configuration fields support the following attributes:
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `spi_bus` | integer | no | - | SPI bus that the concentrator is connected to, if connected through SPI. |
+| `serial_path` | string | no | - | Serial path that the concentrator is mounted at, if connected through USB. |
 
 ### Configuration for `viam:lorawan:sx1302-hat-generic`
 
