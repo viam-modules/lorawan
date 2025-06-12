@@ -54,6 +54,8 @@ See below for the Viam configuration for each of these models.
 
 ### Configuration for `viam:lorawan:dragino-LHT65N` and `viam:lorawan:dragino-WQS-LB`
 
+Before using the Dragino WQS-LB, you must calibrate the sensor. For instructions on how to calibrate your sensor, see [the Viam documentation](https://docs.viam.com/operate/reference/components/sensor/lorawan/#calibrate-the-dragino-wqs-lb-water-quality-sensor)
+
 #### Examples
 
 Example OTAA node configuration:
@@ -147,84 +149,6 @@ Send a generic downlink payload (in hexadecimal) to the node:
 
 For more information about downlink commands, see the [LHT65 temperature sensor user guide](https://www.dragino.com/downloads/downloads/LHT65/UserManual/LHT65_Temperature_Humidity_Sensor_UserManual_v1.3.pdf).
 
-#### Calibrate your WQS-LB
-
-Calibrate your WQS-LB water quality sensor before using it. You can calibrate your sensor using DoCommands.
-For more information about calibration, consult the [user manual](https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20LoRaWAN%20End%20Nodes/WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/).
-
-##### Calibrate the pH probe
-
-The pH probe uses a thre-point calibration process:
-
-1. Wash the electrode with distilled water, then place it in a 9.18 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
-   ```json
-   {
-     "calibrate_ph": 9
-   }
-   ```
-2. Wash the electrode with distilled water, then place it in a 6.86 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
-   ```json
-   {
-     "calibrate_ph": 6
-   }
-   ```
-3. Wash the electrode with distilled water, then place it in a 4.01 standard buffer solution. Once the data stabilizes, send the following downlink to the node:
-   ```json
-   {
-     "calibrate_ph": 4
-   }
-   ```
-
-##### Calibrate the electrical conductivity probe
-
-The EC probe uses a one-point calibration process. You can configure the EC probe in the following modes:
-
-- For K=1, to measure conductivity from 0-2000 μS/cm at a resolution of 1 μS/cm, wash the electrode with distilled water and place it in a 1413 μS/cm solution. Once the data stabilizes, send the following downlink:
-  ```json
-  {
-    "calibrate_ec": 1
-  }
-  ```
-
-- For K=10, to measure conductivity from 10-20000 μS/cm at a resolution of 10 μS/cm: wash the electrode with distilled water and place it in a 12.88 mS/cm solution. Once the data stabilizes, send the following downlink:
-  ```json
-  {
-    "calibrate_ec": 10
-  }
-  ```
-
-##### Calibrate the turbidity probe
-
-The turbidity probe uses a one-point calibration process:
-
-1. Prepare a 0 NTU, 200 NTU, 400 NTU, 600 NTU, 800 NTU, or 1000 NTU solution.
-2. Place the probe in the solution.
-3. Send the downlink with NTU value to your node:
-   ```json
-   {
-     "calibrate_t": <NTU value>
-   }
-   ```
-
-##### Calibrate the ORP probe
-
-The Oxidation-Reduction Potential (ORP) probe uses a two-point calibration process:
-
-1. Wash the electrode with distilled water and place the probe in a 86mV standard buffer.
-2. Once the data is stable, send the following downlink to the node:
-   ```json
-   {
-     "calibrate_orp" : 86
-   }
-   ```
-
-3. Wash the electrode with distilled water and place the probe in a 256mV standard buffer.
-4. Once the data is stable, send the following downlink to the node:
-   ```json
-   {
-     "calibrate_orp": 256
-   }
-   ```
 
 ### Configuration for `viam:lorawan:milesight-ct101` and `viam:lorawan:milesight-em310-tilt`
 
