@@ -89,7 +89,6 @@ Example ABP node configuration:
 | `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
 | `join_type` | string | no | `OTAA` | The [activation protocol](https://docs.viam.com/data-ai/capture-data/lorawan/#activation-protocols) used to secure this network. Options: [`OTAA`, `ABP`] |
 | `uplink_interval_mins` | float64 | no | 20.0 | Interval between uplink messages sent from the node, in minutes. Found in the device datasheet, but can be modified. Configured by downlink after initial connection. |
-| `fport` | string | no | `01` (`0x01`) | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. |
 
 
 #### OTAA Attributes
