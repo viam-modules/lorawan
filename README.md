@@ -54,7 +54,7 @@ See below for the Viam configuration for each of these models.
 
 ### Configuration for `viam:lorawan:dragino-LHT65N` and `viam:lorawan:dragino-WQS-LB`
 
-Before using the Dragino WQS-LB, you must calibrate the sensor. For instructions on how to calibrate your sensor, see [the Viam documentation](https://docs.viam.com/operate/reference/components/sensor/lorawan/#calibrate-the-dragino-wqs-lb-water-quality-sensor)
+Before using the Dragino WQS-LB, you must calibrate the sensor. For instructions on how to calibrate your sensor, see [the Viam documentation](https://docs.viam.com/operate/reference/components/sensor/lorawan/#calibrate-the-dragino-wqs-lb-water-quality-sensor).
 
 #### Examples
 
@@ -107,7 +107,8 @@ Example ABP node configuration:
 | `dev_eui` | string | yes | - | The **device EUI (Extended Unique Identifier)**, a unique 64-bit identifier for the LoRaWAN device in hexadecimal format (16 characters). Found on your device or in device packaging. |
 | `app_key` | string | yes | - | The 128-bit hexadecimal AES **application key** used for device authentication and session key derivation. Found in the device datasheet. |
 
-NOTE: If using a WQS-LB, be sure to calibrate the sensor using the instructions below.
+> [!NOTE]
+> If you use the WQS-LB, be sure to [calibrate the sensor](https://docs.viam.com/operate/reference/components/sensor/lorawan/#calibrate-the-dragino-wqs-lb-water-quality-sensor).
 
 #### DoCommand
 
