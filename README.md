@@ -147,7 +147,7 @@ Send a generic downlink payload (in hexadecimal) to the node:
 }
 ```
 
-For more information about downlink commands, see the [LHT65 temperature sensor user guide](https://www.dragino.com/downloads/downloads/LHT65/UserManual/LHT65_Temperature_Humidity_Sensor_UserManual_v1.3.pdf).
+For more information about downlink commands, see the [LHT65 temperature sensor user manual](https://www.dragino.com/downloads/downloads/LHT65/UserManual/LHT65_Temperature_Humidity_Sensor_UserManual_v1.3.pdf) and the [WQS-LB user manual](https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20LoRaWAN%20End%20Nodes/WQS-LB--LoRaWAN_Water_Quality_Sensor_Transmitter_User_Manual/).
 
 
 ### Configuration for `viam:lorawan:milesight-ct101` and `viam:lorawan:milesight-em310-tilt`
