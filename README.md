@@ -270,7 +270,7 @@ Example ABP node configuration:
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `gateways` | []string | yes | - | An array containing the name of the [gateway component](#add-a-gateway) in your Viam configuration. Alternatively, specify the gateway using the `Depends on` drop down. |
-| `decoder_path` | string | no | (see description) | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. |
+| `decoder_path` | string | yes | - | Path to a Javascript **decoder script** used to interpret data transmitted from the node. You can use a local path on your device or an HTTP(S) URL that points to a file on a remote server. If the decoder script provides multiple implementations, uses the Chirpstack version. Not compatible with The Things Network decoders. |
 | `join_type` | string | no | `OTAA` | The [activation protocol](https://docs.viam.com/data-ai/capture-data/lorawan/#activation-protocols) used to secure this network. Options: [`OTAA`, `ABP`] |
 | `uplink_interval_mins` | float64 | no | Defaults: `10` for the CT101, `1080` for EM310-TILT | Interval between uplink messages sent from the node, in minutes. Found in the device datasheet, but can be modified. Configured by downlink after initial connection. |
 | `fport` | string | no | - | 8-bit hexadecimal **frame port** used to send downlinks to the device. Found in the device datasheet. |
