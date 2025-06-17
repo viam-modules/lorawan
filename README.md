@@ -304,7 +304,7 @@ Send a generic downlink payload (in hexadecimal) to the node:
 }
 ```
 
-## Configuration for LoRaWAN gateway models
+## Configuration for LoRaWAN gateways
 
 ### Configuration for `viam:lorawan:sx1302-waveshare-hat`
 
