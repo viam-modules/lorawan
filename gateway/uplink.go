@@ -56,7 +56,8 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 		// Check if it's unknown due to poor SNR vs truly unknown device
 		minSNR := sfToSNRMin[packet.DataRate]
 		if float64(packet.SNR) < minSNR {
-			g.logger.Debugf("received packet from unknown device %X (likely due to poor SNR: %v, min is %v), ignoring", devAddrBE, packet.SNR, minSNR)
+			g.logger.Debugf("received packet from unknown device %X (likely due to poor SNR: %v, min is %v), ignoring",
+				devAddrBE, packet.SNR, minSNR)
 		} else {
 			g.logger.Debugf("received packet from unknown device %X, ignoring", devAddrBE)
 		}
@@ -66,7 +67,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 	// Check SNR after device identification for better logging context
 	minSNR := sfToSNRMin[packet.DataRate]
 	if float64(packet.SNR) < minSNR {
-		g.logger.Warnf("packet from %s skipped due to low signal noise ratio: %v, min is %v", 
+		g.logger.Warnf("packet from %s skipped due to low signal noise ratio: %v, min is %v",
 			device.NodeName, packet.SNR, minSNR)
 		return "", map[string]interface{}{}, errLowSNR
 	}
