@@ -64,6 +64,7 @@ var (
 	errInvalidRegion              = errors.New("unrecognized region code, valid options are US915 and EU868")
 	errInvalidConcentratorsLength = errors.New("invalid concentrator length - should not happen")
 	errTimedOut                   = errors.New("timed out waiting for gateway to start")
+	errLowSNR = errors.New("packet SNR below minimum threshold")
 )
 
 // constants for MHDRs of different message types.
@@ -745,12 +746,6 @@ func (g *gateway) receivePackets(ctx context.Context) {
 					if isDuplicate {
 						continue
 					}
-					minSNR := sfToSNRMin[packet.DataRate]
-					if float64(packet.SNR) < minSNR {
-						g.logger.Warnf("packet skipped due to low signal noise ratio: %v, min is %v", packet.SNR, minSNR)
-						continue
-					}
-
 					g.handlePacket(ctx, packet, t, c)
 				}
 			}
@@ -774,8 +769,8 @@ func (g *gateway) handlePacket(ctx context.Context, packet lorahw.RxPacket, pack
 	case unconfirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, packet, packetTime, c)
 		if err != nil {
-			// don't log as error if it was a request from unknown device.
-			if errors.Is(errNoDevice, err) {
+			// don't log as error if it was a request from unknown device or low SNR.
+			if errors.Is(errNoDevice, err) || errors.Is(errLowSNR, err) {
 				return
 			}
 			g.logger.Errorf("error parsing uplink message: %v", err)
@@ -785,8 +780,8 @@ func (g *gateway) handlePacket(ctx context.Context, packet lorahw.RxPacket, pack
 	case confirmedUplinkMHdr:
 		name, readings, err := g.parseDataUplink(ctx, packet, packetTime, c)
 		if err != nil {
-			// don't log as error if it was a request from unknown device.
-			if errors.Is(errNoDevice, err) {
+			// don't log as error if it was a request from unknown device or low SNR.
+			if errors.Is(errNoDevice, err) || errors.Is(errLowSNR, err) {
 				return
 			}
 			g.logger.Errorf("error parsing uplink message: %v", err)
