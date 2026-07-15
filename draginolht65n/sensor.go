@@ -68,13 +68,13 @@ func (conf *Config) getNodeConfig(decoderFilePath string) node.Config {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	nodeConf := conf.getNodeConfig("fixed")
-	deps, err := nodeConf.Validate(path)
+	deps, optDeps, err := nodeConf.Validate(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return deps, nil
+	return deps, optDeps, nil
 }
 
 // LHT65N defines a lorawan node device.

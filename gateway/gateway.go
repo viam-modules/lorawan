@@ -191,37 +191,37 @@ func init() {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	var deps []string
 	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
+		return nil, nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
 	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+		return nil, nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
 	if conf.Bus != nil && conf.Path != "" {
-		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
+		return nil, nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
 
 	if conf.Path != "" {
 		err := validateSerialPath(conf.Path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if len(conf.BoardName) == 0 {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
+		return nil, nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
 		if regions.GetRegion(conf.Region) == regions.Unspecified {
-			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
+			return nil, nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
 
-	return deps, nil
+	return deps, nil, nil
 }
 
 func validateSerialPath(path string) error {

@@ -230,7 +230,7 @@ func TestConfigValidate(t *testing.T) {
 		AppKey:   testAppKey,
 		Gateways: []string{testGatewayName},
 	}
-	deps, err := conf.Validate("")
+	deps, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 	test.That(t, deps[0], test.ShouldEqual, testGatewayName)

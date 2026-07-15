@@ -53,34 +53,34 @@ func (conf *ConfigRak7391) getGatewayConfig() *ConfigMultiConcentrator {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *ConfigRak7391) Validate(path string) ([]string, error) {
+func (conf *ConfigRak7391) Validate(path string) ([]string, []string, error) {
 	if conf.Concentrator1 == nil && conf.Concentrator2 == nil {
-		return nil, resource.NewConfigValidationError(path, errConcentrators)
+		return nil, nil, resource.NewConfigValidationError(path, errConcentrators)
 	}
 
 	if conf.BoardName == "" {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
+		return nil, nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
 
 	if conf.Concentrator1 != nil {
 		if conf.Concentrator1.Bus != nil && *conf.Concentrator1.Bus != 0 && *conf.Concentrator1.Bus != 1 {
-			return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+			return nil, nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 		}
 	}
 
 	if conf.Concentrator2 != nil {
 		if conf.Concentrator2.Bus != nil && *conf.Concentrator2.Bus != 0 && *conf.Concentrator2.Bus != 1 {
-			return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+			return nil, nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 		}
 	}
 
 	if conf.Region != "" {
 		if regions.GetRegion(conf.Region) == regions.Unspecified {
-			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
+			return nil, nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
 
-	return []string{conf.BoardName}, nil
+	return []string{conf.BoardName}, nil, nil
 }
 
 func newRak7391(ctx context.Context, deps resource.Dependencies,

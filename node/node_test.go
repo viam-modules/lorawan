@@ -46,7 +46,7 @@ func TestConfigValidate(t *testing.T) {
 		AppKey:   testutils.TestAppKey,
 		Gateways: []string{testGatewayName},
 	}
-	deps, err := conf.Validate("")
+	deps, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 	test.That(t, deps[0], test.ShouldEqual, testGatewayName)
@@ -55,14 +55,14 @@ func TestConfigValidate(t *testing.T) {
 	conf = &Config{
 		Interval: &testInterval,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDecoderPathRequired))
 
 	// Test missing interval
 	conf = &Config{
 		Decoder: testDecoderPath,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrIntervalRequired))
 
 	zeroInterval := 0.0
@@ -71,7 +71,7 @@ func TestConfigValidate(t *testing.T) {
 		Decoder:  testDecoderPath,
 		Interval: &zeroInterval,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrIntervalZero))
 
 	// Test invalid join type
@@ -80,7 +80,7 @@ func TestConfigValidate(t *testing.T) {
 		Interval: &testInterval,
 		JoinType: "INVALID",
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrInvalidJoinType))
 }
 
@@ -92,7 +92,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		JoinType: JoinTypeOTAA,
 		AppKey:   testutils.TestAppKey,
 	}
-	_, err := conf.Validate("")
+	_, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUIRequired))
 
 	// Test invalid DevEUI length
@@ -103,7 +103,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		DevEUI:   "0123456", // Not 8 bytes
 		AppKey:   testutils.TestAppKey,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevEUILength))
 
 	// Test missing AppKey
@@ -113,7 +113,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		JoinType: JoinTypeOTAA,
 		DevEUI:   testutils.TestDevEUI,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyRequired))
 
 	// Test invalid AppKey length
@@ -124,7 +124,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		DevEUI:   testutils.TestDevEUI,
 		AppKey:   "0123456", // Not 16 bytes
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppKeyLength))
 
 	// Test valid OTAA config
@@ -135,7 +135,7 @@ func TestValidateOTAAAttributes(t *testing.T) {
 		DevEUI:   testutils.TestDevEUI,
 		AppKey:   testutils.TestAppKey,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 }
 
@@ -148,7 +148,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		NwkSKey:  testutils.TestNwkSKey,
 		DevAddr:  testutils.TestDevAddr,
 	}
-	_, err := conf.Validate("")
+	_, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyRequired))
 
 	// Test invalid AppSKey length
@@ -160,7 +160,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		NwkSKey:  testutils.TestNwkSKey,
 		DevAddr:  testutils.TestDevAddr,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrAppSKeyLength))
 
 	// Test missing NwkSKey
@@ -171,7 +171,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		AppSKey:  testutils.TestAppSKey,
 		DevAddr:  testutils.TestDevAddr,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyRequired))
 
 	// Test invalid NwkSKey length
@@ -183,7 +183,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		NwkSKey:  "0123456", // Not 16 bytes
 		DevAddr:  testutils.TestDevAddr,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrNwkSKeyLength))
 
 	// Test missing DevAddr
@@ -194,7 +194,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		AppSKey:  testutils.TestAppSKey,
 		NwkSKey:  testutils.TestNwkSKey,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrRequired))
 
 	// Test invalid DevAddr length
@@ -206,7 +206,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		NwkSKey:  testutils.TestNwkSKey,
 		DevAddr:  "0123", // Not 4 bytes
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", ErrDevAddrLength))
 
 	// Test valid ABP config
@@ -218,7 +218,7 @@ func TestValidateABPAttributes(t *testing.T) {
 		NwkSKey:  testutils.TestNwkSKey,
 		DevAddr:  testutils.TestDevAddr,
 	}
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 }
 
