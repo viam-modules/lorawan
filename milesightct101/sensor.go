@@ -83,13 +83,13 @@ func (conf *Config) getNodeConfig() node.Config {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	nodeConf := conf.getNodeConfig()
-	deps, err := nodeConf.Validate(path)
+	deps, _, err := nodeConf.Validate(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return deps, nil
+	return deps, nil, nil
 }
 
 // CT101 defines a lorawan node device.

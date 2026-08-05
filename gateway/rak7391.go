@@ -53,7 +53,7 @@ func (conf *ConfigRak7391) getGatewayConfig() *ConfigMultiConcentrator {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *ConfigRak7391) Validate(path string) ([]string, error) {
+func (conf *ConfigRak7391) Validate(path string) ([]string, []string, error) {
 	if conf.Concentrator1 == nil && conf.Concentrator2 == nil {
 		return nil, resource.NewConfigValidationError(path, errConcentrators)
 	}
