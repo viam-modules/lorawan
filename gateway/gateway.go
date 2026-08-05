@@ -64,7 +64,7 @@ var (
 	errInvalidRegion              = errors.New("unrecognized region code, valid options are US915 and EU868")
 	errInvalidConcentratorsLength = errors.New("invalid concentrator length - should not happen")
 	errTimedOut                   = errors.New("timed out waiting for gateway to start")
-	errLowSNR = errors.New("packet SNR below minimum threshold")
+	errLowSNR                     = errors.New("packet SNR below minimum threshold")
 )
 
 // constants for MHDRs of different message types.
@@ -191,7 +191,7 @@ func init() {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	var deps []string
 	if conf.ResetPin == nil {
 		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")

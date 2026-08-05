@@ -83,23 +83,23 @@ func init() {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	if conf.Decoder == "" {
-		return nil, resource.NewConfigValidationError(path, ErrDecoderPathRequired)
+		return nil, nil, resource.NewConfigValidationError(path, ErrDecoderPathRequired)
 	}
 
 	if conf.Interval == nil {
-		return nil, resource.NewConfigValidationError(path, ErrIntervalRequired)
+		return nil, nil, resource.NewConfigValidationError(path, ErrIntervalRequired)
 	}
 
 	if *conf.Interval == 0 {
-		return nil, resource.NewConfigValidationError(path, ErrIntervalZero)
+		return nil, nil, resource.NewConfigValidationError(path, ErrIntervalZero)
 	}
 
 	deps := []string{}
 	for _, gateway := range conf.Gateways {
 		if gateway == "" {
-			return nil, resource.NewConfigValidationError(path, ErrGatewayEmpty)
+			return nil, nil, resource.NewConfigValidationError(path, ErrGatewayEmpty)
 		}
 		deps = append(deps, gateway)
 	}
@@ -107,11 +107,11 @@ func (conf *Config) Validate(path string) ([]string, error) {
 	if conf.FPort != "" {
 		fPort, err := hex.DecodeString(conf.FPort)
 		if err != nil {
-			return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
+			return nil, nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
 		}
 		// Valid lorawan frame ports are 1-254.
 		if fPort[0] <= byte(0x00) || fPort[0] > byte(0xDF) || len(fPort) > 1 {
-			return nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
+			return nil, nil, resource.NewConfigValidationError(path, ErrInvalidFPort)
 		}
 	}
 
@@ -125,9 +125,9 @@ func (conf *Config) Validate(path string) ([]string, error) {
 		err = resource.NewConfigValidationError(path, ErrInvalidJoinType)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return deps, nil
+	return deps, nil, nil
 }
 
 func (conf *Config) validateOTAAAttributes(path string) error {
