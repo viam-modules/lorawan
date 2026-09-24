@@ -16,7 +16,7 @@ func TestValidateRakConfig(t *testing.T) {
 			Bus: &bus,
 		},
 	}
-	deps, err := conf.Validate("")
+	deps, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, deps, test.ShouldResemble, []string{"pi"})
 
@@ -31,7 +31,7 @@ func TestValidateRakConfig(t *testing.T) {
 			Bus: &bus2,
 		},
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, deps, test.ShouldResemble, []string{"pi"})
 
@@ -39,7 +39,7 @@ func TestValidateRakConfig(t *testing.T) {
 	conf = &ConfigRak7391{
 		BoardName: "pi",
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errConcentrators))
 	test.That(t, deps, test.ShouldBeNil)
@@ -50,7 +50,7 @@ func TestValidateRakConfig(t *testing.T) {
 			Bus: &bus,
 		},
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "board"))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -62,7 +62,7 @@ func TestValidateRakConfig(t *testing.T) {
 		},
 		Region: "INVALID",
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidRegion))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -76,7 +76,7 @@ func TestValidateRakConfig(t *testing.T) {
 			},
 			Region: region,
 		}
-		deps, err = conf.Validate("")
+		deps, _, err = conf.Validate("")
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, deps, test.ShouldResemble, []string{"pi"})
 	}

@@ -90,7 +90,7 @@ func TestValidate(t *testing.T) {
 		ResetPin:  &testRstPin,
 		Path:      tmpFile.Name(),
 	}
-	deps, err := conf.Validate("")
+	deps, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 
@@ -99,7 +99,7 @@ func TestValidate(t *testing.T) {
 		BoardName: "pi",
 		ResetPin:  &testRstPin,
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 
@@ -110,7 +110,7 @@ func TestValidate(t *testing.T) {
 		ResetPin:  &testRstPin,
 		Bus:       &bus,
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 
@@ -121,7 +121,7 @@ func TestValidate(t *testing.T) {
 		Bus:       &bus,
 		Path:      "/dev/ttyUSB0",
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errSPIAndUSB))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -129,7 +129,7 @@ func TestValidate(t *testing.T) {
 	conf = &Config{
 		BoardName: "pi",
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "reset_pin"))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -140,7 +140,7 @@ func TestValidate(t *testing.T) {
 		ResetPin:  &testRstPin,
 		Bus:       &bus,
 	}
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidSpiBus))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -149,7 +149,7 @@ func TestValidate(t *testing.T) {
 		ResetPin: &testRstPin,
 	}
 
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationFieldRequiredError("", "board"))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -160,7 +160,7 @@ func TestValidate(t *testing.T) {
 		Region:    "AS923",
 	}
 
-	deps, err = conf.Validate("")
+	deps, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeError, resource.NewConfigValidationError("", errInvalidRegion))
 	test.That(t, deps, test.ShouldBeNil)
 
@@ -171,7 +171,7 @@ func TestValidate(t *testing.T) {
 		Region:    "EU",
 	}
 
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 
 	// Region can be just be the number
@@ -181,7 +181,7 @@ func TestValidate(t *testing.T) {
 		Region:    "915",
 	}
 
-	_, err = conf.Validate("")
+	_, _, err = conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 }
 
