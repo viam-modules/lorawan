@@ -167,12 +167,20 @@
     :versions: []
     :when: 2026-09-24 21:56:34.111141000 Z
 - - :permit
-  - The
-  - &1
-    :who:
+  - The Unlicense
+  - :who:
     :why:
     :versions: []
     :when: 2026-09-24 21:57:37.676793000 Z
-- - :permit
-  - Unlicense
-  - *1
+- - :approve
+  - github.com/hashicorp/go-getter
+  - :who:
+    :why:
+    :versions: []
+    :when: 2026-09-24 22:00:14.314934000 Z
+- - :approve
+  - github.com/hashicorp/go-version
+  - :who:
+    :why:
+    :versions: []
+    :when: 2026-09-24 22:00:27.604375000 Z
