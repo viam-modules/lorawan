@@ -1197,11 +1197,13 @@ func TestWatchLogs(t *testing.T) {
 				test.That(t, port, test.ShouldEqual, tc.expectPort)
 			}
 
+			// Close the pipe before stopping workers so a readLogs worker blocked in
+			// ReadString is unblocked, matching the order used in gateway Close.
+			pw.Close()
+			pr.Close()
 			if c.workers != nil {
 				c.workers.Stop()
 			}
-			pw.Close()
-			pr.Close()
 		})
 	}
 }
