@@ -19,6 +19,7 @@ linters:
     - gocognit
     - gocyclo
     - godox
+    - gomodguard # gomodguard is deprecated in favor of gomodguard_v2
     - importas
     - interfacebloat
     - ireturn

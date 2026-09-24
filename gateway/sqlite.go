@@ -135,9 +135,8 @@ func (g *gateway) getAllDevicesFromDB(ctx context.Context) ([]deviceInfo, error)
 // Function to migrate the device info from the persitent data file into a sqlite db.
 func (g *gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix string) error {
 	// check if the machine has an old devicedata file for us to migrate
-	filePathTXT := filepath.Join(pathPrefix, "devicedata.txt")
-	filePath := filepath.Clean(filePathTXT)
-	if _, err := os.Stat(filePathTXT); err == nil {
+	filePath := filepath.Clean(filepath.Join(pathPrefix, "devicedata.txt"))
+	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0o600)
 		if err != nil {
 			return errors.Join(errTXTMigration, err)
@@ -177,7 +176,7 @@ func (g *gateway) migrateDevicesFromJSONFile(ctx context.Context, pathPrefix str
 				return errTXTMigration
 			}
 		}
-		if err := os.Remove(filePathTXT); err != nil {
+		if err := os.Remove(filePath); err != nil {
 			return errTXTMigration
 		}
 	}
