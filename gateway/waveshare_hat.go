@@ -1,4 +1,3 @@
-// Package gateway implements the sx1302 gateway module.
 package gateway
 
 import (

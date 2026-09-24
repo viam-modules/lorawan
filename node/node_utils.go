@@ -1,4 +1,3 @@
-// Package node implements the node model
 package node
 
 import (
@@ -47,7 +46,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	n.reconfigureMu.Lock()
 	defer n.reconfigureMu.Unlock()
 	switch cfg.JoinType {
-	case "OTAA", "":
+	case JoinTypeOTAA, "":
 		appKey, err := hex.DecodeString(cfg.AppKey)
 		if err != nil {
 			return err
@@ -59,7 +58,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 			return err
 		}
 		n.DevEui = devEui
-	case "ABP":
+	case JoinTypeABP:
 		devAddr, err := hex.DecodeString(cfg.DevAddr)
 		if err != nil {
 			return err
@@ -101,7 +100,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 	n.JoinType = cfg.JoinType
 
 	if n.JoinType == "" {
-		n.JoinType = "OTAA"
+		n.JoinType = JoinTypeOTAA
 	}
 
 	if cfg.FPort != "" {

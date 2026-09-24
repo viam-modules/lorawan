@@ -24,7 +24,7 @@ import (
 	"github.com/viam-modules/lorawan/regions"
 )
 
-// Error variables for gateway setup errors
+// Error variables for gateway setup errors.
 var (
 	errBoardConfig            = errors.New("error setting the board config")
 	errRadio0Config           = errors.New("error setting the radio frequency config for radio 0")
@@ -36,7 +36,7 @@ var (
 	errInvalidBaseChannel     = errors.New("base channel must be between 0-48")
 )
 
-// SendPacket sends a lora packet using the sx1302 concentrator
+// SendPacket sends a lora packet using the sx1302 concentrator.
 func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	if pkt == nil {
 		return errors.New("packet cannot be nil")
@@ -87,7 +87,7 @@ func SendPacket(ctx context.Context, pkt *TxPacket) error {
 	return nil
 }
 
-// TxPacket represents a packet to be transmitted
+// TxPacket represents a packet to be transmitted.
 type TxPacket struct {
 	Freq      uint32
 	DataRate  uint8
@@ -96,10 +96,10 @@ type TxPacket struct {
 	Payload   []byte
 }
 
-// MaxRxPackets is the maximum number of packets that can be received in one call
+// MaxRxPackets is the maximum number of packets that can be received in one call.
 var MaxRxPackets = int(C.MAX_RX_PKT)
 
-// RxPacket represents a received LoRa packet
+// RxPacket represents a received LoRa packet.
 type RxPacket struct {
 	Size     uint
 	Payload  []byte
@@ -108,7 +108,7 @@ type RxPacket struct {
 	Freq     int
 }
 
-// SetupGateway initializes the gateway hardware
+// SetupGateway initializes the gateway hardware.
 func SetupGateway(comType int, path string, region regions.Region, baseChannel int) error {
 	errCode := C.set_up_gateway(C.int(comType), C.CString(path), C.int(region), C.int(baseChannel))
 	if errCode != 0 {
@@ -117,7 +117,7 @@ func SetupGateway(comType int, path string, region regions.Region, baseChannel i
 	return nil
 }
 
-// StopGateway stops the gateway hardware
+// StopGateway stops the gateway hardware.
 func StopGateway() error {
 	errCode := C.stop_gateway()
 	if errCode != 0 {
@@ -170,7 +170,7 @@ func ReceivePackets() ([]RxPacket, error) {
 	return result, nil
 }
 
-// DisableBuffering disables buffering on C stdout
+// DisableBuffering disables buffering on C stdout.
 func DisableBuffering() {
 	C.disable_buffering()
 }

@@ -48,7 +48,7 @@ func createTestGateway(t *testing.T) *gateway {
 		NwkSKey:     testNwkSKey,
 		NodeName:    testNodeName,
 		DecoderPath: testDecoderPath,
-		JoinType:    "OTAA",
+		JoinType:    node.JoinTypeOTAA,
 		DevEui:      testDevEUI,
 		FCntUp:      math.MaxUint16,
 	}

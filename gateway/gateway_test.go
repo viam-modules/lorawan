@@ -695,7 +695,7 @@ func TestGetMultiConcentratorConfig(t *testing.T) {
 				Region:    "US915",
 				Concentrators: []*ConcentratorConfig{
 					{
-						Name:     "pcie1",
+						Name:     pcie1Name,
 						Bus:      &bus1,
 						ResetPin: &resetPin1,
 					},
@@ -721,7 +721,7 @@ func TestGetMultiConcentratorConfig(t *testing.T) {
 				Region:    "US915",
 				Concentrators: []*ConcentratorConfig{
 					{
-						Name:     "pcie2",
+						Name:     pcie2Name,
 						Bus:      &bus1,
 						ResetPin: &resetPin2,
 					},
@@ -750,12 +750,12 @@ func TestGetMultiConcentratorConfig(t *testing.T) {
 				Region:    "EU868",
 				Concentrators: []*ConcentratorConfig{
 					{
-						Name:     "pcie1",
+						Name:     pcie1Name,
 						Bus:      &bus1,
 						ResetPin: &resetPin1,
 					},
 					{
-						Name:        "pcie2",
+						Name:        pcie2Name,
 						Bus:         &bus2,
 						ResetPin:    &resetPin2,
 						BaseChannel: 8,
@@ -912,13 +912,13 @@ func TestReconfigureMultiConcentrator(t *testing.T) {
 				Region:    "US915",
 				Concentrators: []*ConcentratorConfig{
 					{
-						Name:     "pcie1",
+						Name:     pcie1Name,
 						Bus:      &bus1,
 						ResetPin: &testRstPin,
 						PowerPin: &testPwrPin,
 					},
 					{
-						Name:     "pcie2",
+						Name:     pcie2Name,
 						Bus:      &bus2,
 						ResetPin: &testRstPin,
 					},
@@ -935,7 +935,7 @@ func TestReconfigureMultiConcentrator(t *testing.T) {
 				Region:    "EU868",
 				Concentrators: []*ConcentratorConfig{
 					{
-						Name:     "pcie1",
+						Name:     pcie1Name,
 						Bus:      &bus1,
 						ResetPin: &testRstPin,
 					},
@@ -952,7 +952,7 @@ func TestReconfigureMultiConcentrator(t *testing.T) {
 				Region:    "US915",
 				Concentrators: []*ConcentratorConfig{
 					{
-						Name:     "pcie1",
+						Name:     pcie1Name,
 						Bus:      &bus1,
 						ResetPin: &testRstPin,
 					},

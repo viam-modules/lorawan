@@ -46,7 +46,7 @@ const (
 	rak7391       = "rak7391"
 	SendPacketKey = "send_packet"
 	GetPacketsKey = "get_packets"
-	// the stop Docommand key tells the managed process to call stop on the gateway hardware.
+	// StopKey is the DoCommand key that tells the managed process to call stop on the gateway hardware.
 	StopKey = "stop"
 )
 
@@ -1006,7 +1006,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.MinIntervalSeconds = newNode.MinIntervalSeconds
 
 	switch mergedNode.JoinType {
-	case "OTAA":
+	case node.JoinTypeOTAA:
 		// if join type is OTAA - keep the appSKey, dev addr from the old node.
 		// These fields were determined by the gateway if the join procedure was done.
 		mergedNode.Addr = oldNode.Addr
@@ -1015,7 +1015,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 		// if these were changed during reconfigure the join procedure needs to be redone
 		mergedNode.AppKey = newNode.AppKey
 		mergedNode.DevEui = newNode.DevEui
-	case "ABP":
+	case node.JoinTypeABP:
 		// if join type is ABP get the new appSKey and addr from the new config.
 		// Don't need appkey and DevEui for ABP.
 		mergedNode.Addr = newNode.Addr
