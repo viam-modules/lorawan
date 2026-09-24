@@ -324,6 +324,9 @@ const (
 	Seconds
 	// Minutes is minutes.
 	Minutes
+)
+
+const (
 	// IntervalKey is the key for an interval DoCommand.
 	IntervalKey = "set_interval"
 )

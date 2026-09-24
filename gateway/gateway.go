@@ -367,7 +367,7 @@ func (g *gateway) reconfigureSingleConcentrator(ctx context.Context, deps resour
 	// reset concentrators list
 	g.concentrators = make([]*concentrator, 0)
 
-	board, err := board.FromDependencies(deps, cfg.BoardName)
+	board, err := board.FromProvider(deps, cfg.BoardName)
 	if err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resourc
 	// reset concentrators list
 	g.concentrators = make([]*concentrator, 0)
 
-	board, err := board.FromDependencies(deps, cfg.BoardName)
+	board, err := board.FromProvider(deps, cfg.BoardName)
 	if err != nil {
 		return err
 	}

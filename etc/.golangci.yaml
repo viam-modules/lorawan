@@ -37,6 +37,7 @@ linters:
     - tagliatelle
     - testpackage
     - thelper # false positives
+    - unqueryvet
     - varnamelen
     - wrapcheck
     - wsl # deprecated in favor of wsl_v5
