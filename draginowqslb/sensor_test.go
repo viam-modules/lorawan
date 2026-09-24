@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	testNodeReadings = map[string]interface{}{"reading": 1}
+	testNodeReadings = map[string]any{"reading": 1}
 	testInterval     = 5.0
 	gateways         = []string{testGatewayName}
 	nodes            = []string{testNodeName}
@@ -108,11 +108,11 @@ func TestReadings(t *testing.T) {
 		test.That(t, readings, test.ShouldResemble, node.NoReadings)
 
 		// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
-		_, err = n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
+		_, err = n.Readings(ctx, map[string]any{data.FromDMString: true})
 		test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
 
 		// If data.FromDmString is false, return no error
-		_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+		_, err = n.Readings(context.Background(), map[string]any{data.FromDMString: false})
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, readings, test.ShouldResemble, node.NoReadings)
 	})
@@ -141,9 +141,9 @@ func TestReadings(t *testing.T) {
 		injectedGateway, ok := gateway.(*inject.Sensor)
 		test.That(t, ok, test.ShouldBeTrue)
 
-		injectedGateway.ReadingsFunc = func(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
-			readings := make(map[string]interface{})
-			invalidReadings := map[string]interface{}{
+		injectedGateway.ReadingsFunc = func(ctx context.Context, extra map[string]any) (map[string]any, error) {
+			readings := make(map[string]any)
+			invalidReadings := map[string]any{
 				orpKey: -100000.0, // invalid orp
 				phKey:  7.0,
 			}
@@ -152,21 +152,21 @@ func TestReadings(t *testing.T) {
 		}
 
 		// if From DM should remove invalid reading
-		expectedReadings := map[string]interface{}{
+		expectedReadings := map[string]any{
 			phKey: 7.0,
 		}
-		readings, err := n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
+		readings, err := n.Readings(ctx, map[string]any{data.FromDMString: true})
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, readings, test.ShouldResemble, expectedReadings)
 
 		// If data.FromDmString is false, invalid reading should be "INVALID" string
 		// if From DM should remove invalid reading
-		expectedReadings = map[string]interface{}{
+		expectedReadings = map[string]any{
 			orpKey: "INVALID",
 			phKey:  7.0,
 		}
 
-		readings, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+		readings, err = n.Readings(context.Background(), map[string]any{data.FromDMString: false})
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, readings, test.ShouldResemble, expectedReadings)
 	})
@@ -194,7 +194,7 @@ func TestDoCommand(t *testing.T) {
 
 	t.Run("Test successful generic downlink DoCommand that sends to the gateway", func(t *testing.T) {
 		// this test case is to test using the default node DoCommand
-		req := map[string]interface{}{node.DownlinkKey: "bytes"}
+		req := map[string]any{node.DownlinkKey: "bytes"}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -205,14 +205,14 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, gatewayResp, test.ShouldEqual, "downlink added")
 
 		// we should not receive a node success message
-		nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
+		nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]any)
 		test.That(t, nodeOk, test.ShouldBeFalse)
 		test.That(t, nodeResp, test.ShouldBeNil)
 	})
 	t.Run("Test successful interval downlink DoCommand to Gateway", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
 		// req := map[string]interface{}{testKey: "", DownlinkKey: "bytes"}
-		req := map[string]interface{}{node.IntervalKey: 10.0}
+		req := map[string]any{node.IntervalKey: 10.0}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -229,7 +229,7 @@ func TestDoCommand(t *testing.T) {
 	})
 	t.Run("Test successful interval downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{node.TestKey: "", node.IntervalKey: 10.0}
+		req := map[string]any{node.TestKey: "", node.IntervalKey: 10.0}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -246,7 +246,7 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, nodeResp, test.ShouldEqual, "01000258") // 600 seconds
 	})
 	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
-		req := map[string]interface{}{node.IntervalKey: false}
+		req := map[string]any{node.IntervalKey: false}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected float")
@@ -266,12 +266,12 @@ func TestDoCommand(t *testing.T) {
 		t.Run(fmt.Sprintf("Test %s calibration commands", strings.ToUpper(calibType)), func(t *testing.T) {
 			// Test valid values
 			for i, val := range validValues {
-				req := map[string]interface{}{node.TestKey: "", cmdKey: val}
+				req := map[string]any{node.TestKey: "", cmdKey: val}
 				resp, err := n.DoCommand(ctx, req)
 				test.That(t, err, test.ShouldBeNil)
 				test.That(t, resp, test.ShouldNotBeNil)
 
-				nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
+				nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]any)
 				test.That(t, nodeOk, test.ShouldBeTrue)
 				payload, ok := nodeResp[testNodeName].(string)
 				test.That(t, ok, test.ShouldBeTrue)
@@ -279,13 +279,13 @@ func TestDoCommand(t *testing.T) {
 			}
 
 			// Test invalid value
-			req := map[string]interface{}{node.TestKey: "", cmdKey: invalidValue}
+			req := map[string]any{node.TestKey: "", cmdKey: invalidValue}
 			resp, err := n.DoCommand(ctx, req)
 			test.That(t, resp, test.ShouldBeEmpty)
 			test.That(t, err, test.ShouldNotBeNil)
 
 			// Test invalid type
-			req = map[string]interface{}{cmdKey: fmt.Sprintf("%v", validValues[0])}
+			req = map[string]any{cmdKey: fmt.Sprintf("%v", validValues[0])}
 			resp, err = n.DoCommand(ctx, req)
 			test.That(t, resp, test.ShouldBeEmpty)
 			test.That(t, err, test.ShouldNotBeNil)
@@ -304,7 +304,7 @@ func TestDoCommand(t *testing.T) {
 
 	t.Run("Test successful reset downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{node.TestKey: "", node.ResetKey: ""}
+		req := map[string]any{node.TestKey: "", node.ResetKey: ""}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -330,7 +330,7 @@ func TestConfigValidate(t *testing.T) {
 		AppKey:   testAppKey,
 		Gateways: []string{testGatewayName},
 	}
-	deps, err := conf.Validate("")
+	deps, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 	test.That(t, deps[0], test.ShouldEqual, testGatewayName)
@@ -338,11 +338,11 @@ func TestConfigValidate(t *testing.T) {
 
 func TestSanitizeReading(t *testing.T) {
 	t.Run("valid readings remain unchanged", func(t *testing.T) {
-		reading := map[string]interface{}{
+		reading := map[string]any{
 			phKey:    7.0,    // valid pH
 			ecK10Key: 1000.0, // valid EC K10
 		}
-		extra := map[string]interface{}{}
+		extra := map[string]any{}
 
 		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
 		test.That(t, result[phKey], test.ShouldEqual, 7.0)
@@ -352,11 +352,11 @@ func TestSanitizeReading(t *testing.T) {
 	})
 
 	t.Run("invalid readings in data capture mode are deleted", func(t *testing.T) {
-		reading := map[string]interface{}{
+		reading := map[string]any{
 			phKey:    15.0,    // invalid pH
 			ecK10Key: 25000.0, // invalid EC K10
 		}
-		extra := map[string]interface{}{
+		extra := map[string]any{
 			data.FromDMString: true,
 		}
 
@@ -370,11 +370,11 @@ func TestSanitizeReading(t *testing.T) {
 	})
 
 	t.Run("invalid readings in normal mode are marked INVALID", func(t *testing.T) {
-		reading := map[string]interface{}{
+		reading := map[string]any{
 			phKey:   -1.0,    // invalid pH
 			ecK1Key: 19000.0, // invalid EC K1
 		}
-		extra := map[string]interface{}{}
+		extra := map[string]any{}
 
 		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
 		test.That(t, result[phKey], test.ShouldEqual, "INVALID")
@@ -384,11 +384,11 @@ func TestSanitizeReading(t *testing.T) {
 	})
 
 	t.Run("edge cases at boundaries remain valid", func(t *testing.T) {
-		reading := map[string]interface{}{
+		reading := map[string]any{
 			phKey:    phMax,    // max pH
 			ecK10Key: ecK10Min, // min EC K10
 		}
-		extra := map[string]interface{}{}
+		extra := map[string]any{}
 
 		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
 		test.That(t, result[phKey], test.ShouldEqual, phMax)
@@ -398,11 +398,11 @@ func TestSanitizeReading(t *testing.T) {
 	})
 
 	t.Run("non-float64 values are ignored", func(t *testing.T) {
-		reading := map[string]interface{}{
+		reading := map[string]any{
 			phKey:    "not a number",
 			ecK10Key: true,
 		}
-		extra := map[string]interface{}{}
+		extra := map[string]any{}
 
 		result := sanitizeReading(reading, extra, probeRange{key: phKey, min: phMin, max: phMax})
 		test.That(t, result[phKey], test.ShouldEqual, "not a number")

@@ -1,4 +1,3 @@
-// Package gateway implements the sx1302 gateway module.
 package gateway
 
 import (
@@ -28,7 +27,7 @@ func (conf *ConfigSX1302WaveshareHAT) getGatewayConfig() *Config {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *ConfigSX1302WaveshareHAT) Validate(path string) ([]string, error) {
+func (conf *ConfigSX1302WaveshareHAT) Validate(path string) ([]string, []string, error) {
 	gatewayConf := conf.getGatewayConfig()
 	return gatewayConf.Validate(path)
 }

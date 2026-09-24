@@ -1,4 +1,3 @@
-
 ---
 - - :permit
   - MIT
@@ -50,10 +49,10 @@
     :versions: []
     :when: 2024-12-26 14:34:00.115389050 Z
 - - :license
-  - github.com/go-fonts/liberation
-  - New BSD
+  - codeberg.org/go-fonts/liberation
+  - BSD-3
   - :who:
-    :license_links: https://github.com/go-fonts/liberation/blob/0c2fdab5e932afd0923f4f71ae23691a66305ef6/LICENSE
+    :license_links: https://codeberg.org/go-fonts/liberation/src/branch/main/LICENSE
     :versions: []
     :when: 2024-12-26 14:47:01.153930427 Z
 - - :license
@@ -64,11 +63,11 @@
     :versions: []
     :when: 2024-12-26 14:51:09.537862545 Z
 - - :license
-  - github.com/go-latex/latex
-  - New BSD
+  - codeberg.org/go-latex/latex
+  - BSD-3
   - :who:
     :why: 'TODO(RSDK-583): why is license finder unable to detect this license automatically?'
-    :license_links: https://github.com/go-latex/latex/blob/c0d11ff05a81a63afdffbba6e577b2a3a6e69c85/LICENSE
+    :license_links: https://codeberg.org/go-latex/latex/src/branch/main/LICENSE
     :versions: []
     :when: 2024-12-26 14:55:14.011453253 Z
 - - :license
@@ -161,3 +160,27 @@
     :why:
     :versions: []
     :when: 2025-03-17 15:21:04.946556000 Z
+- - :permit
+  - Mozilla Public License 2.0
+  - :who:
+    :why:
+    :versions: []
+    :when: 2026-09-24 21:56:34.111141000 Z
+- - :permit
+  - The Unlicense
+  - :who:
+    :why:
+    :versions: []
+    :when: 2026-09-24 21:57:37.676793000 Z
+- - :approve
+  - github.com/hashicorp/go-getter
+  - :who:
+    :why:
+    :versions: []
+    :when: 2026-09-24 22:00:14.314934000 Z
+- - :approve
+  - github.com/hashicorp/go-version
+  - :who:
+    :why:
+    :versions: []
+    :when: 2026-09-24 22:00:27.604375000 Z

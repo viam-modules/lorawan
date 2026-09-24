@@ -79,18 +79,19 @@ func (conf *Config) getNodeConfig() node.Config {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	nodeConf := conf.getNodeConfig()
-	deps, err := nodeConf.Validate(path)
+	deps, _, err := nodeConf.Validate(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return deps, nil
+	return deps, nil, nil
 }
 
 // em310Tilt defines a lorawan node device.
 type em310Tilt struct {
 	resource.Named
+
 	logger logging.Logger
 	node   node.Node
 }
@@ -156,12 +157,12 @@ func (n *em310Tilt) Close(ctx context.Context) error {
 }
 
 // Readings returns the node's readings.
-func (n *em310Tilt) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (n *em310Tilt) Readings(ctx context.Context, extra map[string]any) (map[string]any, error) {
 	return n.node.Readings(ctx, extra)
 }
 
 // DoCommand implements the DoCommand for the em310Tilt.
-func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
 	testOnly := node.CheckTestKey(cmd)
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
@@ -171,7 +172,7 @@ func (n *em310Tilt) DoCommand(ctx context.Context, cmd map[string]interface{}) (
 			}
 			return n.node.SendIntervalDownlink(ctx, req)
 		}
-		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
+		return map[string]any{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
 		// FF byte is the channel, 10 is the message type and FF is the command for the downlink.

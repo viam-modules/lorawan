@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ const (
 	rak7391       = "rak7391"
 	SendPacketKey = "send_packet"
 	GetPacketsKey = "get_packets"
-	// the stop Docommand key tells the managed process to call stop on the gateway hardware.
+	// StopKey is the DoCommand key that tells the managed process to call stop on the gateway hardware.
 	StopKey = "stop"
 )
 
@@ -64,7 +65,7 @@ var (
 	errInvalidRegion              = errors.New("unrecognized region code, valid options are US915 and EU868")
 	errInvalidConcentratorsLength = errors.New("invalid concentrator length - should not happen")
 	errTimedOut                   = errors.New("timed out waiting for gateway to start")
-	errLowSNR = errors.New("packet SNR below minimum threshold")
+	errLowSNR                     = errors.New("packet SNR below minimum threshold")
 )
 
 // constants for MHDRs of different message types.
@@ -108,7 +109,7 @@ const (
 	usb
 )
 
-var noReadings = map[string]interface{}{"": "no readings available yet"}
+var noReadings = map[string]any{"": "no readings available yet"}
 
 // ConcentratorConfig describes the configuration for a single concentrator.
 type ConcentratorConfig struct {
@@ -191,37 +192,37 @@ func init() {
 }
 
 // Validate ensures all parts of the config are valid.
-func (conf *Config) Validate(path string) ([]string, error) {
+func (conf *Config) Validate(path string) ([]string, []string, error) {
 	var deps []string
 	if conf.ResetPin == nil {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
+		return nil, nil, resource.NewConfigValidationFieldRequiredError(path, "reset_pin")
 	}
 	if conf.Bus != nil && *conf.Bus != 0 && *conf.Bus != 1 {
-		return nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
+		return nil, nil, resource.NewConfigValidationError(path, errInvalidSpiBus)
 	}
 	if conf.Bus != nil && conf.Path != "" {
-		return nil, resource.NewConfigValidationError(path, errSPIAndUSB)
+		return nil, nil, resource.NewConfigValidationError(path, errSPIAndUSB)
 	}
 
 	if conf.Path != "" {
 		err := validateSerialPath(conf.Path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if len(conf.BoardName) == 0 {
-		return nil, resource.NewConfigValidationFieldRequiredError(path, "board")
+		return nil, nil, resource.NewConfigValidationFieldRequiredError(path, "board")
 	}
 	deps = append(deps, conf.BoardName)
 
 	if conf.Region != "" {
 		if regions.GetRegion(conf.Region) == regions.Unspecified {
-			return nil, resource.NewConfigValidationError(path, errInvalidRegion)
+			return nil, nil, resource.NewConfigValidationError(path, errInvalidRegion)
 		}
 	}
 
-	return deps, nil
+	return deps, nil, nil
 }
 
 func validateSerialPath(path string) error {
@@ -240,12 +241,13 @@ func validateSerialPath(path string) error {
 // Gateway defines a lorawan gateway.
 type gateway struct {
 	resource.Named
+
 	logger logging.Logger
 	mu     sync.Mutex
 
 	workers *utils.StoppableWorkers
 
-	lastReadings map[string]interface{} // map of devices to readings
+	lastReadings map[string]any // map of devices to readings
 	readingsMu   sync.Mutex
 
 	devices map[string]*node.Node // map of node name to node struct
@@ -334,7 +336,7 @@ func (g *gateway) Reconfigure(ctx context.Context, deps resource.Dependencies, c
 	}
 
 	if g.lastReadings == nil {
-		g.lastReadings = make(map[string]interface{})
+		g.lastReadings = make(map[string]any)
 	}
 
 	switch conf.Model {
@@ -365,7 +367,7 @@ func (g *gateway) reconfigureSingleConcentrator(ctx context.Context, deps resour
 	// reset concentrators list
 	g.concentrators = make([]*concentrator, 0)
 
-	board, err := board.FromDependencies(deps, cfg.BoardName)
+	board, err := board.FromProvider(deps, cfg.BoardName)
 	if err != nil {
 		return err
 	}
@@ -405,7 +407,7 @@ func (g *gateway) reconfigureMultiConcentrator(ctx context.Context, deps resourc
 	// reset concentrators list
 	g.concentrators = make([]*concentrator, 0)
 
-	board, err := board.FromDependencies(deps, cfg.BoardName)
+	board, err := board.FromProvider(deps, cfg.BoardName)
 	if err != nil {
 		return err
 	}
@@ -676,7 +678,7 @@ func (g *gateway) receivePackets(ctx context.Context) {
 		default:
 		}
 
-		cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+		cmdStruct, err := structpb.NewStruct(map[string]any{
 			GetPacketsKey: true,
 		})
 		if err != nil {
@@ -794,10 +796,10 @@ func (g *gateway) handlePacket(ctx context.Context, packet lorahw.RxPacket, pack
 	}
 }
 
-func (g *gateway) updateReadings(name string, newReadings map[string]interface{}) {
+func (g *gateway) updateReadings(name string, newReadings map[string]any) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
-	readings, ok := g.lastReadings[name].(map[string]interface{})
+	readings, ok := g.lastReadings[name].(map[string]any)
 	if !ok {
 		// readings for this device does not exist yet
 		g.lastReadings[name] = newReadings
@@ -805,28 +807,26 @@ func (g *gateway) updateReadings(name string, newReadings map[string]interface{}
 	}
 
 	if readings == nil {
-		g.lastReadings[name] = make(map[string]interface{})
+		g.lastReadings[name] = make(map[string]any)
 	}
-	for key, val := range newReadings {
-		readings[key] = val
-	}
+	maps.Copy(readings, newReadings)
 
 	g.lastReadings[name] = readings
 }
 
 // DoCommand validates that the dependency is a gateway, and adds and removes nodes from the device maps.
-func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (g *gateway) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	// Validate that the dependency is correct, returns the gateway's region.
 	if _, ok := cmd["validate"]; ok {
-		return map[string]interface{}{"validate": g.region}, nil
+		return map[string]any{"validate": g.region}, nil
 	}
 
 	// Add the node to gateway's list of devices.
 	if newNode, ok := cmd["register_device"]; ok {
-		if newN, ok := newNode.(map[string]interface{}); ok {
+		if newN, ok := newNode.(map[string]any); ok {
 			node, err := convertToNode(newN)
 			if err != nil {
 				return nil, err
@@ -884,7 +884,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 	// Send a downlink
 	if payload, ok := cmd[node.GatewaySendDownlinkKey]; ok {
-		downlinks, ok := payload.(map[string]interface{})
+		downlinks, ok := payload.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("expected a map[string]interface{} but got %v", reflect.TypeOf(payload))
 		}
@@ -908,12 +908,12 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 			dev.Downlinks = append(dev.Downlinks, payloadBytes)
 		}
 
-		return map[string]interface{}{node.GatewaySendDownlinkKey: "downlink added"}, nil
+		return map[string]any{node.GatewaySendDownlinkKey: "downlink added"}, nil
 	}
 
 	// return all devices that have been registered on the gateway
 	if _, ok := cmd["return_devices"]; ok {
-		resp := map[string]interface{}{}
+		resp := map[string]any{}
 		// Read the device info from the file
 		devices, err := g.getAllDevicesFromDB(ctx)
 		if err != nil {
@@ -927,7 +927,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 
 	// Return info about one device
 	if devEUI, ok := cmd[node.GetDeviceKey]; ok {
-		resp := map[string]interface{}{}
+		resp := map[string]any{}
 		deveui, ok := (devEUI).(string)
 		if !ok {
 			return nil, fmt.Errorf("expected a string but got %v", reflect.TypeOf(devEUI))
@@ -946,7 +946,7 @@ func (g *gateway) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		return resp, nil
 	}
 
-	return map[string]interface{}{}, nil
+	return map[string]any{}, nil
 }
 
 func (g *gateway) getChannelMask() ([]byte, error) {
@@ -1006,7 +1006,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 	mergedNode.MinIntervalSeconds = newNode.MinIntervalSeconds
 
 	switch mergedNode.JoinType {
-	case "OTAA":
+	case node.JoinTypeOTAA:
 		// if join type is OTAA - keep the appSKey, dev addr from the old node.
 		// These fields were determined by the gateway if the join procedure was done.
 		mergedNode.Addr = oldNode.Addr
@@ -1015,7 +1015,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 		// if these were changed during reconfigure the join procedure needs to be redone
 		mergedNode.AppKey = newNode.AppKey
 		mergedNode.DevEui = newNode.DevEui
-	case "ABP":
+	case node.JoinTypeABP:
 		// if join type is ABP get the new appSKey and addr from the new config.
 		// Don't need appkey and DevEui for ABP.
 		mergedNode.Addr = newNode.Addr
@@ -1028,7 +1028,7 @@ func mergeNodes(newNode, oldNode *node.Node) (*node.Node, error) {
 }
 
 // convertToNode converts the map from the docommand into the node struct.
-func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
+func convertToNode(mapNode map[string]any) (*node.Node, error) {
 	node := &node.Node{DecoderPath: mapNode["DecoderPath"].(string)}
 
 	var err error
@@ -1057,8 +1057,8 @@ func convertToNode(mapNode map[string]interface{}) (*node.Node, error) {
 }
 
 // convertToBytes converts the interface{} field from the docommand map into a byte array.
-func convertToBytes(key interface{}) ([]byte, error) {
-	bytes, ok := key.([]interface{})
+func convertToBytes(key any) ([]byte, error) {
+	bytes, ok := key.([]any)
 	if !ok {
 		return nil, errInvalidNodeMapType
 	}
@@ -1078,7 +1078,7 @@ func convertToBytes(key interface{}) ([]byte, error) {
 }
 
 // Readings returns all the node's readings.
-func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (g *gateway) Readings(ctx context.Context, extra map[string]any) (map[string]any, error) {
 	g.readingsMu.Lock()
 	defer g.readingsMu.Unlock()
 
@@ -1086,7 +1086,7 @@ func (g *gateway) Readings(ctx context.Context, extra map[string]interface{}) (m
 	if len(g.lastReadings) == 0 || g.lastReadings == nil {
 		// Tell the collector not to capture the empty data.
 		if extra != nil && extra[data.FromDMString] == true {
-			return map[string]interface{}{}, data.ErrNoCaptureToStore
+			return map[string]any{}, data.ErrNoCaptureToStore
 		}
 		return noReadings, nil
 	}
@@ -1107,7 +1107,7 @@ func (g *gateway) resetConcentrators(ctx context.Context) error {
 	}
 
 	// create stop command
-	cmdStruct, err := structpb.NewStruct(map[string]interface{}{
+	cmdStruct, err := structpb.NewStruct(map[string]any{
 		StopKey: true,
 	})
 	if err != nil {

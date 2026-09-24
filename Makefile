@@ -37,7 +37,7 @@ submodule:
 	git submodule update
 
 tool-install:
-	GOBIN=`pwd`/$(TOOL_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint
+	GOBIN=`pwd`/$(TOOL_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
 gofmt:
 	gofmt -w -s .

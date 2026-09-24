@@ -24,7 +24,7 @@ const (
 )
 
 var (
-	testNodeReadings = map[string]interface{}{"reading": 1}
+	testNodeReadings = map[string]any{"reading": 1}
 	testInterval     = 5.0
 
 	gateways = []string{testGatewayName}
@@ -106,11 +106,11 @@ func TestReadings(t *testing.T) {
 		test.That(t, readings, test.ShouldResemble, node.NoReadings)
 
 		// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
-		_, err = n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
+		_, err = n.Readings(ctx, map[string]any{data.FromDMString: true})
 		test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
 
 		// If data.FromDmString is false, return no error
-		_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+		_, err = n.Readings(context.Background(), map[string]any{data.FromDMString: false})
 		test.That(t, err, test.ShouldBeNil)
 		test.That(t, readings, test.ShouldResemble, node.NoReadings)
 	})
@@ -138,7 +138,7 @@ func TestDoCommand(t *testing.T) {
 
 	t.Run("Test successful generic downlink DoCommand that sends to the gateway", func(t *testing.T) {
 		// this test case is to test using the default node DoCommand
-		req := map[string]interface{}{node.DownlinkKey: "bytes"}
+		req := map[string]any{node.DownlinkKey: "bytes"}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -149,14 +149,14 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, gatewayResp, test.ShouldEqual, "downlink added")
 
 		// we should not receive a node success message
-		nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]interface{})
+		nodeResp, nodeOk := resp[node.DownlinkKey].(map[string]any)
 		test.That(t, nodeOk, test.ShouldBeFalse)
 		test.That(t, nodeResp, test.ShouldBeNil)
 	})
 	t.Run("Test successful interval downlink DoCommand to Gateway", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
 		// req := map[string]interface{}{testKey: "", DownlinkKey: "bytes"}
-		req := map[string]interface{}{node.IntervalKey: 10.0}
+		req := map[string]any{node.IntervalKey: 10.0}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -173,7 +173,7 @@ func TestDoCommand(t *testing.T) {
 	})
 	t.Run("Test successful interval downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{node.TestKey: "", node.IntervalKey: 20.0}
+		req := map[string]any{node.TestKey: "", node.IntervalKey: 20.0}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -191,7 +191,7 @@ func TestDoCommand(t *testing.T) {
 	})
 	t.Run("Test successful reset downlink DoCommand to that returns the payload", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{node.TestKey: "", node.ResetKey: ""}
+		req := map[string]any{node.TestKey: "", node.ResetKey: ""}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -208,7 +208,7 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, nodeResp, test.ShouldEqual, "FF10FF") // reset
 	})
 	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
-		req := map[string]interface{}{node.IntervalKey: false}
+		req := map[string]any{node.IntervalKey: false}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected float")
@@ -230,7 +230,7 @@ func TestConfigValidate(t *testing.T) {
 		AppKey:   testAppKey,
 		Gateways: []string{testGatewayName},
 	}
-	deps, err := conf.Validate("")
+	deps, _, err := conf.Validate("")
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, len(deps), test.ShouldEqual, 1)
 	test.That(t, deps[0], test.ShouldEqual, testGatewayName)

@@ -31,29 +31,29 @@ const gatewaySendDownlinkKey = "add_downlink_to_queue"
 
 func createMockGateway(devices []string) *inject.Sensor {
 	mockGateway := &inject.Sensor{}
-	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	mockGateway.DoFunc = func(ctx context.Context, cmd map[string]any) (map[string]any, error) {
 		if _, ok := cmd["validate"]; ok {
-			return map[string]interface{}{"validate": 1.0}, nil
+			return map[string]any{"validate": 1.0}, nil
 		}
 		if _, ok := cmd[gatewaySendDownlinkKey]; ok {
-			return map[string]interface{}{gatewaySendDownlinkKey: "downlink added"}, nil
+			return map[string]any{gatewaySendDownlinkKey: "downlink added"}, nil
 		}
 		if _, ok := cmd["get_device"]; ok {
-			resp := map[string]interface{}{}
-			resp["get_device"] = map[string]interface{}{
+			resp := map[string]any{}
+			resp["get_device"] = map[string]any{
 				"app_skey": TestAppSKey,
 				"nwk_skey": TestNwkSKey, "dev_eui": TestDevEUI, "min_uplink_interval": 60.0,
 				"fcnt_down": 1.0, "dev_addr": TestDevAddr,
 			}
 			return resp, nil
 		}
-		return map[string]interface{}{}, nil
+		return map[string]any{}, nil
 	}
 
-	testNodeReadings := map[string]interface{}{"reading": 1}
+	testNodeReadings := map[string]any{"reading": 1}
 
-	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-		readings := make(map[string]interface{})
+	mockGateway.ReadingsFunc = func(ctx context.Context, cmd map[string]any) (map[string]any, error) {
+		readings := make(map[string]any)
 		for _, sensor := range devices {
 			readings[sensor] = testNodeReadings
 		}

@@ -60,7 +60,7 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 		return fmt.Errorf("failed to convert packet to map: %w", err)
 	}
 
-	cmd := map[string]interface{}{SendPacketKey: txPktMap}
+	cmd := map[string]any{SendPacketKey: txPktMap}
 
 	cmdStruct, err := structpb.NewStruct(cmd)
 	if err != nil {
@@ -78,8 +78,8 @@ func (g *gateway) sendDownlink(ctx context.Context, payload []byte, isJoinAccept
 	return nil
 }
 
-func convertTxPktToMap(txPkt *lorahw.TxPacket) (map[string]interface{}, error) {
-	var txPktMap map[string]interface{}
+func convertTxPktToMap(txPkt *lorahw.TxPacket) (map[string]any, error) {
+	var txPktMap map[string]any
 	b, err := json.Marshal(txPkt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal txPkt: %w", err)
