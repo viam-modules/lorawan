@@ -228,7 +228,7 @@ func TestGetFOptsToSend(t *testing.T) {
 
 func TestConvertTo32Bit(t *testing.T) {
 	// Create test input with various integer types
-	input := map[string]interface{}{
+	input := map[string]any{
 		"uint8_val":  uint8(255),
 		"uint16_val": uint16(65535),
 		"int8_val":   int8(-128),
@@ -265,7 +265,7 @@ func TestConvertTo32Bit(t *testing.T) {
 	test.That(t, otherVal, test.ShouldEqual, "string")
 
 	// Verify empty input does nothing.
-	input = map[string]interface{}{}
+	input = map[string]any{}
 	result = convertTo32Bit(input)
 	test.That(t, result, test.ShouldEqual, input)
 }

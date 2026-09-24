@@ -117,7 +117,7 @@ func (n *Node) ReconfigureWithConfig(ctx context.Context, deps resource.Dependen
 		return err
 	}
 
-	cmd := make(map[string]interface{})
+	cmd := make(map[string]any)
 
 	// send the device to the gateway.
 	cmd["register_device"] = n
@@ -141,8 +141,8 @@ func getCaptureFrequencyHzFromConfig(c resource.Config) (float64, error) {
 	for _, assocResourceCfg := range c.AssociatedResourceConfigs {
 		if captureMethodsMapInterface := assocResourceCfg.Attributes["capture_methods"]; captureMethodsMapInterface != nil {
 			captureMethodFound = true
-			for _, captureMethodsInterface := range captureMethodsMapInterface.([]interface{}) {
-				captureMethods := captureMethodsInterface.(map[string]interface{})
+			for _, captureMethodsInterface := range captureMethodsMapInterface.([]any) {
+				captureMethods := captureMethodsInterface.(map[string]any)
 				if captureMethods["method"].(string) == "Readings" {
 					captureFreqHz = captureMethods["capture_frequency_hz"].(float64)
 				}
@@ -242,7 +242,7 @@ func WriteDecoderFileFromURL(ctx context.Context, decoderFilename, url string,
 
 		logger.Debugf("Writing decoder to file %s", filePath)
 		//nolint:all
-		err = os.WriteFile(filePath, decoderData, 0755)
+		err = os.WriteFile(filePath, decoderData, 0o755)
 		if err != nil {
 			return "", err
 		}
@@ -282,15 +282,15 @@ func isValidFilePath(path string) error {
 }
 
 // CheckTestKey checks if a map has the testKey set.
-func CheckTestKey(cmd map[string]interface{}) bool {
+func CheckTestKey(cmd map[string]any) bool {
 	_, ok := cmd[TestKey]
 	return ok
 }
 
 // SendDownlink sends a downlink command to the gateway via the gateway's DoCommand.
-func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) (map[string]interface{}, error) {
-	req := map[string]interface{}{}
-	downlinks := map[string]interface{}{}
+func (n *Node) SendDownlink(ctx context.Context, payload string, testOnly bool) (map[string]any, error) {
+	req := map[string]any{}
+	downlinks := map[string]any{}
 	downlinks[n.NodeName] = payload
 	// return the expected message if testOnly is set.
 	if testOnly {
@@ -331,7 +331,7 @@ const (
 
 // SendIntervalDownlink formats a payload to send to the gateway using an IntervalRequest.
 // The function does not support interval downlinks with more than 8 bytes.
-func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]interface{}, error) {
+func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (map[string]any, error) {
 	var formattedInterval uint64
 	if req.Header == "" {
 		return nil, errors.New("cannot send interval downlink, downlink header is empty")
@@ -390,7 +390,7 @@ func (n *Node) SendIntervalDownlink(ctx context.Context, req IntervalRequest) (m
 	}
 
 	if req.TestOnly {
-		return map[string]interface{}{IntervalKey: intervalString}, nil
+		return map[string]any{IntervalKey: intervalString}, nil
 	}
 
 	return n.SendDownlink(ctx, intervalString, false)
@@ -413,7 +413,7 @@ type ResetRequest struct {
 const ResetKey = "restart_sensor"
 
 // SendResetDownlink formats a payload to send to the gateway using a ResetRequest.
-func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[string]interface{}, error) {
+func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[string]any, error) {
 	if req.Header == "" {
 		return nil, errors.New("cannot send reset downlink, downlink header is empty")
 	}
@@ -422,7 +422,7 @@ func (n *Node) SendResetDownlink(ctx context.Context, req ResetRequest) (map[str
 	}
 	fullPayload := strings.ToUpper(req.Header + req.PayloadHex)
 	if req.TestOnly {
-		return map[string]interface{}{ResetKey: fullPayload}, nil
+		return map[string]any{ResetKey: fullPayload}, nil
 	}
 
 	return n.SendDownlink(ctx, fullPayload, false)
@@ -443,7 +443,7 @@ func (n *Node) PollGateway(ctx context.Context) {
 }
 
 // updateNode converts the map from the docommand into the node struct.
-func (n *Node) updateNode(mapNode map[string]interface{}) error {
+func (n *Node) updateNode(mapNode map[string]any) error {
 	// Parse all values before acquiring lock
 	appSKey, err := hex.DecodeString(mapNode["app_skey"].(string))
 	if err != nil {
@@ -483,14 +483,14 @@ func (n *Node) GetAndUpdateDeviceInfo(ctx context.Context) {
 	n.reconfigureMu.Lock()
 	defer n.reconfigureMu.Unlock()
 	eui := hex.EncodeToString(n.DevEui)
-	cmd := map[string]interface{}{GetDeviceKey: eui}
+	cmd := map[string]any{GetDeviceKey: eui}
 	resp, err := n.gateway.DoCommand(ctx, cmd)
 	if err != nil {
 		n.logger.Errorf("error getting node info: %v", err.Error())
 	}
 	if device, ok := resp[GetDeviceKey]; ok {
 		if device != nil {
-			dev, ok := device.(map[string]interface{})
+			dev, ok := device.(map[string]any)
 			if !ok {
 				n.logger.Errorf("expected a float64 but got %v", reflect.TypeOf(device))
 			}

@@ -29,7 +29,7 @@ const (
 
 var (
 	testInterval     = 5.0
-	testNodeReadings = map[string]interface{}{"reading": 1}
+	testNodeReadings = map[string]any{"reading": 1}
 	testDecoderURL   = "https://raw.githubusercontent.com/Milesight-IoT/SensorDecoders/40e844fedbcf9a8c3b279142672fab1c89bee2e0/" +
 		"CT_Series/CT101/CT101_Decoder.js"
 	nodeNames    = []string{testNodeName}
@@ -381,11 +381,11 @@ func TestReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, NoReadings)
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
-	_, err = n.Readings(ctx, map[string]interface{}{data.FromDMString: true})
+	_, err = n.Readings(ctx, map[string]any{data.FromDMString: true})
 	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
 
 	// If data.FromDmString is false, return no error
-	_, err = n.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+	_, err = n.Readings(context.Background(), map[string]any{data.FromDMString: false})
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldResemble, NoReadings)
 }
@@ -572,7 +572,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, n, test.ShouldNotBeNil)
 
 	t.Run("Test successful downlink DoCommand that sends to the gateway", func(t *testing.T) {
-		req := map[string]interface{}{DownlinkKey: "bytes"}
+		req := map[string]any{DownlinkKey: "bytes"}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -583,13 +583,13 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, gatewayResp, test.ShouldEqual, "downlink added")
 
 		// we should not receive a node success message
-		nodeResp, nodeOk := resp[DownlinkKey].(map[string]interface{})
+		nodeResp, nodeOk := resp[DownlinkKey].(map[string]any)
 		test.That(t, nodeOk, test.ShouldBeFalse)
 		test.That(t, nodeResp, test.ShouldBeNil)
 	})
 	t.Run("Test successful downlink DoCommand that returns the node response", func(t *testing.T) {
 		// testKey controls whether we send bytes to the gateway. used for debugging.
-		req := map[string]interface{}{TestKey: "", DownlinkKey: "bytes"}
+		req := map[string]any{TestKey: "", DownlinkKey: "bytes"}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldNotBeNil)
 		test.That(t, err, test.ShouldBeNil)
@@ -600,7 +600,7 @@ func TestDoCommand(t *testing.T) {
 		test.That(t, gatewayResp, test.ShouldEqual, "")
 
 		// we should not receive a node success message
-		nodeResp, nodeOk := resp[DownlinkKey].(map[string]interface{})
+		nodeResp, nodeOk := resp[DownlinkKey].(map[string]any)
 		test.That(t, nodeOk, test.ShouldBeTrue)
 		test.That(t, nodeResp, test.ShouldNotBeNil)
 		testNodeBytes, ok := nodeResp[n.Name().ShortName()]
@@ -615,7 +615,7 @@ func TestDoCommand(t *testing.T) {
 	})
 
 	t.Run("Test failed downlink DoCommand due to wrong type", func(t *testing.T) {
-		req := map[string]interface{}{DownlinkKey: false}
+		req := map[string]any{DownlinkKey: false}
 		resp, err := n.DoCommand(ctx, req)
 		test.That(t, resp, test.ShouldBeEmpty)
 		test.That(t, err.Error(), test.ShouldContainSubstring, "error parsing payload, expected string")
@@ -885,7 +885,7 @@ func TestResetDownlink(t *testing.T) {
 	}
 }
 
-func testDoCommandResp(t *testing.T, resp map[string]interface{}, err error,
+func testDoCommandResp(t *testing.T, resp map[string]any, err error,
 	key, expectedReturn, expectedErr string, testGatewayReturn bool,
 ) {
 	t.Helper()
@@ -922,7 +922,7 @@ func testDoCommandResp(t *testing.T, resp map[string]interface{}, err error,
 func TestUpdateNode(t *testing.T) {
 	n := &Node{}
 
-	validNodeInfo := map[string]interface{}{
+	validNodeInfo := map[string]any{
 		"app_skey":            testutils.TestAppSKey,
 		"dev_eui":             testutils.TestDevEUI,
 		"nwk_skey":            testutils.TestNwkSKey,
@@ -951,7 +951,7 @@ func TestUpdateNode(t *testing.T) {
 	test.That(t, n.FCntDown, test.ShouldEqual, uint16(123))
 
 	// Test invalid hex strings
-	invalidNodeInfo := map[string]interface{}{
+	invalidNodeInfo := map[string]any{
 		"app_skey":            "invalid hex",
 		"dev_eui":             testutils.TestDevEUI,
 		"nwk_skey":            testutils.TestNwkSKey,

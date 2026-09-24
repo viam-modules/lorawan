@@ -114,7 +114,7 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 			return nil, err
 		}
 
-		resp := map[string]interface{}{"packets": packets}
+		resp := map[string]any{"packets": packets}
 		pbRes, err := protoutils.StructToStructPb(resp)
 		if err != nil {
 			return nil, err
@@ -122,7 +122,7 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 		return &v1.DoCommandResponse{Result: pbRes}, nil
 	}
 	if packet, ok := cmd[gateway.SendPacketKey]; ok {
-		pkt, err := convertToTxPacket(packet.(map[string]interface{}))
+		pkt, err := convertToTxPacket(packet.(map[string]any))
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +140,7 @@ func (s sensorService) DoCommand(ctx context.Context, req *v1.DoCommandRequest) 
 	return &v1.DoCommandResponse{}, nil
 }
 
-func convertToTxPacket(pktMap map[string]interface{}) (*lorahw.TxPacket, error) {
+func convertToTxPacket(pktMap map[string]any) (*lorahw.TxPacket, error) {
 	var pkt lorahw.TxPacket
 	// Convert map to JSON
 	jsonBytes, err := json.Marshal(pktMap)
@@ -155,7 +155,7 @@ func convertToTxPacket(pktMap map[string]interface{}) (*lorahw.TxPacket, error) 
 	return &pkt, nil
 }
 
-func (s sensorService) Close(ctx context.Context, extra map[string]interface{}) map[string]interface{} {
+func (s sensorService) Close(ctx context.Context, extra map[string]any) map[string]any {
 	return nil
 }
 

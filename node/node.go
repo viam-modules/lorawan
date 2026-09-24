@@ -57,7 +57,7 @@ const (
 )
 
 // NoReadings is the return for a sensor that has not received data.
-var NoReadings = map[string]interface{}{"": "no readings available yet"}
+var NoReadings = map[string]any{"": "no readings available yet"}
 
 // Config defines the node's config.
 type Config struct {
@@ -172,6 +172,7 @@ func (conf *Config) validateABPAttributes(path string) error {
 // Node defines a lorawan node device.
 type Node struct {
 	resource.Named
+
 	logger logging.Logger
 
 	AppSKey []byte
@@ -260,7 +261,7 @@ func (n *Node) validateGateway(ctx context.Context, deps resource.Dependencies) 
 		return errors.New("dependency must be the sx1302-gateway sensor")
 	}
 
-	cmd := make(map[string]interface{})
+	cmd := make(map[string]any)
 	cmd["validate"] = 1
 
 	// Validate that the dependency is the gateway - gateway will return the region.
@@ -297,18 +298,18 @@ func (n *Node) Close(ctx context.Context) error {
 	if n.Workers != nil {
 		n.Workers.Stop()
 	}
-	cmd := make(map[string]interface{})
+	cmd := make(map[string]any)
 	cmd["remove_device"] = n.NodeName
 	_, err := n.gateway.DoCommand(ctx, cmd)
 	return err
 }
 
 // Readings returns the node's readings.
-func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (n *Node) Readings(ctx context.Context, extra map[string]any) (map[string]any, error) {
 	if n.gateway != nil {
 		allReadings, err := n.gateway.Readings(ctx, nil)
 		if err != nil {
-			return map[string]interface{}{}, err
+			return map[string]any{}, err
 		}
 
 		reading, ok := allReadings[n.NodeName]
@@ -316,18 +317,18 @@ func (n *Node) Readings(ctx context.Context, extra map[string]interface{}) (map[
 		if !ok {
 			// If the readings call came from data capture, return noCaptureToStore error to indicate not to capture data.
 			if extra != nil && extra[data.FromDMString] == true {
-				return map[string]interface{}{}, data.ErrNoCaptureToStore
+				return map[string]any{}, data.ErrNoCaptureToStore
 			}
 			return NoReadings, nil
 		}
-		return reading.(map[string]interface{}), nil
+		return reading.(map[string]any), nil
 	}
-	return map[string]interface{}{}, errors.New("node does not have gateway")
+	return map[string]any{}, errors.New("node does not have gateway")
 }
 
 // DoCommand lets users send downlink commands from the node to the gateway.
-func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	resp := map[string]interface{}{}
+func (n *Node) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
+	resp := map[string]any{}
 	testOnly := CheckTestKey(cmd)
 
 	if payload, payloadSet := cmd[DownlinkKey]; payloadSet {
@@ -335,7 +336,7 @@ func (n *Node) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[s
 			// SendDownlink locks to prevent commands from being sent during reconfigure.
 			return n.SendDownlink(ctx, payloadString, testOnly)
 		}
-		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected string got %v", reflect.TypeOf(payload))
+		return map[string]any{}, fmt.Errorf("error parsing payload, expected string got %v", reflect.TypeOf(payload))
 	}
 
 	return resp, nil

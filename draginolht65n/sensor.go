@@ -80,6 +80,7 @@ func (conf *Config) Validate(path string) ([]string, []string, error) {
 // LHT65N defines a lorawan node device.
 type LHT65N struct {
 	resource.Named
+
 	logger      logging.Logger
 	decoderPath string
 	node        node.Node
@@ -150,12 +151,12 @@ func (n *LHT65N) Close(ctx context.Context) error {
 }
 
 // Readings returns the node's readings.
-func (n *LHT65N) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (n *LHT65N) Readings(ctx context.Context, extra map[string]any) (map[string]any, error) {
 	return n.node.Readings(ctx, extra)
 }
 
 // DoCommand implements the DoCommand for the LHT65N.
-func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
 	testOnly := node.CheckTestKey(cmd)
 
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
@@ -163,7 +164,7 @@ func (n *LHT65N) DoCommand(ctx context.Context, cmd map[string]interface{}) (map
 			req := dragino.CreateIntervalDownlinkRequest(ctx, intervalFloat, testOnly)
 			return n.node.SendIntervalDownlink(ctx, req)
 		}
-		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
+		return map[string]any{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
 		dragino.DraginoResetRequest.TestOnly = testOnly

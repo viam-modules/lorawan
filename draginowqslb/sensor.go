@@ -110,6 +110,7 @@ func (conf *Config) Validate(path string) ([]string, []string, error) {
 // WQSLB defines the WQS-LB sensor implementation.
 type WQSLB struct {
 	resource.Named
+
 	logger logging.Logger
 	node   node.Node
 }
@@ -179,10 +180,10 @@ type probeRange struct {
 }
 
 // Readings returns the node's readings.
-func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (n *WQSLB) Readings(ctx context.Context, extra map[string]any) (map[string]any, error) {
 	reading, err := n.node.Readings(ctx, extra)
 	if err != nil {
-		return map[string]interface{}{}, err
+		return map[string]any{}, err
 	}
 
 	for _, probeRange := range probeRanges {
@@ -192,7 +193,7 @@ func (n *WQSLB) Readings(ctx context.Context, extra map[string]interface{}) (map
 	return reading, nil
 }
 
-func sanitizeReading(reading, extra map[string]interface{}, limits probeRange) map[string]interface{} {
+func sanitizeReading(reading, extra map[string]any, limits probeRange) map[string]any {
 	if val, ok := reading[limits.key].(float64); ok && (val > limits.max || val < limits.min) {
 		// remove reading if from data capture
 		if extra != nil && extra[data.FromDMString] == true {
@@ -205,7 +206,7 @@ func sanitizeReading(reading, extra map[string]interface{}, limits probeRange) m
 }
 
 // DoCommand implements the DoCommand interface.
-func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
 	testOnly := node.CheckTestKey(cmd)
 
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
@@ -213,7 +214,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 			req := dragino.CreateIntervalDownlinkRequest(ctx, intervalFloat, testOnly)
 			return n.node.SendIntervalDownlink(ctx, req)
 		}
-		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
+		return map[string]any{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
 		dragino.DraginoResetRequest.TestOnly = testOnly
@@ -223,7 +224,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 	if ph, ok := cmd["calibrate_ph"]; ok {
 		phFloat, ok := ph.(float64)
 		if !ok {
-			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(ph))
+			return map[string]any{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(ph))
 		}
 		payload := "FB"
 
@@ -238,7 +239,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		case 4:
 			payload += "04"
 		default:
-			return map[string]interface{}{}, fmt.Errorf("unexpected ph calibration value %f, valid values are 4, 6, or 9", phFloat)
+			return map[string]any{}, fmt.Errorf("unexpected ph calibration value %f, valid values are 4, 6, or 9", phFloat)
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
@@ -246,7 +247,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 	if ec, ok := cmd["calibrate_ec"]; ok {
 		ecFloat, ok := ec.(float64)
 		if !ok {
-			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(ec))
+			return map[string]any{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(ec))
 		}
 		payload := "FD"
 		switch ecFloat {
@@ -257,7 +258,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		case 10:
 			payload += "10"
 		default:
-			return map[string]interface{}{}, fmt.Errorf("unexpected electrical conductivity calibration value %f, valid values are 1 or 10", ecFloat)
+			return map[string]any{}, fmt.Errorf("unexpected electrical conductivity calibration value %f, valid values are 1 or 10", ecFloat)
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}
@@ -266,7 +267,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 	if t, ok := cmd["calibrate_t"]; ok {
 		tFloat, ok := t.(float64)
 		if !ok {
-			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(t))
+			return map[string]any{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(t))
 		}
 		payload := "FE"
 		// each case here corresponds to an NTU value,
@@ -285,7 +286,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		case 1000:
 			payload += "0A"
 		default:
-			return map[string]interface{}{}, fmt.Errorf("unexpected turbidity calibration value %f,"+
+			return map[string]any{}, fmt.Errorf("unexpected turbidity calibration value %f,"+
 				"expected values are 0,200,400,600,800,or 1000", tFloat)
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
@@ -295,7 +296,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 	if orp, ok := cmd["calibrate_orp"]; ok {
 		orpFloat, ok := orp.(float64)
 		if !ok {
-			return map[string]interface{}{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(orp))
+			return map[string]any{}, fmt.Errorf("expected float64 got %v", reflect.TypeOf(orp))
 		}
 		payload := "FC"
 		switch orpFloat {
@@ -306,7 +307,7 @@ func (n *WQSLB) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 		case 256:
 			payload += "0100"
 		default:
-			return map[string]interface{}{}, fmt.Errorf("unexpected orp calibration value %f, expected values are 86 or 256", orpFloat)
+			return map[string]any{}, fmt.Errorf("unexpected orp calibration value %f, expected values are 86 or 256", orpFloat)
 		}
 		return n.node.SendDownlink(ctx, payload, testOnly)
 	}

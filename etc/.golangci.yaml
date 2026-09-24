@@ -1,33 +1,35 @@
 version: "2"
 run:
-  deadline: 900s
+  timeout: 900s
   modules-download-mode: readonly
 linters:
-  enable-all: true
+  default: all
   disable:
     - asasalint
-    - mnd
     - containedctx
     - contextcheck
     - cyclop
     - depguard
+    - err113
     - exhaustruct
     - forcetypeassert
     - funlen
-    - gocognit
-    - godox
     - gochecknoglobals
     - gochecknoinits
+    - gocognit
     - gocyclo
+    - godox
     - importas
     - interfacebloat
     - ireturn
     - maintidx
     - makezero
+    - mnd
     - musttag
     - nakedret
     - nestif
     - nlreturn
+    - noinlineerr
     - nonamedreturns
     - nosprintfhostport
     - paralleltest
@@ -37,62 +39,75 @@ linters:
     - thelper # false positives
     - varnamelen
     - wrapcheck
-    - wsl
-linters-settings:
-  errcheck:
-    check-blank: true
-  gci:
-    sections:
-      - standard
-      - default
-  gofumpt:
-    lang-version: "1.21"
-    extra-rules: true
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-      - shadow
-      - composites
-  revive:
-    # Unfortunately configuring a single rules disables all other rules, even
-    # if we set `enable-all: true`
-    #
-    # To get around this, we include default rules:
-    # https://github.com/mgechev/revive/blob/master/defaults.toml
+    - wsl # deprecated in favor of wsl_v5
+    - wsl_v5
+  settings:
+    errcheck:
+      check-blank: true
+    funcorder:
+      struct-method: false # keep helpers next to the exported methods that use them
+    govet:
+      disable:
+        - fieldalignment
+        - shadow
+        - composites
+      enable-all: true
+    lll:
+      line-length: 140
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: var-declaration
+        - name: var-naming
+  exclusions:
+    generated: lax
     rules:
-      - name: blank-imports
-      - name: context-keys-type
-      - name: dot-imports
-      - name: empty-block
-      - name: error-naming
-      - name: error-return
-      - name: error-strings
-      - name: errorf
-      - name: exported
-      - name: increment-decrement
-      - name: indent-error-flow
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: redefines-builtin-id
-      - name: superfluous-else
-      - name: time-naming
-      - name: unexported-return
-      - name: unreachable-code
-      - name: var-declaration
-      - name: var-naming
-  lll:
-    line-length: 140
+      - linters:
+          - dupword
+          - errcheck
+          - exhaustive
+          - goconst
+          - gosec
+        path: _test\.go$
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    - path: _test\.go$
-      linters:
-        - dupword
-        - errcheck
-        - exhaustive
-        - goconst
-        - gosec
-  exclude-use-default: false
-  max-per-linter: 0
+  max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+    gofumpt:
+      extra-rules: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

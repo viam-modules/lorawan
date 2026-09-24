@@ -95,6 +95,7 @@ func (conf *Config) Validate(path string) ([]string, []string, error) {
 // CT101 defines a lorawan node device.
 type CT101 struct {
 	resource.Named
+
 	logger logging.Logger
 	node   node.Node
 }
@@ -160,12 +161,12 @@ func (n *CT101) Close(ctx context.Context) error {
 }
 
 // Readings returns the node's readings.
-func (n *CT101) Readings(ctx context.Context, extra map[string]interface{}) (map[string]interface{}, error) {
+func (n *CT101) Readings(ctx context.Context, extra map[string]any) (map[string]any, error) {
 	return n.node.Readings(ctx, extra)
 }
 
 // DoCommand implements the DoCommand for the CT101.
-func (n *CT101) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+func (n *CT101) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
 	testOnly := node.CheckTestKey(cmd)
 	if interval, intervalSet := cmd[node.IntervalKey]; intervalSet {
 		if intervalFloat, floatOk := interval.(float64); floatOk {
@@ -175,7 +176,7 @@ func (n *CT101) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[
 			}
 			return n.node.SendIntervalDownlink(ctx, req)
 		}
-		return map[string]interface{}{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
+		return map[string]any{}, fmt.Errorf("error parsing payload, expected float got %v", reflect.TypeOf(interval))
 	}
 	if _, ok := cmd[node.ResetKey]; ok {
 		// FF byte is the channel, 10 is the message type and FF is the command for the downlink.

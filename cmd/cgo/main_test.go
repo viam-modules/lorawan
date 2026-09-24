@@ -62,13 +62,13 @@ func TestParseAndValidateArguments(t *testing.T) {
 func TestConvertToTxPacket(t *testing.T) {
 	tests := []struct {
 		name        string
-		input       map[string]interface{}
+		input       map[string]any
 		expected    *lorahw.TxPacket
 		expectError bool
 	}{
 		{
 			name: "valid packet",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"Freq":      915000000,
 				"DataRate":  7,
 				"Bandwidth": 1,
@@ -86,7 +86,7 @@ func TestConvertToTxPacket(t *testing.T) {
 		},
 		{
 			name: "invalid type",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"Freq": "invalid", // Should be number
 			},
 			expected:    nil,
@@ -116,7 +116,7 @@ func TestSensorServiceDoCommand(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("get_packets command", func(t *testing.T) {
-		cmd := map[string]interface{}{
+		cmd := map[string]any{
 			gateway.GetPacketsKey: true,
 		}
 		pbCmd, err := structpb.NewStruct(cmd)
@@ -138,14 +138,14 @@ func TestSensorServiceDoCommand(t *testing.T) {
 	})
 
 	t.Run("send_packet command", func(t *testing.T) {
-		packet := map[string]interface{}{
+		packet := map[string]any{
 			"Freq":      915000000,
 			"DataRate":  7,
 			"Bandwidth": 1,
 			"Size":      3,
 			"Payload":   []byte{0x01, 0x02, 0x03},
 		}
-		cmd := map[string]interface{}{
+		cmd := map[string]any{
 			gateway.SendPacketKey: packet,
 		}
 		pbCmd, err := structpb.NewStruct(cmd)
@@ -161,7 +161,7 @@ func TestSensorServiceDoCommand(t *testing.T) {
 	})
 
 	t.Run("stop command", func(t *testing.T) {
-		cmd := map[string]interface{}{
+		cmd := map[string]any{
 			gateway.StopKey: true,
 		}
 		pbCmd, err := structpb.NewStruct(cmd)

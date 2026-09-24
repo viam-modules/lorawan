@@ -56,11 +56,11 @@ func createFakeBoard() *inject.Board {
 	rstPin := &inject.GPIOPin{}
 	pwrPin := &inject.GPIOPin{}
 
-	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
+	rstPin.SetFunc = func(ctx context.Context, high bool, extra map[string]any) error {
 		return nil
 	}
 
-	pwrPin.SetFunc = func(ctx context.Context, high bool, extra map[string]interface{}) error {
+	pwrPin.SetFunc = func(ctx context.Context, high bool, extra map[string]any) error {
 		return nil
 	}
 
@@ -198,7 +198,7 @@ func TestDoCommand(t *testing.T) {
 	}
 
 	// Test Validate response should be 1
-	validateCmd := make(map[string]interface{})
+	validateCmd := make(map[string]any)
 	validateCmd["validate"] = 1
 	resp, err := s.DoCommand(context.Background(), validateCmd)
 	test.That(t, err, test.ShouldBeNil)
@@ -207,7 +207,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, retVal.(regions.Region), test.ShouldEqual, regions.US)
 
 	// need to simulate what happens when the DoCommand message is serialized/deserialized into proto
-	doOverWire := func(gateway sensor.Sensor, cmd map[string]interface{}) {
+	doOverWire := func(gateway sensor.Sensor, cmd map[string]any) {
 		command, err := protoutils.StructToStructPb(cmd)
 		test.That(t, err, test.ShouldBeNil)
 		_, err = gateway.DoCommand(context.Background(), command.AsMap())
@@ -218,7 +218,7 @@ func TestDoCommand(t *testing.T) {
 	// clear devices
 	g.devices = map[string]*node.Node{}
 	g.concentrators = []*concentrator{{}}
-	registerCmd := make(map[string]interface{})
+	registerCmd := make(map[string]any)
 	registerCmd["register_device"] = &n
 	doOverWire(s, registerCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 1)
@@ -259,13 +259,13 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, len(dev.FoptsToSend), test.ShouldEqual, 1)
 
 	// Test remove device command
-	removeCmd := make(map[string]interface{})
+	removeCmd := make(map[string]any)
 	removeCmd["remove_device"] = n.NodeName
 	doOverWire(s, removeCmd)
 	test.That(t, len(g.devices), test.ShouldEqual, 0)
 
 	// Test GetDevice command
-	cmd := make(map[string]interface{})
+	cmd := make(map[string]any)
 	cmd[node.GetDeviceKey] = fmt.Sprintf("%X", testDevEUI)
 	resp, err = s.DoCommand(context.Background(), cmd)
 	test.That(t, err, test.ShouldBeNil)
@@ -300,8 +300,8 @@ func TestDoCommand(t *testing.T) {
 		AppKey:      testAppKey,
 	}
 
-	downlinkCmd := make(map[string]interface{})
-	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]interface{}{
+	downlinkCmd := make(map[string]any)
+	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]any{
 		testNodeName: testDownLinkPayload,
 	}
 
@@ -324,7 +324,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, testNode.Downlinks[0], test.ShouldResemble, expectedPayload)
 
 	// Unknown device name should error
-	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]interface{}{
+	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]any{
 		"unknown-node": testDownLinkPayload,
 	}
 	_, err = s.DoCommand(context.Background(), downlinkCmd)
@@ -332,7 +332,7 @@ func TestDoCommand(t *testing.T) {
 	test.That(t, err.Error(), test.ShouldContainSubstring, "not found")
 
 	// invalid byte encoding should error
-	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]interface{}{
+	downlinkCmd[node.GatewaySendDownlinkKey] = map[string]any{
 		testNodeName: "olf",
 	}
 	_, err = s.DoCommand(context.Background(), downlinkCmd)
@@ -431,16 +431,16 @@ func TestMergeNodes(t *testing.T) {
 
 func TestUpdateReadings(t *testing.T) {
 	g := &gateway{
-		lastReadings: make(map[string]interface{}),
+		lastReadings: make(map[string]any),
 	}
 
 	// Test adding new readings
-	newReading := map[string]interface{}{
+	newReading := map[string]any{
 		"temp": 20.5,
 		"hum":  60,
 	}
 
-	expectedReadings := map[string]interface{}{
+	expectedReadings := map[string]any{
 		"device1": newReading,
 	}
 
@@ -450,13 +450,13 @@ func TestUpdateReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, expectedReadings)
 
 	// Test updating readings of a device that contains readings already.
-	newReading = map[string]interface{}{
+	newReading = map[string]any{
 		"temp": 26.5,
 		"pres": 1013,
 	}
 
-	expectedReadings = map[string]interface{}{
-		"device1": map[string]interface{}{
+	expectedReadings = map[string]any{
+		"device1": map[string]any{
 			"temp": 26.5,
 			"hum":  60,
 			"pres": 1013,
@@ -470,7 +470,7 @@ func TestUpdateReadings(t *testing.T) {
 
 func TestReadings(t *testing.T) {
 	g := &gateway{
-		lastReadings: make(map[string]interface{}),
+		lastReadings: make(map[string]any),
 	}
 
 	// If lastReadings is empty and the call is not from data manager, return no error.
@@ -479,17 +479,17 @@ func TestReadings(t *testing.T) {
 	test.That(t, readings, test.ShouldResemble, noReadings)
 
 	// If lastReadings is empty and the call is from data manager, return ErrNoCaptureToStore
-	_, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: true})
+	_, err = g.Readings(context.Background(), map[string]any{data.FromDMString: true})
 	test.That(t, err, test.ShouldBeError, data.ErrNoCaptureToStore)
 
 	// If data.FromDmString is false, return no error
-	_, err = g.Readings(context.Background(), map[string]interface{}{data.FromDMString: false})
+	_, err = g.Readings(context.Background(), map[string]any{data.FromDMString: false})
 	test.That(t, err, test.ShouldBeNil)
 	test.That(t, readings, test.ShouldResemble, noReadings)
 
 	// successful readings call test case.
-	expectedReadings := map[string]interface{}{
-		"device1": map[string]interface{}{
+	expectedReadings := map[string]any{
+		"device1": map[string]any{
 			"temp": 26.5,
 			"hum":  60,
 			"pres": 1013,
@@ -546,8 +546,7 @@ func TestClose(t *testing.T) {
 		concentrators: []*concentrator{{pipeReader: pr1, pipeWriter: pw1, started: true}, {pipeReader: pr2, pipeWriter: pw2, started: true}},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Call Close and verify cleanup
 	err := g.Close(ctx)

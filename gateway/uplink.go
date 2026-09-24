@@ -38,12 +38,12 @@ var (
 // | 1 B  |   4 B    | 1 B   |  2 B   |   1 B   | variable    |  variable   | 4B  |
 // Returns the node name, readings and error.
 func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, packetTime time.Time, c *concentrator) (
-	string, map[string]interface{}, error,
+	string, map[string]any, error,
 ) {
 	phyPayload := packet.Payload
 	// payload should be at least 13 bytes
 	if len(phyPayload) < 13 {
-		return "", map[string]interface{}{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
+		return "", map[string]any{}, fmt.Errorf("%w, payload should be at least 13 bytes but got %d", errInvalidLength, len(phyPayload))
 	}
 
 	devAddr := phyPayload[1:5]
@@ -61,7 +61,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 		} else {
 			g.logger.Debugf("received packet from unknown device %X, ignoring", devAddrBE)
 		}
-		return "", map[string]interface{}{}, errNoDevice
+		return "", map[string]any{}, errNoDevice
 	}
 
 	// Check SNR after device identification for better logging context
@@ -69,7 +69,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 	if float64(packet.SNR) < minSNR {
 		g.logger.Warnf("packet from %s skipped due to low signal noise ratio: %v, min is %v",
 			device.NodeName, packet.SNR, minSNR)
-		return "", map[string]interface{}{}, errLowSNR
+		return "", map[string]any{}, errLowSNR
 	}
 
 	uplinkType := Unconfirmed
@@ -87,7 +87,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 	foptsLength := fctrl & 0x0F
 
 	if len(phyPayload) < 8+int(foptsLength) {
-		return "", map[string]interface{}{}, fmt.Errorf("%w, got fopts length of %d but don't have enough bytes", errInvalidLength, foptsLength)
+		return "", map[string]any{}, fmt.Errorf("%w, got fopts length of %d but don't have enough bytes", errInvalidLength, foptsLength)
 	}
 
 	fopts := phyPayload[8 : 8+foptsLength]
@@ -100,7 +100,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 
 	if frameCnt <= device.FCntUp && device.FCntUp != math.MaxUint16 {
 		g.logger.Debugf("skipping uplink message - packet already parsed")
-		return "", map[string]interface{}{}, errAlreadyParsed
+		return "", map[string]any{}, errAlreadyParsed
 	}
 
 	device.FCntUp = frameCnt
@@ -111,11 +111,11 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 		mic, err := crypto.ComputeLegacyUplinkMIC(
 			types.AES128Key(device.NwkSKey), types.DevAddr(devAddrBE), uint32(frameCnt), phyPayload[:len(phyPayload)-4])
 		if err != nil {
-			return "", map[string]interface{}{}, err
+			return "", map[string]any{}, err
 		}
 
 		if !bytes.Equal(phyPayload[len(phyPayload)-4:], mic[:]) {
-			return "", map[string]interface{}{}, errInvalidMIC
+			return "", map[string]any{}, errInvalidMIC
 		}
 	}
 
@@ -151,10 +151,10 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 		} else {
 			payload, err := g.createDownlink(ctx, device, downlinkPayload, foptsToSend, requests, sendAck, packet.SNR, packet.DataRate)
 			if err != nil {
-				return "", map[string]interface{}{}, fmt.Errorf("failed to create downlink: %w", err)
+				return "", map[string]any{}, fmt.Errorf("failed to create downlink: %w", err)
 			}
 			if err = g.sendDownlink(ctx, payload, false, packetTime, c); err != nil {
-				return "", map[string]interface{}{}, fmt.Errorf("failed to send downlink: %w", err)
+				return "", map[string]any{}, fmt.Errorf("failed to send downlink: %w", err)
 			}
 			g.logger.Debugf("sent a downlink to %s", device.NodeName)
 		}
@@ -165,7 +165,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 
 	// Ensure there is a frame payload in the packet.
 	if int(8+foptsLength+1) >= (len(phyPayload) - 4) {
-		return "", map[string]interface{}{}, fmt.Errorf("device %s sent packet with no data", device.NodeName)
+		return "", map[string]any{}, fmt.Errorf("device %s sent packet with no data", device.NodeName)
 	}
 
 	// framepayload is the device readings.
@@ -176,18 +176,18 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 	// decrypt the frame payload
 	decryptedPayload, err := crypto.DecryptUplink(types.AES128Key(device.AppSKey), *dAddr, (uint32)(frameCnt), framePayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error while decrypting uplink message: %w", err)
+		return "", map[string]any{}, fmt.Errorf("error while decrypting uplink message: %w", err)
 	}
 
 	// decode using the codec.
 	readings, err := decodePayload(ctx, fPort, device.DecoderPath, decryptedPayload)
 	if err != nil {
-		return "", map[string]interface{}{}, fmt.Errorf("error decoding payload of device %s: %w", device.NodeName, err)
+		return "", map[string]any{}, fmt.Errorf("error decoding payload of device %s: %w", device.NodeName, err)
 	}
 
 	// payload was empty or unparsable
 	if len(readings) == 0 {
-		return "", map[string]interface{}{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
+		return "", map[string]any{}, fmt.Errorf("data received by node %s was not parsable", device.NodeName)
 	}
 
 	// Ensure all types in map are protobuf compatible.
@@ -206,7 +206,7 @@ func (g *gateway) parseDataUplink(ctx context.Context, packet lorahw.RxPacket, p
 
 // 8 and 16 bit integers are not supported in protobuf.
 // If the decoder returns those types, convert to 32 bit integer.
-func convertTo32Bit(readings map[string]interface{}) map[string]interface{} {
+func convertTo32Bit(readings map[string]any) map[string]any {
 	// Iterate over the map and convert uint8 values to uint32
 	for key, value := range readings {
 		if reflect.TypeOf(value).Kind() == reflect.Uint8 {
@@ -234,11 +234,11 @@ func matchDeviceAddr(devAddr []byte, devices map[string]*node.Node) (*node.Node,
 	return nil, fmt.Errorf("no match for DeviceAddress %v", devAddr)
 }
 
-func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]interface{}, error) {
+func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (map[string]any, error) {
 	//nolint: gosec
 	decoder, err := os.ReadFile(path)
 	if err != nil {
-		return map[string]interface{}{}, fmt.Errorf("error reading decoder: %w", err)
+		return map[string]any{}, fmt.Errorf("error reading decoder: %w", err)
 	}
 
 	// Convert the byte slice to a string
@@ -246,16 +246,16 @@ func decodePayload(ctx context.Context, fPort uint8, path string, data []byte) (
 
 	readingsMap, err := convertBinaryToMap(ctx, fPort, fileContent, data)
 	if err != nil {
-		return map[string]interface{}{}, fmt.Errorf("error executing decoder: %w", err)
+		return map[string]any{}, fmt.Errorf("error executing decoder: %w", err)
 	}
 
 	return readingsMap, nil
 }
 
-func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b []byte) (map[string]interface{}, error) {
+func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b []byte) (map[string]any, error) {
 	decodeScript += "\n\nDecode(fPort, bytes);\n"
 
-	vars := make(map[string]interface{})
+	vars := make(map[string]any)
 
 	vars["fPort"] = fPort
 	vars["bytes"] = b
@@ -266,12 +266,12 @@ func convertBinaryToMap(ctx context.Context, fPort uint8, decodeScript string, b
 	}
 
 	switch v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 	default:
-		return map[string]interface{}{}, fmt.Errorf("decoder returned unexpected data type: %v", reflect.TypeOf(v))
+		return map[string]any{}, fmt.Errorf("decoder returned unexpected data type: %v", reflect.TypeOf(v))
 	}
 
-	readings := v.(map[string]interface{})
+	readings := v.(map[string]any)
 
 	return readings, nil
 }
@@ -282,7 +282,7 @@ type result struct {
 	err error
 }
 
-func executeDecoder(ctx context.Context, script string, vars map[string]interface{}) (out interface{}, err error) {
+func executeDecoder(ctx context.Context, script string, vars map[string]any) (out any, err error) {
 	defer func() {
 		if caught := recover(); caught != nil {
 			err = fmt.Errorf("%s", caught)
