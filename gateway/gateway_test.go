@@ -883,7 +883,7 @@ func main() {
 
 	// Build the mock binary
 	cgoPath := filepath.Join(tmpDir, "cgo")
-	cmd := exec.Command("go", "build", "-o", cgoPath, srcPath)
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", cgoPath, srcPath)
 	err = cmd.Run()
 	test.That(t, err, test.ShouldBeNil)
 	return cgoPath

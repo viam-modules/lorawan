@@ -47,8 +47,7 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	lorahw.DisableBuffering()
 
 	// OS will assign a free port
-	//nolint:gosec
-	lis, err := net.Listen("tcp", ":0")
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":0")
 	logger.Info("Attempting to bind to TCP port")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
