@@ -7,10 +7,10 @@ require (
 	github.com/mattn/go-sqlite3 v1.9.0
 	github.com/robertkrimen/otto v0.4.0
 	go.thethings.network/lorawan-stack/v3 v3.32.0
-	go.viam.com/api v0.1.588
-	go.viam.com/rdk v1.10.0
+	go.viam.com/api v0.1.590
+	go.viam.com/rdk v1.11.0
 	go.viam.com/test v1.2.5
-	go.viam.com/utils v0.13.0
+	go.viam.com/utils v0.13.2
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 )
