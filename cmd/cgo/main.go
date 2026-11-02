@@ -46,8 +46,8 @@ func mainWithArgs(ctx context.Context, args []string, logger logging.Logger) err
 	// Need to disable buffering on stdout so C logs can be displayed in real time.
 	lorahw.DisableBuffering()
 
-	// OS will assign a free port
-	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":0")
+	// Loopback only: the gateway connects over localhost. OS will assign a free port
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	logger.Info("Attempting to bind to TCP port")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
