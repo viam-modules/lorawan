@@ -498,7 +498,7 @@ func (n *Node) GetAndUpdateDeviceInfo(ctx context.Context) {
 			}
 			// update node struct with info
 			if err := n.updateNode(dev); err != nil {
-				n.logger.Errorf("error getting device info: %w", err)
+				n.logger.Errorf("error getting device info: %v", err)
 			}
 		}
 	}

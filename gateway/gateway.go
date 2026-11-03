@@ -601,7 +601,7 @@ func (c *concentrator) watchLogs(ctx context.Context, logger logging.Logger) (st
 		<-cancelCtx.Done()
 		if errors.Is(cancelCtx.Err(), context.DeadlineExceeded) {
 			if err := c.pipeReader.Close(); err != nil {
-				logger.Warnf("error closing reader: %w", err)
+				logger.Warnf("error closing reader: %v", err)
 			}
 		}
 	}()
@@ -1140,7 +1140,7 @@ func (g *gateway) resetConcentrators(ctx context.Context) error {
 func (g *gateway) closeProcesses() {
 	for _, c := range g.concentrators {
 		if err := c.Close(); err != nil {
-			g.logger.Errorf("error closing concentrator %s: %w", c.name, err)
+			g.logger.Errorf("error closing concentrator %s: %v", c.name, err)
 		}
 	}
 }
@@ -1189,7 +1189,7 @@ func (g *gateway) Close(ctx context.Context) error {
 
 	if g.db != nil {
 		if err := g.db.Close(); err != nil {
-			g.logger.Errorf("error closing data db: %w", err)
+			g.logger.Errorf("error closing data db: %v", err)
 		}
 	}
 

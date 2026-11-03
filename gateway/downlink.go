@@ -151,7 +151,7 @@ func (g *gateway) createDownlink(ctx context.Context,
 				g.logger.Debugf("got device time request from %s", device.NodeName)
 				deviceTimeAns, err := createDeviceTimeAns()
 				if err != nil {
-					g.logger.Errorf("failed to create device time answer: %w", err)
+					g.logger.Errorf("failed to create device time answer: %v", err)
 					continue
 				}
 				if len(fopts)+len(deviceTimeAns) <= 15 {
