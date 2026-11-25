@@ -7,7 +7,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.9.0
 	github.com/robertkrimen/otto v0.4.0
 	go.thethings.network/lorawan-stack/v3 v3.32.0
-	go.viam.com/api v0.1.607
+	go.viam.com/api v0.1.610
 	go.viam.com/rdk v1.17.0
 	go.viam.com/test v1.2.5
 	go.viam.com/utils v0.17.1
@@ -417,7 +417,7 @@ require (
 	google.golang.org/api v0.278.0 // indirect
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260817212433-ac3dfec99bb1 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261116203732-fd2c7689a808 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261123191846-1e707ab9fbc2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
